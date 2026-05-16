@@ -316,8 +316,6 @@ def _usage_guide() -> dict[str, Any]:
 
 
 def _check_import(module_name: str) -> dict[str, Any]:
-    if module_name.startswith("cst"):
-        cst_env.ensure_cst_path_priority()
     try:
         __import__(module_name)
         return {"name": f"import:{module_name}", "status": "success"}
