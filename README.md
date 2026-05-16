@@ -63,10 +63,13 @@ New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-run
 
 ### 第一步：环境初始化
 
-首次使用前，按 [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md) 完成环境搭建：
-1. **Bootstrap** — 自动装 Python/uv/虚拟环境/CST 库
-2. **`uv sync`** — 安装 cst-runtime 包
-3. **`uv run python -m cst_runtime doctor`** — 确认 `overall=pass`
+直接告诉 agent：
+
+> 帮我初始化 CST 运行环境，创建 workspace，完成后告诉我。
+
+agent 会自动完成：`health-check --auto-fix true` → `uv sync` → `doctor` 确认。
+
+首次使用细节见 [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md)。
 
 ### 第二步：告诉 agent 你的需求
 

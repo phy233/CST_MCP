@@ -63,10 +63,13 @@ The skills take effect after restarting opencode or starting a new session.
 
 ### Step 1: Environment Setup
 
-Before first use, follow [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md) to set up the environment:
-1. **Bootstrap** — auto-install Python/uv/venv/CST libraries
-2. **`uv sync`** — install the cst-runtime package
-3. **`uv run python -m cst_runtime doctor`** — confirm `overall=pass`
+Tell the agent:
+
+> Initialize the CST runtime environment, create a workspace, and let me know when done.
+
+The agent will automatically run: `health-check --auto-fix true` → `uv sync` → `doctor` to confirm.
+
+For details, see [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md).
 
 ### Step 2: Tell the Agent Your Requirements
 
