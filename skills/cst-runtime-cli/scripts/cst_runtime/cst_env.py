@@ -179,7 +179,7 @@ def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str
         }
 
     if target_path == scan_result.get("active_path"):
-        verify = _verify_cst_imports()
+        verify = _verify_cst_imports(target_path)
         return {
             "status": "success",
             "cst_path": target_path,
@@ -193,7 +193,7 @@ def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str
     if write_result.get("status") == "error":
         return {**write_result, "scan": scan_result}
 
-    verify = _verify_cst_imports()
+    verify = _verify_cst_imports(target_path)
     return {
         "status": "success",
         "cst_path": target_path,
@@ -204,8 +204,54 @@ def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str
     }
 
 
-def _verify_cst_imports() -> dict[str, Any]:
+def _find_active_cst_path_from_pyproject() -> str | None:
+    """从 workspace pyproject.toml 读取活跃 CST 路径。"""
+    ws_result = _find_workspace_pyproject()
+    if not ws_result:
+        return None
+    pyproject = ws_result
+    try:
+        raw = pyproject.read_text(encoding="utf-8")
+    except Exception:
+        return None
+    idx = raw.find("cst-studio-suite-link = {")
+    if idx == -1:
+        return None
+    m = re.search(r'path\s*=\s*"([^"]+)"', raw[idx:])
+    if not m:
+        return None
+    return m.group(1).replace("\\\\", "\\")
+
+
+def _find_workspace_pyproject() -> Path | None:
+    for candidate in (Path.cwd().resolve(), Path(__file__).resolve().parents[3]):
+        p = candidate / "pyproject.toml"
+        if p.exists():
+            return p
+    return None
+
+
+def ensure_cst_path_priority(cst_path: str | None = None) -> bool:
+    """确保 CST python_cst_libraries 路径在 sys.path[0]，避免第三方同名包冲突。"""
+    if cst_path is None:
+        cst_path = _find_active_cst_path_from_pyproject()
+    if not cst_path:
+        return False
+    resolved = Path(cst_path).resolve()
+    if not resolved.is_dir():
+        return False
+    sp = str(resolved)
+    if sp == sys.path[0]:
+        return True
+    if sp in sys.path:
+        sys.path.remove(sp)
+    sys.path.insert(0, sp)
+    return True
+
+
+def _verify_cst_imports(cst_path: str | None = None) -> dict[str, Any]:
     results: dict[str, Any] = {}
+    ensure_cst_path_priority(cst_path)
     for mod in ("cst", "cst.interface", "cst.results"):
         try:
             __import__(mod)
