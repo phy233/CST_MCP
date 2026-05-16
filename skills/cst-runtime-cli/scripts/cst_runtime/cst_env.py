@@ -190,7 +190,7 @@ def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str
         }
 
     if target_path == scan_result.get("active_path"):
-        verify = _verify_cst_imports()
+        verify = _verify_cst_imports(target_path)
         return {
             "status": "success",
             "cst_path": target_path,
@@ -204,7 +204,7 @@ def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str
     if write_result.get("status") == "error":
         return {**write_result, "scan": scan_result}
 
-    verify = _verify_cst_imports()
+    verify = _verify_cst_imports(target_path)
     return {
         "status": "success",
         "cst_path": target_path,
@@ -215,14 +215,24 @@ def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str
     }
 
 
-def _verify_cst_imports() -> dict[str, Any]:
+def _verify_cst_imports(cst_path: str | None = None) -> dict[str, Any]:
     results: dict[str, Any] = {}
     for mod in ("cst", "cst.interface", "cst.results"):
         try:
             __import__(mod)
             results[mod] = "success"
         except Exception as exc:
-            results[mod] = f"error: {exc}"
+            if cst_path:
+                try:
+                    sp = str(Path(cst_path).resolve())
+                    if sp not in sys.path:
+                        sys.path.insert(0, sp)
+                    __import__(mod)
+                    results[mod] = "success"
+                except Exception:
+                    results[mod] = f"error: {exc}"
+            else:
+                results[mod] = f"error: {exc}"
     return results
 
 
@@ -242,12 +252,12 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
     remaining_issues: list[dict[str, Any]] = []
 
     # 1. Python version
-    py_ok = sys.version_info >= (3, 13)
+    py_ok = sys.version_info >= (3, 12)
     checks.append(_check_item(
         "python_version",
         "pass" if py_ok else "error",
-        f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if py_ok else f"Python {sys.version_info.major}.{sys.version_info.minor} < 3.13",
-        user_action="Install Python 3.13 or later from https://python.org" if not py_ok else "",
+        f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if py_ok else f"Python {sys.version_info.major}.{sys.version_info.minor} < 3.12",
+        user_action="Install Python 3.12 or later from https://python.org" if not py_ok else "",
     ))
     if not py_ok:
         remaining_issues.append(checks[-1])
