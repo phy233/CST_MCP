@@ -1,37 +1,125 @@
 [English](README.en.md) | **中文**
 
-# cst-runtime-cli
+# CST Runtime CLI
 
-CST Studio Suite CLI 基础设施层。通过统一 CLI 入口提供建模、仿真、结果读取和远场工具。
+CST Studio Suite 的 AI 自动化交互工具链。通过统一 CLI 入口提供建模、仿真、参数优化、结果读取和远场导出能力，让 AI agent 能够可靠地操作 CST 完成电磁仿真任务。
+
+仓库包含两个 skill：
+
+- **`cst-runtime-cli`** — 基础设施 skill，提供 CLI 工具实现（session 管理、建模、仿真、结果读取、远场导出等），是直接与 CST 交互的底层层。
+- **`cst-runtime-optimization`** — 优化 skill，专注参数优化闭环，依赖 `cst-runtime-cli` 执行 CLI 调用，自身仅包含 SKILL.md 定义的流程逻辑。
+
+---
+
+## 前置条件
+
+| 依赖 | 说明 |
+|---|---|
+| CST Studio Suite 2026 | **必须手动安装**，安装时勾选 "Python libraries" 组件 |
+| Python 3.12+ | health-check 可自动安装 |
+| uv | health-check 可自动安装 |
+
+> 完整的环境初始化指引（包括 bootstrap、Python 手动安装、常见问题排查）见 [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md)。
+
+## 安装 Skill
+
+仓库包含两个 skill，需分别安装：
+
+### 方式 A：Release 下载（仅 skill 结构，推荐）
+
+从 [Releases](https://github.com/anomalyco/cst-runtime-cli/releases) 下载最新版压缩包，解压到 opencode skills 目录：
+
+```
+%USERPROFILE%\.config\opencode\skills\cst-runtime-cli\
+├── SKILL.md
+├── scripts/
+├── references/
+└── tests/
+```
+
+`cst-runtime-optimization` 尚未包含在 release 压缩包中，需通过方式 B 获取。
+
+### 方式 B：Clone 完整仓库
 
 ```powershell
-python <skill-root>\scripts\cst_runtime_cli.py health-check --auto-fix true
-python <skill-root>\scripts\cst_runtime_cli.py list-tools
+git clone https://github.com/anomalyco/cst-runtime-cli.git
 ```
+
+创建符号链接到 opencode skills 目录：
+
+```powershell
+# 基础设施 skill
+New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-runtime-cli" -Target ".\skills\cst-runtime-cli"
+
+# 优化 skill
+New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-runtime-optimization" -Target ".\skills\cst-runtime-optimization"
+```
+
+> 方式 B 适合需要同时修改 skill 源码的场景。
+
+重启 opencode 或开始新会话后，skill 即生效。
 
 ## 快速开始
 
-需要 **Python 3.13+**、**uv** 和 **CST Studio Suite 2026**。
+### 第一步：环境初始化
 
-```powershell
-# 自动检测并配置 CST Python 库
-python <skill-root>\scripts\cst_runtime_cli.py health-check --auto-fix true
+首次使用前，按 [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md) 完成环境搭建：
+1. **Bootstrap** — 自动装 Python/uv/虚拟环境/CST 库
+2. **`uv sync`** — 安装 cst-runtime 包
+3. **`uv run python -m cst_runtime doctor`** — 确认 `overall=pass`
 
-# 发现可用工具
-python <skill-root>\scripts\cst_runtime_cli.py list-tools
-python <skill-root>\scripts\cst_runtime_cli.py list-pipelines
-python <skill-root>\scripts\cst_runtime_cli.py describe-tool --tool change-parameter
+### 第二步：告诉 agent 你的需求
+
+```
+源工程: C:\path\to\your_project.cst
+优化目标: 例如 9-11 GHz S11 ≤ -40 dB
+可调参数: 例如 g (20-30, 步进0.5)
 ```
 
-完整文档见 [`skills/cst-runtime-cli/SKILL.md`](skills/cst-runtime-cli/SKILL.md)。
+如果不确定参数名称，agent 会先读取工程参数列表让你确认。
 
-## 包含内容
+### 常见场景
 
-- **105 个 CLI 工具**：session 管理、建模、仿真、结果、远场
-- **自检**：`health-check` 诊断环境，`install-cst-libraries` 配置 CST
-- **证据捕获**：`stage-evidence` 捕获操作前后快照用于验证
-- **39 个合约测试**：不启动 CST 即可验证 JSON 输出格式
+| 场景 | 需求示例 |
+|---|---|
+| 优化 S11 | 源工程在 `C:\antennas\my_horn.cst`，优化 9-11 GHz S11 ≤ -40 dB |
+| 跑一次仿真 | 帮我跑一下 `C:\antennas\my_horn.cst` 的仿真，看 S11 曲线 |
+| 导出远场 | 帮我导出 10 GHz 的远场方向图，Realized Gain |
+| 对比 S11 | 两个 run 的 S11 结果，帮我做个对比页面 |
+
+---
+
+## 项目结构
+
+```
+cst-runtime-cli/                          # 完整仓库
+├── README.md                             # 本文件
+├── README.en.md                          # 英文版
+├── LICENSE
+├── pyproject.toml                        # 根项目（可选）
+├── uv.lock
+├── .gitignore
+│
+├── skills/
+│   ├── cst-runtime-cli/                  # ← 基础设施 skill（即 release 内容）
+│   │   ├── SKILL.md                      # Agent 执行手册
+│   │   ├── scripts/
+│   │   │   ├── cst_runtime_cli.py        # CLI 入口（bootstrap 用）
+│   │   │   ├── pyproject.toml            # cst-runtime 包定义
+│   │   │   └── cst_runtime/              # 所有工具实现
+│   │   ├── references/
+│   │   │   ├── setup_guide.md            # 首次初始化完整手册
+│   │   │   ├── task_card_template.md
+│   │   │   ├── pipeline_mode_guide.md
+│   │   │   └── materials_name_list.txt
+│   │   └── tests/
+│   │
+│   └── cst-runtime-optimization/         # ← 优化 skill
+│       └── SKILL.md                      # 优化闭环流程定义
+│
+└── tests/                                # 集成测试
+```
 
 ## License
 
-MIT License. 详见 [LICENSE](LICENSE)。
+MIT
