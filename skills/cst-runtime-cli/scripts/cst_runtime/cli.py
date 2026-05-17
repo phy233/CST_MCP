@@ -43,8 +43,8 @@ WORKSPACE_OPTIONAL_TOOLS = {
     "cst-session-quit",
     "generate-s11-comparison",
     "generate-s11-farfield-dashboard",
-    "generate-optimization-dashboard",
-    "generate-optimization-audit",
+    "export-run-results",
+    "generate-report",
     "plot-exported-file",
     "inspect-farfield-ascii",
     "plot-farfield-multi",
@@ -287,7 +287,7 @@ def _usage_guide() -> dict[str, Any]:
             "process_cleanup": ["inspect-cst-environment", "cleanup-cst-processes"],
             "project_ops": ["list-parameters", "change-parameter", "define-parameters", "define-frequency-range", "change-frequency-range", "define-background", "define-boundary", "define-mesh", "define-solver", "define-port", "define-monitor", "change-solver-type", "start-simulation", "start-simulation-async", "is-simulation-running", "wait-simulation", "pause-simulation", "resume-simulation", "stop-simulation", "set-solver-acceleration", "set-fdsolver-extrude-open-bc", "set-mesh-fpbavoid-nonreg-unite", "set-mesh-minimum-step-number"],
             "modeling": ["define-brick", "define-cylinder", "define-cone", "define-rectangle", "define-units", "define-polygon-3d", "define-analytical-curve", "define-extrude-curve", "define-loft", "transform-shape", "transform-curve", "create-horn-segment", "create-loft-sweep", "create-hollow-sweep", "boolean-add", "boolean-subtract", "boolean-intersect", "boolean-insert", "create-component", "delete-entity", "rename-entity", "set-entity-color", "change-material", "define-material-from-mtd", "list-materials", "list-entities", "set-farfield-monitor", "set-efield-monitor", "set-field-monitor", "set-probe", "delete-probe", "delete-monitor", "set-background-with-space", "set-farfield-plot-cuts", "show-bounding-box", "activate-post-process", "create-mesh-group", "pick-face", "add-to-history", "export-e-field", "export-surface-current", "export-voltage"],
-            "results": ["open-results-project", "list-subprojects", "list-run-ids", "get-parameter-combination", "get-1d-result", "get-2d-result", "generate-s11-comparison", "generate-s11-farfield-dashboard", "generate-optimization-dashboard", "generate-optimization-audit", "plot-exported-file", "plot-project-result"],
+            "results": ["open-results-project", "list-subprojects", "list-run-ids", "get-parameter-combination", "get-1d-result", "get-2d-result", "generate-s11-comparison", "generate-s11-farfield-dashboard", "export-run-results", "generate-report", "plot-exported-file", "plot-project-result"],
             "farfield": ["export-farfield-fresh-session", "read-realized-gain-grid-fresh-session", "inspect-farfield-ascii", "plot-farfield-multi"],
         },
         "hard_rules": [
@@ -403,10 +403,7 @@ def _production_dependency_error(tool_name: str, missing_modules: list[str]) -> 
 
 
 def _tool_requires_check_solid(tool_name: str) -> bool:
-    record = TOOLS.get(tool_name)
-    if record is None:
-        return False
-    return record.get("category") == "modeling" and record.get("risk") == "write"
+    return False  # gate disabled — model_intent/check_solid not yet implemented
 
 
 def _tool_pipeline_mode(record: dict[str, Any]) -> str:
@@ -1707,12 +1704,26 @@ def tool_generate_optimization_dashboard(args: dict[str, Any]) -> dict[str, Any]
 
 
 def tool_generate_optimization_audit(args: dict[str, Any]) -> dict[str, Any]:
-    farfield_files = args.get("farfield_files") or []
-    if isinstance(farfield_files, str):
-        farfield_files = json.loads(farfield_files)
-    return results.generate_optimization_audit(
-        run_dir=str(args.get("run_dir", "")),
-        farfield_files=[str(f) for f in farfield_files] if farfield_files else None,
+    pass  # deprecated, use generate-report
+
+
+def tool_export_run_results(args: dict[str, Any]) -> dict[str, Any]:
+    farfield_names = args.get("farfield_names") or []
+    if isinstance(farfield_names, str):
+        farfield_names = json.loads(farfield_names)
+    return results.export_run_results(
+        project_path=str(args.get("project_path", "")),
+        farfield_names=[str(n) for n in farfield_names] if farfield_names else None,
+        farfield_plot_mode=str(args.get("farfield_plot_mode", "Realized Gain")),
+        farfield_theta_step=float(args.get("farfield_theta_step", 2.0)),
+        farfield_phi_step=float(args.get("farfield_phi_step", 2.0)),
+        run_id=int(args.get("run_id")) if args.get("run_id") else None,
+    )
+
+
+def tool_generate_report(args: dict[str, Any]) -> dict[str, Any]:
+    return results.generate_report(
+        data_dir=str(args.get("data_dir", "")),
         output_html=str(args.get("output_html", "")),
         page_title=str(args.get("page_title", "")),
     )
@@ -2118,17 +2129,17 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "Generate a combined S11 and farfield HTML dashboard from exported JSON/TXT files.",
         "function": tool_generate_s11_farfield_dashboard,
     },
-    "generate-optimization-dashboard": {
+    "export-run-results": {
         "category": "results",
         "risk": "filesystem-write",
-        "description": "Generate an executive optimization dashboard from a run directory (S11, 3D farfield, timeline).",
-        "function": tool_generate_optimization_dashboard,
+        "description": "统一导出仿真结果：自动导出 S11、2D 数据、远场方向图到 exports/ 目录",
+        "function": tool_export_run_results,
     },
-    "generate-optimization-audit": {
+    "generate-report": {
         "category": "results",
         "risk": "filesystem-write",
-        "description": "Generate a full optimization audit trail page from a run directory with step-by-step operation cards.",
-        "function": tool_generate_optimization_audit,
+        "description": "生成电磁仿真综合报告（S11 曲线、3D 远场、2D 热力图、操作审计追踪）",
+        "function": tool_generate_report,
     },
     "get-1d-result": {
         "category": "results",

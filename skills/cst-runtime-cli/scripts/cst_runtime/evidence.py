@@ -173,7 +173,7 @@ def compare_snapshots(
                 bd = _param_desc(bv_raw)
                 changed = bv != av
                 cls = " class='changed'" if changed else ""
-                desc_cell = f"<td style='color:#6b7280;font-size:11px;max-width:200px'>{bd}</td>" if bd else ""
+                desc_cell = f"<td style='color:#6b7280;font-size:11px;max-width:200px'>{bd}</td>"
                 rows += f"<tr{cls}><td>{k}</td>{desc_cell}<td>{bv}</td><td>{av}</td></tr>\n"
             html_parts.append(f"""
 <h2>参数对比</h2>

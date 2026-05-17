@@ -195,21 +195,19 @@ ARGS_TEMPLATES: dict[str, dict[str, Any]] = {
         "page_title": "S11 + Farfield Dashboard",
         "farfield_run_id": 1,
     },
-    "generate-optimization-dashboard": {
-        "run_dir": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001",
-        "farfield_files": [
-            "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\farfield_13ghz_port1_realized_gain.txt"
+    "export-run-results": {
+        "project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst",
+        "farfield_names": [
+            "farfield (f=10) [1]"
         ],
-        "output_html": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\optimization_dashboard.html",
-        "page_title": "Optimization Dashboard",
+        "farfield_plot_mode": "Realized Gain",
+        "farfield_theta_step": 2.0,
+        "farfield_phi_step": 2.0,
     },
-    "generate-optimization-audit": {
-        "run_dir": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001",
-        "farfield_files": [
-            "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\farfield_13ghz_port1_realized_gain.txt"
-        ],
-        "output_html": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\optimization_audit.html",
-        "page_title": "Optimization Audit Trail",
+    "generate-report": {
+        "data_dir": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001",
+        "output_html": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\report.html",
+        "page_title": "电磁仿真综合报告",
     },
     "inspect-farfield-ascii": {
         "file_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\farfield_13ghz_port1.txt",

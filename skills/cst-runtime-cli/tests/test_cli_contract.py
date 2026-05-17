@@ -547,7 +547,7 @@ class CliContractSessionTests(unittest.TestCase):
             p = json.loads(r.stdout)
             self.assertEqual(p["status"], "success")
             report = (d / "report.html").read_text(encoding="utf-8")
-            self.assertIn("Parameters", report)
+            self.assertIn("参数对比", report)
             self.assertIn("Entities", report)
             self.assertIn("changed", report)
             self.assertIn("added", report)

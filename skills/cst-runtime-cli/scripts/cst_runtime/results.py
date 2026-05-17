@@ -280,6 +280,7 @@ tr.best td{{background:var(--accent-subtle);font-weight:600}}
 .step-detail pre{{margin:0;padding:12px 16px;font-size:11px;font-family:"SF Mono","Fira Code","Cascadia Code",monospace;background:var(--bg);color:var(--text-secondary);overflow-x:auto;white-space:pre-wrap;max-height:300px;overflow-y:auto}}
 /* Canvas 3D */
 .chart-panel canvas{{max-width:100%;height:auto;display:block;margin:0 auto;border-radius:4px}}
+.section-h2{{font-size:16px;font-weight:600;color:var(--text);margin:36px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border)}}
 footer{{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);text-align:left}}
 footer p{{color:var(--text-muted);font-size:11px;letter-spacing:.03em}}
 </style>
@@ -451,7 +452,7 @@ def _load_s11_exports(export_dir: str) -> dict[int, dict[str, Any]]:
     d = Path(export_dir)
     if not d.is_dir():
         return exports
-    for fpath in sorted(d.glob("s11_run*.json")):
+    for fpath in sorted(list(d.glob("s11_run*.json")) + list(d.glob("result_1d_run*.json"))):
         try:
             payload = json.loads(fpath.read_text(encoding="utf-8-sig"))
             if "xdata" not in payload or "ydata" not in payload:
@@ -1076,9 +1077,8 @@ def get_1d_result(
             export_file.parent.mkdir(parents=True, exist_ok=True)
             export_file = export_file.resolve()
         else:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
             export_file = (
-                Path(context["fullpath"]).parent.parent / "exports" / f"result_1d_run{run_id}_{timestamp}.json"
+                Path(context["fullpath"]).parent.parent / "exports" / f"s11_run{run_id}.json"
             ).resolve()
             export_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -2039,5 +2039,233 @@ def generate_optimization_audit(
             "generate_optimization_audit_failed",
             str(exc),
             run_dir=str(run_dir),
+            runtime_module="cst_runtime.results",
+        )
+
+
+# ── Unified export + report generators ──
+
+def export_run_results(
+    project_path: str,
+    farfield_names: list[str] | None = None,
+    farfield_plot_mode: str = "Realized Gain",
+    farfield_theta_step: float = 2.0,
+    farfield_phi_step: float = 2.0,
+    run_id: int | None = None,
+) -> dict[str, Any]:
+    try:
+        p = Path(project_path).expanduser().resolve()
+        if not p.is_file():
+            return error_response("project_not_found", "project_path is not a file", project_path=str(p))
+
+        exports_dir = p.parent.parent / "exports"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        exported: list[str] = []
+
+        # Phase 1: Modeler session — export farfields
+        if farfield_names:
+            from .farfield import export_farfield_fresh_session
+            from .session_manager import close_project as sm_close
+
+            # Discover run_ids from results first (before modeler close)
+            try:
+                proj, _ = _load_project(str(p), allow_interactive=True)
+                m3d = proj.get_3d()
+                run_ids = m3d.get_all_run_ids(max_mesh_passes_only=True)
+            except Exception:
+                run_ids = [0]
+
+            latest_run = max(run_ids) if run_ids else 0
+
+            for ff_name in farfield_names:
+                freq_str = ""
+                try:
+                    freq_str = f"_{_extract_farfield_freq(ff_name)}ghz"
+                except Exception:
+                    pass
+                ff_out = str(exports_dir / f"farfield{freq_str}_run{latest_run}.txt")
+                result = export_farfield_fresh_session(
+                    project_path=str(p),
+                    farfield_name=ff_name,
+                    output_file=ff_out,
+                    plot_mode=farfield_plot_mode,
+                    theta_step_deg=farfield_theta_step,
+                    phi_step_deg=farfield_phi_step,
+                )
+                if result.get("status") == "success":
+                    exported.append(ff_out)
+
+            sm_close(project_path=str(p), save=False)
+
+        # Phase 2: Results session — export S11 + 2D data
+        try:
+            proj2, ctx2 = _load_project(str(p), allow_interactive=True)
+            m3d2 = proj2.get_3d()
+            rids = run_id and [run_id] or m3d2.get_all_run_ids(max_mesh_passes_only=True)
+
+            for rid in rids:
+                r = get_1d_result(
+                    project_path=str(p),
+                    treepath="1D Results\\S-Parameters\\S1,1",
+                    run_id=rid,
+                    allow_interactive=True,
+                )
+                if r.get("status") == "success":
+                    exported.append(r["export_path"])
+
+            tree_items = [str(it) for it in m3d2.get_tree_items(filter="colormap")]
+            for ti in tree_items:
+                try:
+                    r2 = get_2d_result(project_path=str(p), treepath=ti, allow_interactive=True)
+                    if r2.get("status") == "success":
+                        exported.append(r2["export_path"])
+                except Exception:
+                    pass
+
+        except Exception as exc:
+            return error_response("results_phase_failed", str(exc), project_path=str(p))
+
+        return {
+            "status": "success",
+            "exported_count": len(exported),
+            "exported": exported,
+            "exports_dir": str(exports_dir),
+            "runtime_module": "cst_runtime.results",
+        }
+    except Exception as exc:
+        return error_response(
+            "export_run_results_failed",
+            str(exc),
+            project_path=str(project_path),
+            runtime_module="cst_runtime.results",
+        )
+
+
+def _extract_farfield_freq(name: str) -> str:
+    m = re.search(r"f\s*[=＝]\s*(\d+(?:\.\d+)?)", name)
+    if m:
+        return m.group(1)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*GHz", name, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    return ""
+
+
+_SECTION_LABELS = {
+    "s11": "S11 曲线",
+    "farfield": "3D 辐射方向图",
+    "2d": "2D 场分布",
+    "timeline": "操作审计追踪",
+    "params": "参数变更记录",
+    "efield": "电场分布",
+    "surface_current": "表面电流",
+    "voltage": "电压",
+}
+
+
+def generate_report(
+    data_dir: str,
+    output_html: str = "",
+    page_title: str = "",
+) -> dict[str, Any]:
+    try:
+        dd = Path(data_dir).expanduser().resolve()
+        exports_d = dd / "exports"
+        if not exports_d.is_dir():
+            exports_d = dd
+        target = Path(output_html).expanduser().resolve() if output_html else exports_d / "report.html"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        title = page_title or f"电磁仿真报告 — {dd.name}"
+
+        body_parts: list[str] = []
+        metrics: list[dict[str, str]] = []
+
+        # ── S11 section ──
+        s11_files = sorted(list(exports_d.glob("s11_run*.json")) + list(exports_d.glob("result_1d_run*.json")))
+        s11_data = _load_s11_exports(str(exports_d)) if s11_files else {}
+        if s11_data:
+            s11_traces = [{"x": e["xdata"], "y": e["ydata"], "name": f"Run {e['run_id']}"} for e in s11_data.values()]
+            s11_svg = _svg_linechart(s11_traces)
+            body_parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["s11"]}</h2><div class="chart-panel">{s11_svg}</div>')
+            best = min(s11_data.values(), key=lambda e: e["min_db"])
+            metrics.append({"label": "最优 S11", "value": f"{best['min_db']:.2f}", "unit": "dB", "css_class": "success"})
+            metrics.append({"label": "最优频率", "value": f"{best['best_freq']:.3f}" if best['best_freq'] else "-", "unit": "GHz", "css_class": "accent"})
+            metrics.append({"label": "S11 文件数", "value": str(len(s11_data)), "css_class": ""})
+
+        # ── Farfield section ──
+        ff_files = sorted(exports_d.glob("farfield*.txt"))
+        if ff_files:
+            body_parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["farfield"]}</h2>')
+            if len(ff_files) > 1:
+                opts = "".join(f'<option value="{i}">{ff.name}</option>' for i, ff in enumerate(ff_files))
+                body_parts.append(f'<select id="ffSelect" onchange="switchFF(this.value)" style="margin-bottom:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);color:var(--text);font-size:13px">{opts}</select>')
+            for i, ff_file in enumerate(ff_files):
+                try:
+                    ff_data = _load_exported_payload(str(ff_file))
+                    display = "block" if i == 0 else "none"
+                    body_parts.append(f'<div class="ff-panel" id="ffPanel{i}" style="display:{display}">{_render_3d_farfield(ff_data, f"ff3d_{i}")}</div>')
+                except Exception:
+                    pass
+            if len(ff_files) > 1:
+                body_parts.append('<script>function switchFF(v){var ps=document.querySelectorAll(".ff-panel");for(var i=0;i<ps.length;i++)ps[i].style.display=i==v?"block":"none";}</script>')
+            metrics.append({"label": "远场文件数", "value": str(len(ff_files)), "css_class": ""})
+
+        # ── 2D section ──
+        two_d_files = sorted(exports_d.glob("result_2d_*.json"))
+        if two_d_files:
+            body_parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["2d"]}</h2>')
+            for td in two_d_files:
+                try:
+                    payload = _load_exported_payload(str(td))
+                    svg = _svg_heatmap(
+                        x=payload.get("xpositions", []), y=payload.get("ypositions", []),
+                        z=payload.get("data", []), title=payload.get("title", td.stem),
+                        xlabel=payload.get("xlabel", "X"), ylabel=payload.get("ylabel", "Y"),
+                        zlabel=payload.get("zlabel", "Value"),
+                    )
+                    body_parts.append(f'<div class="chart-panel">{svg}</div>')
+                except Exception:
+                    pass
+
+        # ── Timeline / params section ──
+        timeline = _build_timeline(str(dd))
+        if timeline:
+            body_parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["timeline"]}（{len(timeline)} 步）</h2>')
+            for idx, rec in enumerate(timeline, 1):
+                body_parts.append(_step_card_html(idx, rec, s11_data))
+
+            param_changes = [r for r in timeline if _categorize_step(r) == "param_change"]
+            if param_changes:
+                body_parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["params"]}</h2>')
+                body_parts.append(_param_changes_table_html(timeline))
+                metrics.append({"label": "参数变更", "value": str(len(param_changes)), "css_class": ""})
+
+        # ── Other field exports ──
+        for suffix, label_key in [("efield_*.txt", "efield"), ("surface_current_*.txt", "surface_current"), ("voltage_*.txt", "voltage")]:
+            files = sorted(exports_d.glob(suffix))
+            if files:
+                body_parts.append(f'<h2 class="section-h2">{_SECTION_LABELS[label_key]}（{len(files)} 文件）</h2>')
+                body_parts.append(f'<table><thead><tr><th>文件</th></tr></thead><tbody>{"".join(f"<tr><td>{escape(f.name)}</td></tr>" for f in files)}</tbody></table>')
+
+        body = "\n".join(body_parts)
+        metrics_html = _metric_cards_html(metrics) if metrics else ""
+        target.write_text(
+            _svg_page(title, body, metrics_html=metrics_html,
+                      subtitle=f"数据目录：{str(exports_d)}"),
+            encoding="utf-8")
+
+        return {
+            "status": "success",
+            "output_html": str(target),
+            "s11_count": len(s11_data),
+            "farfield_count": len(ff_files),
+            "timeline_count": len(timeline),
+            "runtime_module": "cst_runtime.results",
+        }
+    except Exception as exc:
+        return error_response(
+            "generate_report_failed",
+            str(exc),
+            data_dir=str(data_dir),
             runtime_module="cst_runtime.results",
         )
