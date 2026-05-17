@@ -37,6 +37,8 @@ uv run python -m cst_runtime list-pipelines
 
 **health-check --auto-fix 通过后，所有后续命令必须使用 `uv run` 模式**（`uv run python -m cst_runtime ...`），不可再走系统 Python，否则可能出现库冲突等不可预期结果。
 
+> `health-check --auto-fix true` 可安全重复执行。首次运行完成全部初始化（`uv sync` + `doctor` 验证），后续 `.venv` 已存在时仍跑 `uv sync`（锁文件一致时毫秒级，同时验证 venv 健康），跳过 `doctor` 重检查。
+
 ## Skill 包结构
 
 - `SKILL.md`：触发条件、调用原则、风险判断、验收格式。

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import re
 import shutil
 import subprocess
 import sys
@@ -216,83 +214,39 @@ def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str
     }
 
 
-def _verify_cst_imports(cst_path: str | None = None) -> dict[str, Any]:
+def _verify_cst_imports(cst_path: str) -> dict[str, Any]:
     results: dict[str, Any] = {}
+    sp = str(Path(cst_path).resolve())
+    if sp not in sys.path:
+        sys.path.insert(0, sp)
     for mod in ("cst", "cst.interface", "cst.results"):
         try:
             __import__(mod)
             results[mod] = "success"
         except Exception as exc:
-            if cst_path:
-                try:
-                    sp = str(Path(cst_path).resolve())
-                    if sp not in sys.path:
-                        sys.path.insert(0, sp)
-                    __import__(mod)
-                    results[mod] = "success"
-                except Exception:
-                    results[mod] = f"error: {exc}"
-            else:
-                results[mod] = f"error: {exc}"
+            results[mod] = f"error: {exc}"
     return results
 
 
-def _check_item(name: str, status: str, message: str = "", auto_fixed: bool = False, user_action: str = "") -> dict[str, Any]:
-    return {
-        "name": name,
-        "status": status,
-        "message": message,
-        "auto_fixed": auto_fixed,
-        "user_action": user_action,
-    }
-
-
-def _run_uv_sync(workspace_root: str) -> dict[str, Any]:
+def _run_uv_cmd(args: list[str], workspace_root: str, timeout: int = 120, label: str = "uv") -> dict[str, Any]:
     try:
-        result = subprocess.run(
-            ["uv", "sync"],
-            cwd=workspace_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        result = subprocess.run(args, cwd=workspace_root, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
-            return {
-                "status": "error",
-                "message": f"uv sync failed (exit {result.returncode}):\n{result.stderr.strip()[:500]}",
-            }
+            return {"status": "error", "message": f"{label} failed (exit {result.returncode}):\n{result.stderr.strip()[:500]}"}
         return {"status": "success"}
     except FileNotFoundError:
-        return {"status": "error", "message": "uv not on PATH, cannot run uv sync"}
+        return {"status": "error", "message": f"uv not on PATH, cannot run {label}"}
     except subprocess.TimeoutExpired:
-        return {"status": "error", "message": "uv sync timed out after 120s"}
+        return {"status": "error", "message": f"{label} timed out after {timeout}s"}
     except Exception as exc:
-        return {"status": "error", "message": f"uv sync error: {exc}"}
+        return {"status": "error", "message": f"{label} error: {exc}"}
 
 
-def _run_uv_doctor(workspace_root: str) -> dict[str, Any]:
-    try:
-        result = subprocess.run(
-            ["uv", "run", "python", "-m", "cst_runtime", "doctor"],
-            cwd=workspace_root,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode != 0:
-            return {
-                "status": "error",
-                "message": f"doctor check failed (exit {result.returncode})",
-                "stdout_preview": result.stdout.strip()[:300],
-                "stderr_preview": result.stderr.strip()[:300],
-            }
-        return {"status": "success"}
-    except FileNotFoundError:
-        return {"status": "error", "message": "uv not on PATH, cannot run doctor"}
-    except subprocess.TimeoutExpired:
-        return {"status": "error", "message": "doctor check timed out after 60s"}
-    except Exception as exc:
-        return {"status": "error", "message": f"doctor check error: {exc}"}
+def _record_check(checks: list[dict[str, Any]], remaining: list[dict[str, Any]], name: str, status: str, message: str = "", *, auto_fixed: bool = False, user_action: str = "") -> None:
+    item = {"name": name, "status": status, "message": message, "auto_fixed": auto_fixed, "user_action": user_action}
+    checks.append(item)
+    if status != "pass":
+        remaining.append(item)
 
 
 def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
@@ -302,25 +256,17 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
 
     # 1. Python version
     py_ok = sys.version_info >= (3, 12)
-    checks.append(_check_item(
-        "python_version",
+    _record_check(checks, remaining_issues, "python_version",
         "pass" if py_ok else "error",
         f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if py_ok else f"Python {sys.version_info.major}.{sys.version_info.minor} < 3.12",
-        user_action="Install Python 3.12 or later from https://python.org" if not py_ok else "",
-    ))
-    if not py_ok:
-        remaining_issues.append(checks[-1])
+        user_action="Install Python 3.12 or later from https://python.org" if not py_ok else "")
 
     # 2. uv
     uv_path = shutil.which("uv")
-    checks.append(_check_item(
-        "uv",
+    _record_check(checks, remaining_issues, "uv",
         "pass" if uv_path else "warning",
         f"uv found at {uv_path}" if uv_path else "uv not on PATH",
-        user_action="Install uv: powershell -c \"irm https://astral.sh/uv/install.ps1 | iex\"" if not uv_path else "",
-    ))
-    if not uv_path:
-        remaining_issues.append(checks[-1])
+        user_action='Install uv: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"' if not uv_path else "")
 
     # 3. Workspace
     from . import workspace as ws_mod
@@ -337,17 +283,13 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
                 ws_ok = True
         except Exception:
             pass
-    checks.append(_check_item(
-        "workspace",
+    _record_check(checks, remaining_issues, "workspace",
         "pass" if ws_ok else "error",
         f"Workspace at {ws_info['workspace_root']}" if ws_ok else "Workspace not initialized",
         auto_fixed=ws_fixed,
-        user_action="Run: python <skill-root>/scripts/cst_runtime_cli.py init-workspace --workspace <path>" if not ws_ok and not auto_fix else "",
-    ))
-    if not ws_ok:
-        remaining_issues.append(checks[-1])
+        user_action="Run: python <skill-root>/scripts/cst_runtime_cli.py init-workspace --workspace <path>" if not ws_ok and not auto_fix else "")
 
-    # 4. CST library scan
+    # 4. CST library scan + auto-configure
     scan = scan_cst_installations()
     cst_found = scan["found_count"] > 0
     cst_valid = any(inst["has_interface"] and inst["has_results"] for inst in scan["installations"])
@@ -366,80 +308,44 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
             pass
 
     if not cst_found:
-        cst_status = "error"
-        cst_msg = "No CST Studio Suite installation detected"
-        cst_action = "Install CST Studio Suite 2026 or higher, then re-run health-check"
+        cst_status, cst_msg, cst_action = "error", "No CST Studio Suite installation detected", "Install CST Studio Suite 2026 or higher, then re-run health-check"
     elif not cst_valid:
-        cst_status = "error"
-        cst_msg = f"CST found at {scan['installations'][0]['path']} but Python libraries incomplete"
-        cst_action = "Reinstall CST Studio Suite with Python libraries option"
+        cst_status, cst_msg, cst_action = "error", f"CST found at {scan['installations'][0]['path']} but Python libraries incomplete", "Reinstall CST Studio Suite with Python libraries option"
     elif not cst_configured:
-        cst_status = "warning"
-        cst_msg = "CST libraries found but not configured in pyproject.toml"
-        cst_action = f"Run: python <skill-root>/scripts/cst_runtime_cli.py install-cst-libraries --cst-path \"{scan['installations'][0]['path']}\""
+        cst_status, cst_msg, cst_action = "warning", "CST libraries found but not configured in pyproject.toml", f"Run: python <skill-root>/scripts/cst_runtime_cli.py install-cst-libraries --cst-path \"{scan['installations'][0]['path']}\""
     else:
-        cst_status = "pass"
-        cst_msg = f"CST libraries at {scan['active_path']}"
-        cst_action = ""
+        cst_status, cst_msg, cst_action = "pass", f"CST libraries at {scan['active_path']}", ""
+    _record_check(checks, remaining_issues, "cst_libraries", cst_status, cst_msg, auto_fixed=cst_fixed, user_action=cst_action)
 
-    checks.append(_check_item(
-        "cst_libraries",
-        cst_status,
-        cst_msg,
-        auto_fixed=cst_fixed,
-        user_action=cst_action,
-    ))
-    if cst_status != "pass":
-        remaining_issues.append(checks[-1])
-
-    # 5. Import verification
+    # 5. Import verification (bootstrap context, before uv sync)
     if cst_configured or (cst_fixed and auto_fix):
-        v = _verify_cst_imports(cst_path=scan.get("active_path"))
+        v = _verify_cst_imports(scan["active_path"])
         imp_ok = all(val == "success" for val in v.values())
-        failed_imports = [mod for mod, status in v.items() if status != "success"]
-        checks.append(_check_item(
-            "import_cst",
+        failed = [m for m, s in v.items() if s != "success"]
+        _record_check(checks, remaining_issues, "import_cst",
             "pass" if imp_ok else "error",
-            f"All CST imports OK" if imp_ok else f"Failed: {', '.join(failed_imports)}",
-            user_action="Check CST installation or PYTHONPATH configuration" if not imp_ok else "",
-        ))
-        if not imp_ok:
-            remaining_issues.append(checks[-1])
+            "All CST imports OK" if imp_ok else f"Failed: {', '.join(failed)}",
+            user_action="Check CST installation or PYTHONPATH configuration" if not imp_ok else "")
     else:
-        checks.append(_check_item(
-            "import_cst",
-            "skipped",
-            "CST libraries not configured, skipping import verification",
-        ))
+        checks.append({"name": "import_cst", "status": "skipped", "message": "CST libraries not configured, skipping import verification"})
 
-    # 6. Encoding
-    encoding = getattr(sys.stdout, "encoding", "unknown") or "unknown"
-    checks.append(_check_item("encoding", "pass" if encoding.lower() in ("utf-8", "utf8") else "info", f"stdout encoding: {encoding}"))
-
-    # 7. uv sync + final verification (auto-fix only, only when no blocking issues)
+    # 6. uv sync + final verification (auto-fix only, skip if blocking issues exist)
     if auto_fix and not any(c["status"] == "error" for c in checks):
         ws_root = ws_info.get("workspace_root")
         if ws_root:
-            sync_result = _run_uv_sync(str(ws_root))
-            checks.append(_check_item(
-                "uv_sync",
+            first_setup = not (Path(str(ws_root)) / ".venv").is_dir()
+            sync_result = _run_uv_cmd(["uv", "sync"], str(ws_root), label="uv sync")
+            _record_check(checks, remaining_issues, "uv_sync",
                 "pass" if sync_result["status"] == "success" else "error",
-                sync_result.get("message", "uv sync completed"),
-            ))
-            if sync_result["status"] == "success":
+                sync_result.get("message", "uv sync completed"))
+            if sync_result["status"] == "success" and first_setup:
                 fixes_applied.append("uv_sync: dependencies installed to .venv")
-                doctor_result = _run_uv_doctor(str(ws_root))
-                checks.append(_check_item(
-                    "final_verification",
+                doctor_result = _run_uv_cmd(["uv", "run", "python", "-m", "cst_runtime", "doctor"], str(ws_root), timeout=60, label="doctor")
+                _record_check(checks, remaining_issues, "final_verification",
                     "pass" if doctor_result["status"] == "success" else "warning",
-                    doctor_result.get("message", "Post-sync doctor check passed"),
-                ))
+                    doctor_result.get("message", "Post-sync doctor check passed"))
                 if doctor_result["status"] == "success":
                     fixes_applied.append("final_verification: doctor check passed")
-                else:
-                    remaining_issues.append(checks[-1])
-            else:
-                remaining_issues.append(checks[-1])
 
     overall = "pass"
     for c in checks:
@@ -454,18 +360,7 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
         "overall": overall,
         "checks": checks,
         "fixes_applied": fixes_applied,
-        "remaining_issues": [
-            {k: v for k, v in issue.items() if v}
-            for issue in remaining_issues
-        ],
-        "readiness_summary": (
-            "All systems ready." if overall == "pass" else
-            f"Auto-fixed {len(fixes_applied)} issue(s); {len(remaining_issues)} remaining."
-        ),
-        "user_instructions": (
-            "\n".join(
-                f"- [{issue['name']}] {issue['user_action']}"
-                for issue in remaining_issues if issue.get("user_action")
-            ) if remaining_issues else "No manual action needed."
-        ),
+        "remaining_issues": [{k: v for k, v in issue.items() if v} for issue in remaining_issues],
+        "readiness_summary": "All systems ready." if overall == "pass" else f"Auto-fixed {len(fixes_applied)} issue(s); {len(remaining_issues)} remaining.",
+        "user_instructions": "\n".join(f"- [{issue['name']}] {issue['user_action']}" for issue in remaining_issues if issue.get("user_action")) if remaining_issues else "No manual action needed.",
     }
