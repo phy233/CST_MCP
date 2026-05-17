@@ -116,9 +116,6 @@ cst-runtime-cli/                          # 完整仓库
 ├── README.md                             # 本文件
 ├── README.en.md                          # 英文版
 ├── LICENSE
-├── pyproject.toml                        # 根项目（可选）
-├── uv.lock
-├── .gitignore
 │
 ├── skills/
 │   ├── cst-runtime-cli/                  # ← 基础设施 skill（即 release 内容）

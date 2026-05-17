@@ -113,12 +113,9 @@ If you are unsure about parameter names, the agent will first read the project's
 
 ```
 cst-runtime-cli/                          # Full repository
-├── README.md                             # This file (Chinese)
+├── README.md                             # This file
 ├── README.en.md                          # English version
 ├── LICENSE
-├── pyproject.toml                        # Root project (optional)
-├── uv.lock
-├── .gitignore
 │
 ├── skills/
 │   ├── cst-runtime-cli/                  # ← Infrastructure skill (same as release contents)
