@@ -27,17 +27,31 @@ CST Studio Suite 的 AI 自动化交互工具链。通过统一 CLI 入口提供
 
 ### 方式 A：Release 下载（仅 skill 结构，推荐）
 
-从 [Releases](https://github.com/anomalyco/cst-runtime-cli/releases) 下载最新版压缩包，解压到 opencode skills 目录：
+从 [Releases](https://github.com/anomalyco/cst-runtime-cli/releases) 下载最新版压缩包，解压到对应工具的 skills 目录：
 
+| AI 工具 | Skills 目录 |
+|---------|-------------|
+| OpenCode | `%USERPROFILE%\.config\opencode\skills\` |
+| Claude Code | `%USERPROFILE%\.claude\skills\` |
+| Cursor | `%USERPROFILE%\.cursor\skills\` |
+| Trae / Codex | `%USERPROFILE%\.trae\skills\` |
+| 通用 | 在工具配置中将 skills 目录指向解压路径 |
+
+解压后结构：
 ```
-%USERPROFILE%\.config\opencode\skills\cst-runtime-cli\
+skills\cst-runtime-cli\
 ├── SKILL.md
 ├── scripts/
 ├── references/
 └── tests/
 ```
 
-`cst-runtime-optimization` 尚未包含在 release 压缩包中，需通过方式 B 获取。
+Windows 下也可用符号链接指向解压目录：
+```powershell
+New-Item -ItemType Junction -Path "$env:USERPROFILE\.config\opencode\skills\cst-runtime-cli" -Target "解压路径\skills\cst-runtime-cli"
+```
+
+> `cst-runtime-optimization` 尚未包含在 release 压缩包中，需通过方式 B 获取。
 
 ### 方式 B：Clone 完整仓库
 
@@ -45,10 +59,10 @@ CST Studio Suite 的 AI 自动化交互工具链。通过统一 CLI 入口提供
 git clone https://github.com/anomalyco/cst-runtime-cli.git
 ```
 
-创建符号链接到 opencode skills 目录：
+创建符号链接到对应工具的 skills 目录：
 
 ```powershell
-# 基础设施 skill
+# 基础设施 skill（OpenCode 示例，其他工具替换路径前缀）
 New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-runtime-cli" -Target ".\skills\cst-runtime-cli"
 
 # 优化 skill
@@ -57,7 +71,7 @@ New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-run
 
 > 方式 B 适合需要同时修改 skill 源码的场景。
 
-重启 opencode 或开始新会话后，skill 即生效。
+重启 AI 工具或开始新会话后，skill 即生效。
 
 ## 快速开始
 

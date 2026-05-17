@@ -27,14 +27,28 @@ The repository contains two skills; install each separately:
 
 ### Option A: Release Download (skill only, recommended)
 
-Download the latest archive from [Releases](https://github.com/anomalyco/cst-runtime-cli/releases) and extract to the opencode skills directory:
+Download the latest archive from [Releases](https://github.com/anomalyco/cst-runtime-cli/releases) and extract to your tool's skills directory:
 
+| AI Tool | Skills Directory |
+|---------|-----------------|
+| OpenCode | `%USERPROFILE%\.config\opencode\skills\` |
+| Claude Code | `%USERPROFILE%\.claude\skills\` |
+| Cursor | `%USERPROFILE%\.cursor\skills\` |
+| Trae / Codex | `%USERPROFILE%\.trae\skills\` |
+| Generic | Point your tool's skills directory to the extracted path |
+
+Extracted structure:
 ```
-%USERPROFILE%\.config\opencode\skills\cst-runtime-cli\
+skills\cst-runtime-cli\
 ├── SKILL.md
 ├── scripts/
 ├── references/
 └── tests/
+```
+
+On Windows you may also use a junction to link the extracted directory:
+```powershell
+New-Item -ItemType Junction -Path "$env:USERPROFILE\.config\opencode\skills\cst-runtime-cli" -Target "extracted\skills\cst-runtime-cli"
 ```
 
 `cst-runtime-optimization` is not yet included in the release archive; use Option B to obtain it.
@@ -45,14 +59,14 @@ Download the latest archive from [Releases](https://github.com/anomalyco/cst-run
 git clone https://github.com/anomalyco/cst-runtime-cli.git
 ```
 
-Create symlinks to the opencode skills directory:
+Create symlinks to your tool's skills directory (example for OpenCode; adjust path prefix for other tools):
 
 ```powershell
 # Infrastructure skill
-New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-runtime-cli" -Target ".\skills\cst-runtime-cli"
+New-Item -ItemType Junction -Path "$env:USERPROFILE%\.config\opencode\skills\cst-runtime-cli" -Target ".\skills\cst-runtime-cli"
 
 # Optimization skill
-New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-runtime-optimization" -Target ".\skills\cst-runtime-optimization"
+New-Item -ItemType Junction -Path "$env:USERPROFILE%\.config\opencode\skills\cst-runtime-optimization" -Target ".\skills\cst-runtime-optimization"
 ```
 
 > Option B is suitable when you need to modify the skill source code simultaneously.
