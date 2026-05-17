@@ -1,8 +1,7 @@
 # Pipeline Mode Guide
 
-This guide records the pipeline-mode vocabulary that came out of the MCP to
-CLI migration. The old `mcp_cli_tool_inventory.json` ledger is retired; current
-tool metadata is discovered from the CLI itself with `list-tools` and
+This guide records the pipeline-mode vocabulary used in tool metadata.
+Tool metadata is discovered from the CLI itself with `list-tools` and
 `describe-tool`.
 
 ## Values
@@ -25,8 +24,5 @@ tool metadata is discovered from the CLI itself with `list-tools` and
 ## Phase 1 Rules
 
 - Static classification is not validation.
-- CLI migration should not repair existing broken MCP behavior in the same task.
-- MCP retention fields belonged to the migration-period ledger and are no
-  longer part of current runtime governance.
 - A CLI replacement is now governed through the live CLI registry, Skill
   guidance, pipeline recipes, and validation records.

@@ -44,7 +44,6 @@ description: 当用户要求使用 CLI/runtime 执行 CST 参数优化循环、S
 
 - 只需要单次仿真、结果读取或远场导出（使用 `cst-runtime-cli`）。
 - 几何建模、材料、边界、网格、结构创建。
-- 用户要求使用历史 MCP tool 调用（已退场）。
 
 ## CLI 调用原则
 
@@ -263,7 +262,7 @@ python <base-skill-root>\scripts\cst_runtime_cli.py update-status --args-file "$
 
 ## 错误处理
 
-- `workspace_not_initialized`：先运行 `init-workspace`，或用 `--workspace` / `CST_MCP_WORKSPACE` 指向已初始化工作区。
+- `workspace_not_initialized`：先运行 `init-workspace`，或用 `--workspace` / `CST_WORKSPACE` 指向已初始化工作区。
 - `source_project_missing`：`task.json` 或入参中的 `source_project` 缺失、路径不存在，或不是可用 `.cst` / `.prj` 工程；不要继续 `prepare-run`。
 - `production_dependency_missing`：真实 CST 生产命令缺少 `cst.interface` / `cst.results` 等依赖；发现类命令仍可用，生产动作必须先修 CST Python 库或 session 环境。
 - `invalid_json_args`：不要修 CLI，改用 `--args-file`。
@@ -275,7 +274,7 @@ python <base-skill-root>\scripts\cst_runtime_cli.py update-status --args-file "$
 
 ## 历史说明
 
-本 Skill 由 `skills/cst-runtime-cli-optimization` 拆分而来。旧 skill 已归档到 `archive/skills/cst-runtime-cli-optimization-20260516/`。`mcp/` 目录曾是早期 MCP 工具链实现，已不再作为正式执行依赖。
+本 Skill 由 `skills/cst-runtime-cli-optimization` 拆分而来。旧 skill 已归档到 `archive/skills/cst-runtime-cli-optimization-20260516/`。
 
 ## 最终验收清单
 
@@ -285,4 +284,4 @@ python <base-skill-root>\scripts\cst_runtime_cli.py update-status --args-file "$
 - [ ] 工程已关闭且无 `.lok` 锁文件。
 - [ ] 清理 CST 进程结果已记录；Access denied 残留没有写成已杀掉。
 - [ ] `logs/tool_calls.jsonl` 和 `stages/` 能追溯每一步。
-- [ ] 只使用了 `cst-runtime-optimization` + `cst-runtime-cli`，没有调用 MCP 或旧脚本。
+- [ ] 只使用了 `cst-runtime-optimization` + `cst-runtime-cli`，没有调用旧脚本。

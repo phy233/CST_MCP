@@ -25,7 +25,7 @@ agent 在收到任务卡后的标准回应：
 | `target_metric` | 必填 | `"9-11 GHz S11 mean ≤ -40 dB"` | 定量停止条件 |
 | `max_rounds` | 必填 | `15` | 不含 baseline |
 | `farfield` | 可选 | `{"frequency":10, "cut_axis":"Phi", "plot_mode":"Realized Gain"}` | 末端验证 |
-| `pipeline` | 可选 | `CLI` / `MCP` | 执行链路，默认 CLI |
+| `pipeline` | 可选 | `CLI` | 执行链路，默认 CLI |
 | `stopping` | 可选 | `{"no_improvement_rounds":3, "target_value":-40}` | 早停参数，默认连续 3 轮无改善 |
 
 ## 任务卡 JSON 示例

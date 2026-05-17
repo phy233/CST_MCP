@@ -8,7 +8,7 @@ from typing import Any
 
 from .errors import error_response
 
-WORKSPACE_META_DIR = ".cst_mcp_runtime"
+WORKSPACE_META_DIR = ".cst_runtime"
 WORKSPACE_META_FILE = "workspace.json"
 WORKSPACE_SCHEMA_VERSION = 1
 
@@ -45,10 +45,10 @@ def resolve_workspace_root(explicit_workspace: str = "") -> tuple[Path, str, boo
         root = Path(explicit_workspace).expanduser().resolve()
         return root, "argument", marker_path(root).exists()
 
-    env_workspace = os.environ.get("CST_MCP_WORKSPACE", "").strip()
+    env_workspace = os.environ.get("CST_WORKSPACE", "").strip()
     if env_workspace:
         root = Path(env_workspace).expanduser().resolve()
-        return root, "CST_MCP_WORKSPACE", marker_path(root).exists()
+        return root, "CST_WORKSPACE", marker_path(root).exists()
 
     marker = find_workspace_marker()
     if marker:
@@ -140,7 +140,7 @@ def init_workspace(workspace: str = "") -> dict[str, Any]:
             "skill_root_at_init": skill_root().as_posix(),
             "notes": [
                 "This is a minimal CST runtime workspace.",
-                "It is not a full CST_MCP repository.",
+                "It is not a full CST Studio Suite project repository.",
                 "Production runs still require an explicit source_project .cst/.prj file.",
             ],
         }

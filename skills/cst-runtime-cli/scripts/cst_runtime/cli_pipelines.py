@@ -127,7 +127,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "category": "results",
         "risk": "filesystem-write",
         "description": "Export a project result through cst.results and render an HTML preview with explicit project_path.",
-        "when_to_use": "When replacing current-context MCP plot_project_result with a CLI call that names the .cst file.",
+        "when_to_use": "When replacing current-context plot_project_result with a CLI call that names the .cst file.",
         "required_context": ["working_project", "treepath", "exports_dir"],
         "commands": [
             "uv run python -m cst_runtime args-template --tool plot-project-result --output <stages>\\plot_project_result_args.json",

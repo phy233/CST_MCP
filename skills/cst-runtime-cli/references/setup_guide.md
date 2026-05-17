@@ -5,14 +5,13 @@
 ## 自动流程
 
 ```powershell
-# 1. 全量自检 + 自动修复
+# 一键全量自检 + 自动修复（含 uv sync + 最终验证）
 python <skill-root>\scripts\cst_runtime_cli.py health-check --auto-fix true
 
-# 2. 安装依赖到虚拟环境
-uv sync
-
-# 3. 确认就绪
-uv run python -m cst_runtime doctor
+# 通过后，所有后续命令使用 uv run 模式
+uv run python -m cst_runtime usage-guide
+uv run python -m cst_runtime list-tools
+uv run python -m cst_runtime list-pipelines
 ```
 
 `health-check --auto-fix true` 自动诊断并修复：
@@ -21,23 +20,15 @@ uv run python -m cst_runtime doctor
 - 工作区初始化（`init-workspace`）
 - CST 安装扫描 + pyproject.toml 配置
 - Python 导入验证
-
-`health-check` 返回 `overall=blocked` 时 agent 停止，展示 `user_instructions`。
-
-`health-check` + `uv sync` 通过后执行：
-```powershell
-# 发现工具和管道
-uv run python -m cst_runtime usage-guide
-uv run python -m cst_runtime list-tools
-uv run python -m cst_runtime list-pipelines
-```
+- 虚拟环境安装（`uv sync`）
+- 最终验证（`uv run doctor`）
 
 ## 入口模式
 
 | 模式 | 命令 | 条件 |
 |---|---|---|
 | 引导 | `python <skill-root>\scripts\cst_runtime_cli.py` | 首次运行，无包依赖 |
-| 生产 | `uv run python -m cst_runtime` | `uv sync` 后 |
+| 生产 | `uv run python -m cst_runtime` | `health-check --auto-fix` 通过后 |
 
 ## 上下游工具安装
 

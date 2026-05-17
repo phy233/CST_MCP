@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -246,6 +247,54 @@ def _check_item(name: str, status: str, message: str = "", auto_fixed: bool = Fa
     }
 
 
+def _run_uv_sync(workspace_root: str) -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            ["uv", "sync"],
+            cwd=workspace_root,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "message": f"uv sync failed (exit {result.returncode}):\n{result.stderr.strip()[:500]}",
+            }
+        return {"status": "success"}
+    except FileNotFoundError:
+        return {"status": "error", "message": "uv not on PATH, cannot run uv sync"}
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "message": "uv sync timed out after 120s"}
+    except Exception as exc:
+        return {"status": "error", "message": f"uv sync error: {exc}"}
+
+
+def _run_uv_doctor(workspace_root: str) -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            ["uv", "run", "python", "-m", "cst_runtime", "doctor"],
+            cwd=workspace_root,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "message": f"doctor check failed (exit {result.returncode})",
+                "stdout_preview": result.stdout.strip()[:300],
+                "stderr_preview": result.stderr.strip()[:300],
+            }
+        return {"status": "success"}
+    except FileNotFoundError:
+        return {"status": "error", "message": "uv not on PATH, cannot run doctor"}
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "message": "doctor check timed out after 60s"}
+    except Exception as exc:
+        return {"status": "error", "message": f"doctor check error: {exc}"}
+
+
 def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     fixes_applied: list[str] = []
@@ -345,7 +394,7 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
 
     # 5. Import verification
     if cst_configured or (cst_fixed and auto_fix):
-        v = _verify_cst_imports()
+        v = _verify_cst_imports(cst_path=scan.get("active_path"))
         imp_ok = all(val == "success" for val in v.values())
         failed_imports = [mod for mod, status in v.items() if status != "success"]
         checks.append(_check_item(
@@ -366,6 +415,31 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
     # 6. Encoding
     encoding = getattr(sys.stdout, "encoding", "unknown") or "unknown"
     checks.append(_check_item("encoding", "pass" if encoding.lower() in ("utf-8", "utf8") else "info", f"stdout encoding: {encoding}"))
+
+    # 7. uv sync + final verification (auto-fix only, only when no blocking issues)
+    if auto_fix and not any(c["status"] == "error" for c in checks):
+        ws_root = ws_info.get("workspace_root")
+        if ws_root:
+            sync_result = _run_uv_sync(str(ws_root))
+            checks.append(_check_item(
+                "uv_sync",
+                "pass" if sync_result["status"] == "success" else "error",
+                sync_result.get("message", "uv sync completed"),
+            ))
+            if sync_result["status"] == "success":
+                fixes_applied.append("uv_sync: dependencies installed to .venv")
+                doctor_result = _run_uv_doctor(str(ws_root))
+                checks.append(_check_item(
+                    "final_verification",
+                    "pass" if doctor_result["status"] == "success" else "warning",
+                    doctor_result.get("message", "Post-sync doctor check passed"),
+                ))
+                if doctor_result["status"] == "success":
+                    fixes_applied.append("final_verification: doctor check passed")
+                else:
+                    remaining_issues.append(checks[-1])
+            else:
+                remaining_issues.append(checks[-1])
 
     overall = "pass"
     for c in checks:

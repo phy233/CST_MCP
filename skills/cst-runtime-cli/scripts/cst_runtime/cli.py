@@ -22,7 +22,8 @@ from cst_runtime.cli_pipelines import PIPELINES
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 CLI_VERSION = "0.1.0"
-ENTRYPOINT_DISPLAY = "python <skill-root>\\scripts\\cst_runtime_cli.py"
+_BOOTSTRAP_ENTRYPOINT = "python <skill-root>\\scripts\\cst_runtime_cli.py"
+_UV_ENTRYPOINT = "uv run python -m cst_runtime"
 SAFE_WORKSPACE_COMMANDS = {
     "doctor",
     "usage-guide",
@@ -208,30 +209,17 @@ def _json_default(value: Any) -> Any:
 
 
 def _json_response(payload: dict[str, Any]) -> int:
-    payload = _rewrite_entrypoints(payload)
     print(json.dumps(payload, ensure_ascii=True, indent=2, default=_json_default))
     return 0 if payload.get("status") != "error" else 1
 
 
 def _entrypoint() -> str:
-    return ENTRYPOINT_DISPLAY
+    main_script = Path(sys.argv[0]).name if sys.argv else ""
+    return _BOOTSTRAP_ENTRYPOINT if main_script == "cst_runtime_cli.py" else _UV_ENTRYPOINT
 
 
 def _cmd(suffix: str = "") -> str:
     return f"{_entrypoint()} {suffix}".rstrip()
-
-
-def _rewrite_entrypoints(value: Any) -> Any:
-    if isinstance(value, str):
-        return (
-            value.replace("uv run python -m cst_runtime", _entrypoint())
-            .replace("python -m cst_runtime", _entrypoint())
-        )
-    if isinstance(value, list):
-        return [_rewrite_entrypoints(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _rewrite_entrypoints(item) for key, item in value.items()}
-    return value
 
 
 def _usage_guide() -> dict[str, Any]:
@@ -249,11 +237,11 @@ def _usage_guide() -> dict[str, Any]:
             "production_dependency_missing": "Configure CST Python libraries/session dependencies before real CST production commands.",
         },
         "workspace": {
-            "environment_variable": "CST_MCP_WORKSPACE",
-            "marker": ".cst_mcp_runtime/workspace.json",
+            "environment_variable": "CST_WORKSPACE",
+            "marker": ".cst_runtime/workspace.json",
             "init": _cmd("init-workspace --workspace <workspace>"),
             "init_task": _cmd("init-task --workspace <workspace> --task-id task_001_demo --source-project C:\\path\\model.cst --goal demo"),
-            "resolution_order": ["--workspace", "CST_MCP_WORKSPACE", "ancestor marker", "current directory"],
+            "resolution_order": ["--workspace", "CST_WORKSPACE", "ancestor marker", "current directory"],
         },
         "agent_steps": [
             "Run doctor first when using a new shell, machine, IDE agent, or migrated workspace.",
@@ -570,10 +558,10 @@ def _doctor(explicit_workspace: str = "") -> dict[str, Any]:
     checks.append(
         {
             "name": "python_version",
-            "status": "success" if sys.version_info >= (3, 13) else "warning",
+            "status": "success" if sys.version_info >= (3, 12) else "warning",
             "version": sys.version,
             "executable": sys.executable,
-            "required": ">=3.13",
+            "required": ">=3.12",
         }
     )
     workspace_root = Path(str(workspace_info["workspace_root"]))
@@ -684,7 +672,7 @@ def _doctor(explicit_workspace: str = "") -> dict[str, Any]:
             "Use --args-file for Windows paths and cross-shell compatibility.",
             "When combining stdin with --args-file or --args-json, add --args-stdin.",
             "Run init-workspace in an empty directory before production commands.",
-            "Use CST_MCP_WORKSPACE or --workspace when the current directory is not the target workspace.",
+            "Use CST_WORKSPACE or --workspace when the current directory is not the target workspace.",
             "Meta commands such as doctor, usage-guide, list-tools, describe-tool, and args-template do not start CST.",
         ],
     }
@@ -2456,7 +2444,7 @@ def _pipeline_record(pipeline_name: str) -> dict[str, Any] | None:
     record = PIPELINES.get(pipeline_name)
     if record is None:
         return None
-    return _rewrite_entrypoints(json.loads(json.dumps(record, ensure_ascii=False)))
+    return json.loads(json.dumps(record, ensure_ascii=False))
 
 
 def _pipeline_runbook(pipeline_name: str) -> dict[str, Any]:

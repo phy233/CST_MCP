@@ -1,6 +1,6 @@
-"""Shared CST_MCP runtime primitives.
+"""Shared CST runtime primitives.
 
-This package is intentionally protocol-neutral. CLI and MCP adapters should
-call these functions instead of storing production rules in adapter files.
+This package is intentionally protocol-neutral. CLI adapters should
+import from cst_runtime.cli or cst_runtime.cli_pipelines.
 """
 
