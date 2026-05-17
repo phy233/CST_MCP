@@ -69,6 +69,8 @@ Tell the agent:
 
 The agent will automatically run: `health-check --auto-fix true` → `uv sync` → `doctor` to confirm.
 
+**After auto-fix completes, all subsequent commands must use `uv run` mode.** Do not use system Python directly, or unexpected library conflicts may occur.
+
 For details, see [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md).
 
 ### Step 2: Tell the Agent Your Requirements

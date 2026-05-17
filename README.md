@@ -69,6 +69,8 @@ New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-run
 
 agent 会自动完成：`health-check --auto-fix true` → `uv sync` → `doctor` 确认。
 
+**auto-fix 完成后，所有后续命令必须使用 `uv run` 模式**，不可再走系统 Python，否则可能出现库冲突等不可预期结果。
+
 首次使用细节见 [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md)。
 
 ### 第二步：告诉 agent 你的需求
