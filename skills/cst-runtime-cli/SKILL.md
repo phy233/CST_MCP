@@ -100,6 +100,7 @@ health-check --auto-fix 通过后所有后续命令使用 uv run python -m cst_r
 每次调用后解析 stdout JSON；只有 status=="success" 才继续。
 health-check 返回 overall=blocked 时停止，向用户展示 user_instructions。
 失败时停止当前链路，用 record-stage / update-status 写明 blocked 或 needs_validation。
+仿真完成后用 export-run-results 统一导出，用 generate-report 生成报告。
 ```
 
 ## 环境自检与修复
@@ -145,16 +146,69 @@ uv run python -m cst_runtime pipeline-template --pipeline <name> --output "$run\
 3. **args-file-tool-call**：复杂参数先生成 args 文件再调用。
 4. **project-unlock-check**：检查 `.lok` 锁文件。
 5. **cst-session-management-gate**：完整 CST session 生命周期验证。
-6. **latest-s11-preview**：读取最新 S11 并生成 HTML 预览。
-7. **async-simulation-refresh-results**：异步仿真 → 关闭 modeler → 刷新 results → 读 S11。
-8. **s11-json-comparison**：JSON 格式 S11 对比页生成。
-9. **s11-farfield-dashboard**：S11 + 远场合一的 dashboard。
-10. **farfield-realized-gain-preview**：fresh-session 远场导出/读取/预览。
+6. **optimization-iteration-A**：同项目多 run_id 迭代（纯参数调优简化流程）。
+7. **optimization-iteration-B**：每次新建项目（改几何或需独立数据）。
 
 管道停止规则：
 - 每一步都解析 stdout JSON，`status!="success"` 立即停止，除非下一步是明确恢复动作。
 - `health-check` 返回 `overall=blocked` 时，必须先解决 `remaining_issues`。
-- 任何会触发 CST session、保存、关闭、导出、清理进程的链路，都必须遵守 `AGENTS.md` 的 Level 1 红线。
+- 任何会触发 CST session、保存、关闭、导出、清理进程的链路，都必须遵守本文件的红线。
+
+## 优化迭代模式
+
+### 核心工具
+
+仿真后使用 **两个统一工具** 完成数据导出和结果展示：
+
+| 工具 | 用途 | 调用时机 |
+|------|------|----------|
+| `export-run-results` | 导出 S11、2D 数据、远场到 `exports/` | 每轮仿真后 |
+| `generate-report` | 生成综合报告（S11 曲线、3D 远场、2D 热力图、操作审计） | 随时调用，传入 data_dir |
+
+### 文件名约定（固定，无时间戳）
+
+```
+exports/
+  s11_run{N}.json              ← get-1d-result 导出，{N}=CST run_id
+  farfield_{freq}ghz_run{N}.txt ← 远场粗精度导出（默认 2° 步进）
+  result_2d_*.json             ← 2D 场分布数据
+  report.html                  ← generate-report 输出
+```
+
+### 模式 A：同项目多 run_id（纯参数调优）
+
+适合仅调参数、不改变几何结构的优化。
+
+```
+prepare-run(run_00N) → cst-session-open → change-parameter
+  → save-project → start-sim → wait → cst-session-close
+  → export-run-results
+```
+
+- 每轮参数变更在同一个 `.cst` 项目中累积多个 CST run_id
+- S11 按 `s11_run{N}.json` 保存所有 run_id
+- 远场每轮覆盖写（粗精度）
+
+### 模式 B：每次新建项目（改变几何或需独立数据）
+
+适合改变几何实体或需要完整数据隔离的优化。
+
+```
+prepare-run(run_00N) → cst-session-open → define-brick/boolean/...
+  → save → start-sim → wait → cst-session-close
+  → export-run-results
+```
+
+- 每轮独立 `run_00N` 目录，项目和数据完全隔离
+- 适合改几何的场景（新增/删除实体算新项目，不产生新 run_id）
+
+### 结果展示
+
+```
+uv run python -m cst_runtime generate-report --data_dir <run 或 task 目录>
+```
+
+自动读取 `exports/` 下所有约定文件，渲染含 S11 曲线、3D 远场、2D 热力图、操作审计追踪的综合报告。有数据就展示，无数据则跳过对应区块。
 
 ## 进程管理前置 gate
 
@@ -195,7 +249,7 @@ CLI 命令：`inspect-cst-environment` / `cst-session-inspect` / `cst-session-op
 
 - [ ] `health-check` 返回 `overall=pass`。
 - [ ] `status.json` 状态正确（validated / blocked / needs_validation）。
-- [ ] 所有输出文件（S11 JSON/HTML、远场 TXT/HTML、grid JSON）已落盘。
+- [ ] `exports/` 下有 `s11_run{N}.json`（每轮仿真必导出）。
 - [ ] 工程已关闭且无 `.lok` 锁文件。
 - [ ] 清理 CST 进程结果已记录；Access denied 残留没有写成已杀掉。
 - [ ] `logs/tool_calls.jsonl` 和 `stages/` 能追溯每一步。
