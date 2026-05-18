@@ -623,4 +623,20 @@ ARGS_TEMPLATES: dict[str, dict[str, Any]] = {
         ],
         "output_html": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\analysis\\evidence_report.html",
     },
+    "inspect-project": {
+        "project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst",
+    },
+    "prepare-experiment": {
+        "project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst",
+        "param_name": "g",
+        "param_value": 23.5,
+    },
+    "run-experiment": {
+        "project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst",
+        "farfield_names": [],
+        "farfield_plot_mode": "Realized Gain",
+        "farfield_theta_step": 2.0,
+        "farfield_phi_step": 2.0,
+        "timeout_seconds": 3600,
+    },
 }

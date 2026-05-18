@@ -18,6 +18,11 @@ from typing import Any, Callable
 from cst_runtime import audit, cst_env, evidence, farfield, modeling, process_cleanup, project_identity, project_ops, results, run_workspace, session_manager, workspace
 from cst_runtime.cli_args_templates import ARGS_TEMPLATES
 from cst_runtime.cli_pipelines import PIPELINES
+from cst_runtime.cli_pipeline_impl import (
+    pipeline_inspect_project,
+    pipeline_prepare_experiment,
+    pipeline_run_experiment,
+)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -127,6 +132,9 @@ CST_INTERFACE_TOOLS = {
     "pause-simulation",
     "resume-simulation",
     "define-material-from-mtd",
+    "inspect-project",
+    "prepare-experiment",
+    "run-experiment",
 }
 CST_RESULTS_TOOLS = {
     "open-results-project",
@@ -1000,6 +1008,9 @@ DIRECT_ARG_SPECS: dict[str, dict[str, str]] = {
     "install-cst-libraries": {"cst_path": "cst_path", "dry_run": "dry_run"},
     "health-check": {"workspace": "workspace", "auto_fix": "auto_fix"},
     "stage-evidence": {"project_path": "project_path", "capture": "capture", "compare": "compare", "output_dir": "output_dir", "output_html": "output_html", "stage_name": "stage_name"},
+    "inspect-project": {"project_path": "project_path"},
+    "prepare-experiment": {"project_path": "project_path", "param_name": "param_name", "param_value": "param_value"},
+    "run-experiment": {"project_path": "project_path", "farfield_names": "farfield_names", "farfield_plot_mode": "farfield_plot_mode", "farfield_theta_step": "farfield_theta_step", "farfield_phi_step": "farfield_phi_step", "timeout_seconds": "timeout_seconds"},
 }
 
 
@@ -1191,6 +1202,38 @@ def tool_stage_evidence(args: dict[str, Any]) -> dict[str, Any]:
         )
     else:
         return {"status": "error", "error_type": "missing_action", "message": "Provide --capture or --compare"}
+
+
+def tool_inspect_project(args: dict[str, Any]) -> dict[str, Any]:
+    return pipeline_inspect_project(
+        project_path=str(args.get("project_path", "")),
+    )
+
+
+def tool_prepare_experiment(args: dict[str, Any]) -> dict[str, Any]:
+    return pipeline_prepare_experiment(
+        project_path=str(args.get("project_path", "")),
+        param_name=str(args.get("param_name", "")),
+        param_value=float(args.get("param_value", 0)),
+    )
+
+
+def tool_run_experiment(args: dict[str, Any]) -> dict[str, Any]:
+    ff_names = args.get("farfield_names")
+    if isinstance(ff_names, str):
+        import json as _json
+        try:
+            ff_names = _json.loads(ff_names)
+        except Exception:
+            ff_names = None
+    return pipeline_run_experiment(
+        project_path=str(args.get("project_path", "")),
+        farfield_names=ff_names if isinstance(ff_names, list) else None,
+        farfield_plot_mode=str(args.get("farfield_plot_mode", "Realized Gain")),
+        farfield_theta_step=float(args.get("farfield_theta_step", 2.0)),
+        farfield_phi_step=float(args.get("farfield_phi_step", 2.0)),
+        timeout_seconds=int(args.get("timeout_seconds", 3600)),
+    )
 
 
 def tool_list_materials(args: dict[str, Any]) -> dict[str, Any]:
@@ -2464,6 +2507,24 @@ TOOLS: dict[str, dict[str, Any]] = {
         "risk": "read",
         "description": "Capture CST project state snapshots and generate before/after comparison reports. Use --capture to snapshot, --compare to diff two snapshots into HTML.",
         "function": tool_stage_evidence,
+    },
+    "inspect-project": {
+        "category": "project-ops",
+        "risk": "read",
+        "description": "Open a CST project, list all parameters and entities, then close. Returns parameter names/values and entity names.",
+        "function": tool_inspect_project,
+    },
+    "prepare-experiment": {
+        "category": "project-ops",
+        "risk": "write",
+        "description": "Open a CST project, change a single parameter, confirm the change, then save and close. Use before run-experiment in iteration loops.",
+        "function": tool_prepare_experiment,
+    },
+    "run-experiment": {
+        "category": "simulation",
+        "risk": "long-running",
+        "description": "Run a simulation, wait for completion, close modeler, then export S11 + farfield results. Returns s11_metric with min_db and best_freq.",
+        "function": tool_run_experiment,
     },
 }
 

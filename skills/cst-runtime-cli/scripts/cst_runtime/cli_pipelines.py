@@ -256,4 +256,65 @@ PIPELINES: dict[str, dict[str, Any]] = {
             "If doctor reports warnings after auto-fix, note them but may proceed with degraded functionality.",
         ],
     },
+    "inspect-project": {
+        "category": "project-ops",
+        "risk": "read",
+        "description": "Open a CST project, list all parameters and entities, then close.",
+        "when_to_use": "First exploration of an unknown project to understand available tuning knobs.",
+        "required_context": ["working_project"],
+        "commands": [
+            "uv run python -m cst_runtime inspect-project --project-path <run>\\projects\\working.cst",
+        ],
+        "steps": [
+            {"tool": "cst-session-open", "purpose": "Open the CST project."},
+            {"tool": "list-parameters", "purpose": "Discover all tunable parameters with current values."},
+            {"tool": "list-entities", "purpose": "Discover all geometric entities."},
+            {"tool": "cst-session-close", "purpose": "Close with save=false (no changes were made)."},
+        ],
+        "stop_rules": [
+            "If open fails, check that the .cst file exists and is not locked.",
+        ],
+    },
+    "prepare-experiment": {
+        "category": "project-ops",
+        "risk": "write",
+        "description": "Open a CST project, change a parameter, confirm the change, then save and close.",
+        "when_to_use": "Before each simulation round to update parameter values.",
+        "required_context": ["working_project", "param_name", "param_value"],
+        "commands": [
+            "uv run python -m cst_runtime prepare-experiment --project-path <run>\\projects\\working.cst --param-name g --param-value 23.5",
+        ],
+        "steps": [
+            {"tool": "cst-session-open", "purpose": "Open the CST project."},
+            {"tool": "change-parameter", "purpose": "Change the parameter to the new value."},
+            {"tool": "list-parameters", "purpose": "Confirm the parameter change took effect."},
+            {"tool": "save-project", "purpose": "Persist the change to disk."},
+            {"tool": "cst-session-close", "purpose": "Close with save=false (already saved)."},
+        ],
+        "stop_rules": [
+            "If change-parameter fails, stop and report the error before simulation.",
+            "param_name must exactly match one of the names from list-parameters.",
+        ],
+    },
+    "run-experiment": {
+        "category": "simulation",
+        "risk": "long-running",
+        "description": "Run a simulation, wait for completion, then export S11 and farfield results.",
+        "when_to_use": "After prepare-experiment to execute the simulation round and collect results.",
+        "required_context": ["working_project"],
+        "commands": [
+            "uv run python -m cst_runtime run-experiment --project-path <run>\\projects\\working.cst",
+        ],
+        "steps": [
+            {"tool": "cst-session-open", "purpose": "Open the CST project for simulation."},
+            {"tool": "start-simulation-async", "purpose": "Start the solver without blocking."},
+            {"tool": "wait-simulation", "purpose": "Poll until running=false or timeout."},
+            {"tool": "cst-session-close", "purpose": "Close modeler with save=false to release the project."},
+            {"tool": "export-run-results", "purpose": "Export S11 JSON + farfield TXT to exports/."},
+        ],
+        "stop_rules": [
+            "If simulation times out, close modeler and record the timeout.",
+            "After export, read s11_metric from output (no need to read JSON file manually).",
+        ],
+    },
 }
