@@ -98,7 +98,7 @@ var stops=[0,0.16,0.33,0.5,0.66,0.83,1];
 var rs=[5,0,0,0,255,255,255],gs=[5,100,200,255,220,120,255],bs=[30,200,255,0,0,0,255];
 var seg=0;while(seg<6&&t>stops[seg+1])seg++;
 var s=(t-stops[seg])/(stops[seg+1]-stops[seg]+0.0001);
-var r=Math.round(rs[seg]+s*(rs[seg+1]-rs[seg]));}}
+var r=Math.round(rs[seg]+s*(rs[seg+1]-rs[seg]));
 var g=Math.round(gs[seg]+s*(gs[seg+1]-gs[seg]));
 var b=Math.round(bs[seg]+s*(bs[seg+1]-bs[seg]));
 return"rgb("+r+","+g+","+b+")";}}
@@ -134,7 +134,7 @@ return{{x:W/2+(x+cx)*s*W/(2*maxR),y:H/2-(y+cy)*s*W/(2*maxR),z:z}};}}
 function draw(){{
 cnv.width=W;cnv.height=H;
 ctx.clearRect(0,0,W,H);
-ctx.fillStyle="#18181b";ctx.fillRect(0,0,H);
+ctx.fillStyle="#18181b";ctx.fillRect(0,0,W,H);
 var proj=F.map(function(f){{return{{p:[project(V[f[0]]),project(V[f[1]]),project(V[f[2]])],v:f[3]}};}});
 proj.sort(function(a,b){{var az=a.p[0].z+a.p[1].z+a.p[2].z,bz=b.p[0].z+b.p[1].z+b.p[2].z;return az-bz;}});
 for(var i=0;i<proj.length;i++){{var p=proj[i];
