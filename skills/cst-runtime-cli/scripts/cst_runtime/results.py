@@ -580,7 +580,13 @@ def export_run_results(
         try:
             proj2, ctx2 = _load_project(str(p), allow_interactive=True)
             m3d2 = proj2.get_3d()
-            rids = run_id and [run_id] or m3d2.get_all_run_ids(max_mesh_passes_only=True)
+            all_rids = m3d2.get_all_run_ids(max_mesh_passes_only=True)
+            if run_id is not None:
+                rids = [run_id]
+            elif all_rids:
+                rids = [max(all_rids)]
+            else:
+                rids = [0]
 
             for rid in rids:
                 r = get_1d_result(
