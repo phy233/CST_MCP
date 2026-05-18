@@ -583,10 +583,12 @@ def export_run_results(
             all_rids = m3d2.get_all_run_ids(max_mesh_passes_only=True)
             if run_id is not None:
                 rids = [run_id]
-            elif all_rids:
-                rids = [max(all_rids)]
             else:
-                rids = [0]
+                # run_id 0 in CST is an alias for the latest result, skip it
+                # to avoid duplicate export when multiple run_ids exist
+                rids = sorted(all_rids or [0])
+                if len(rids) > 1:
+                    rids = [r for r in rids if r != 0]
 
             for rid in rids:
                 r = get_1d_result(
