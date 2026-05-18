@@ -299,7 +299,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
     "run-experiment": {
         "category": "simulation",
         "risk": "long-running",
-        "description": "Run a simulation, wait for completion, then export S11 and farfield results.",
+        "description": "Run a simulation, wait for completion, then export S11 and farfield (auto-discovered) results.",
         "when_to_use": "After prepare-experiment to execute the simulation round and collect results.",
         "required_context": ["working_project"],
         "commands": [
@@ -310,11 +310,12 @@ PIPELINES: dict[str, dict[str, Any]] = {
             {"tool": "start-simulation-async", "purpose": "Start the solver without blocking."},
             {"tool": "wait-simulation", "purpose": "Poll until running=false or timeout."},
             {"tool": "cst-session-close", "purpose": "Close modeler with save=false to release the project."},
-            {"tool": "export-run-results", "purpose": "Export S11 JSON + farfield TXT to exports/."},
+            {"tool": "export-run-results", "purpose": "Export S11 JSON + auto-discovered farfield TXT to exports/."},
         ],
         "stop_rules": [
             "If simulation times out, close modeler and record the timeout.",
             "After export, read s11_metric from output (no need to read JSON file manually).",
+            "farfield_names is optional — all monitors are auto-discovered when omitted.",
         ],
     },
 }

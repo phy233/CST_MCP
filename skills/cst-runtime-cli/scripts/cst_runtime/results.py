@@ -523,6 +523,24 @@ def export_run_results(
         exports_dir.mkdir(parents=True, exist_ok=True)
         exported: list[str] = []
 
+        # Auto-discover farfield monitors if none provided
+        if not farfield_names:
+            try:
+                proj_ff, _ = _load_project(str(p), allow_interactive=True)
+                m3d_ff = proj_ff.get_3d()
+                ff_tree = [
+                    str(it) for it in m3d_ff.get_tree_items("Farfields")
+                ]
+                discovered = []
+                for item in ff_tree:
+                    short = item.rsplit("\\", 1)[-1] if "\\" in item else item
+                    if short and short.strip():
+                        discovered.append(short)
+                if discovered:
+                    farfield_names = discovered
+            except Exception:
+                pass
+
         if farfield_names:
             from .farfield import export_farfield_fresh_session
             from .session_manager import close_project as sm_close

@@ -2523,7 +2523,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     "run-experiment": {
         "category": "simulation",
         "risk": "long-running",
-        "description": "Run a simulation, wait for completion, close modeler, then export S11 + farfield results. Returns s11_metric with min_db and best_freq.",
+        "description": "Run a simulation, wait for completion, close modeler, then export S11 + farfield results. Returns s11_metric with min_db and best_freq. farfield_names is optional — auto-discovers all monitors if not provided.",
         "function": tool_run_experiment,
     },
 }
