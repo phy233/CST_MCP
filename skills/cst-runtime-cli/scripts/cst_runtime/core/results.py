@@ -510,6 +510,15 @@ def export_run_results(
         exports_dir.mkdir(parents=True, exist_ok=True)
         exported: list[str] = []
 
+        # Read latest run_id from CST results first
+        latest_run_id: int | None = None
+        proj2, ctx2 = _load_project(str(p), allow_interactive=True)
+        m3d2 = proj2.get_3d()
+        all_rids = m3d2.get_all_run_ids(max_mesh_passes_only=True)
+        if all_rids:
+            sorted_rids = sorted(all_rids)
+            latest_run_id = sorted_rids[-1] if sorted_rids[-1] != 0 else (sorted_rids[-2] if len(sorted_rids) > 1 else 0)
+
         # Auto-discover farfield monitors if none provided
         if not farfield_names:
             try:
@@ -533,14 +542,12 @@ def export_run_results(
                     quantity=farfield_plot_mode,
                     theta_step_deg=farfield_theta_step,
                     phi_step_deg=farfield_phi_step,
+                    run_id=latest_run_id,
                 )
                 if result.get("status") == "success":
                     exported.append(result["output_file"])
 
         try:
-            proj2, ctx2 = _load_project(str(p), allow_interactive=True)
-            m3d2 = proj2.get_3d()
-            all_rids = m3d2.get_all_run_ids(max_mesh_passes_only=True)
             if run_id is not None:
                 rids = [run_id]
             else:

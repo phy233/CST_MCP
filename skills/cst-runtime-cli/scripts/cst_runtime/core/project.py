@@ -20,10 +20,18 @@ def save_project(project_path: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
+        fp = Path(normalized_project)
+        mtime_before = fp.stat().st_mtime if fp.exists() else 0
         project.save()
+        import time
+        for _ in range(10):
+            time.sleep(0.1)
+            if fp.exists() and fp.stat().st_mtime > mtime_before:
+                break
         return {
             "status": "success",
             "project_path": normalized_project,
+            "file_mtime_verified": fp.exists() and fp.stat().st_mtime > mtime_before,
             "runtime_module": "cst_runtime.modeler",
         }
     except Exception as exc:

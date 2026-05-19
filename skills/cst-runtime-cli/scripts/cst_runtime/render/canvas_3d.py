@@ -6,19 +6,19 @@ from typing import Any
 
 
 def render_3d_farfield(data: dict[str, Any], container_id: str = "ff3d") -> str:
-    theta = data.get("ypositions", [])
-    phi = data.get("xpositions", [])
+    xpos = data.get("xpositions", [])
+    ypos = data.get("ypositions", [])
     gain = data.get("data", [])
-    if not theta or not phi or not gain:
+    if not xpos or not ypos or not gain:
         return '<div class="chart-panel"><p>\u65e0\u53ef\u7528\u7684\u8fdc\u573a\u6570\u636e\uff0c\u65e0\u6cd5\u6e32\u67d3 3D \u89c6\u56fe</p></div>'
 
-    ny = len(theta)
-    nx = len(phi)
+    ny = len(xpos)
+    nx = len(ypos)
 
     raw_vals: list[float | None] = []
     for i in range(ny):
         for j in range(nx):
-            g = gain[i][j] if i < len(gain) and j < len(gain[i]) else None
+            g = gain[j][i] if j < len(gain) and i < len(gain[j]) else None
             raw_vals.append(float(g) if g is not None else None)
     valid_vals = [v for v in raw_vals if v is not None]
     val_min = min(valid_vals) if valid_vals else -40
@@ -38,8 +38,8 @@ def render_3d_farfield(data: dict[str, Any], container_id: str = "ff3d") -> str:
                 r = (g - val_min) / val_rng * 4.5 + 0.3
                 v = g
                 max_radius = max(max_radius, r)
-            th = math.radians(float(theta[i]))
-            ph = math.radians(float(phi[j]))
+            th = math.radians(float(xpos[i]))
+            ph = math.radians(float(ypos[j]))
             x = r * math.sin(th) * math.cos(ph)
             y = r * math.sin(th) * math.sin(ph)
             z = r * math.cos(th)
@@ -53,6 +53,19 @@ def render_3d_farfield(data: dict[str, Any], container_id: str = "ff3d") -> str:
             b = a + 1
             c = a + nx
             d = c + 1
+            va, vb, vc, vd = values[a], values[b], values[c], values[d]
+            if va is not None and vb is not None and vc is not None:
+                faces.append([a, b, c, (va + vb + vc) / 3])
+            if vb is not None and vd is not None and vc is not None:
+                faces.append([b, d, c, (vb + vd + vc) / 3])
+
+    # Wrap phi seam: connect last column (phi=max) to first column (phi=0)
+    if nx >= 3:
+        for i in range(ny - 1):
+            a = i * nx + (nx - 1)
+            b = i * nx
+            c = (i + 1) * nx + (nx - 1)
+            d = (i + 1) * nx
             va, vb, vc, vd = values[a], values[b], values[c], values[d]
             if va is not None and vb is not None and vc is not None:
                 faces.append([a, b, c, (va + vb + vc) / 3])

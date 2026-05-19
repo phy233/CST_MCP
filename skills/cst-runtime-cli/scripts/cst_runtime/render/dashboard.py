@@ -492,8 +492,8 @@ def _param_changes_table_html(timeline: list[dict[str, Any]]) -> str:
     rows = []
     for r in changes:
         args = r.get("args", {})
-        name = args.get("name", "?")
-        value = args.get("value", "?")
+        name = args.get("param_name") or args.get("name", "?")
+        value = args.get("param_value") or args.get("value", "?")
         rows.append(f'<tr><td>{escape(str(name))}</td><td>{escape(str(value))}</td><td>{r.get("timestamp", "")}</td></tr>')
     return (
         f'<div class="data-section">'

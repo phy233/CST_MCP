@@ -380,13 +380,14 @@ def discover_farfield_monitors(project_path: str) -> dict[str, Any]:
                 pass
 
 
-def _make_farfield_grid_slug(farfield_name: str, quantity: str) -> str:
+def _make_farfield_grid_slug(farfield_name: str, quantity: str, run_id: int | None = None) -> str:
     freq = _extract_farfield_frequency_ghz(farfield_name)
     port_match = re.search(r"\[(\d+)\]", farfield_name)
     port = port_match.group(1) if port_match else "1"
     q_slug = quantity.lower().replace(" ", "_")
     freq_suffix = f"_{freq}ghz" if freq else ""
-    return f"farfield{freq_suffix}_port{port}_{q_slug}"
+    run_suffix = f"_run{run_id}" if run_id is not None and run_id > 0 else ""
+    return f"farfield{freq_suffix}_port{port}{run_suffix}_{q_slug}"
 
 
 def _make_farfield_cut_slug(tree_path: str) -> str:
@@ -428,7 +429,7 @@ def export_farfield_grid(
     export_base = Path(export_dir).expanduser().resolve()
     ff_dir = export_base / "farfield"
     ff_dir.mkdir(parents=True, exist_ok=True)
-    slug = _make_farfield_grid_slug(farfield_name, normalized_mode["result_type"])
+    slug = _make_farfield_grid_slug(farfield_name, normalized_mode["result_type"], run_id=run_id)
     output_path = ff_dir / f"{slug}.json"
     flow_log: list[dict[str, Any]] = []
 

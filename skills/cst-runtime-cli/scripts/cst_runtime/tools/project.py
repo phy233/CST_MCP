@@ -159,10 +159,10 @@ TOOL_DEFS = {
 "prepare-experiment": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Open a CST project, change a single parameter, confirm the change, then save and close. Use before run-experiment in iteration loops.",
+    "description": "Open a CST project, change one or more parameters, confirm, then save and close. Supports batch via names+values arrays. Use before run-experiment.",
     "handler": "tool_prepare_experiment",
     "direct_flags": True,
-    "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst", "param_name": "g", "param_value": 23.5},
+    "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst", "param_name": "g", "param_value": 23.5, "names": ["R", "g"], "values": [0.16, 23.0]},
 },
 
 "resume-simulation": {
@@ -285,6 +285,10 @@ def tool_inspect_project(args: dict) -> dict:
 
 
 def tool_prepare_experiment(args: dict) -> dict:
+    names = args.get("names") or args.get("param_names")
+    values = args.get("values") or args.get("param_values")
+    if isinstance(names, list) and isinstance(values, list):
+        return _prepare(project_path=str(args.get("project_path", "")), names=names, values=values)
     return _prepare(
         project_path=str(args.get("project_path", "")),
         param_name=str(args.get("param_name", "")),

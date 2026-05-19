@@ -52,47 +52,64 @@ exports/
 
 ## 优化迭代模式
 
-### 模式 A：同项目多 run_id
+### 模式 A：同项目多 run_id（推荐）
 
 适合仅调参数、不改变几何结构。参数变更在同一个 `.cst` 中累积多个 CST run_id。
 
+**管道工具模式（推荐）：**
+```
+┌─ 每轮迭代 ──────────────────────────────────────────────────────┐
+│ prepare-experiment  ← 修改参数（支持 names+values 批量改参）      │
+│   → run-experiment  ← 仿真 + 自动导出 S11 + 远场（每轮独立文件）     │
+│   → 解析 s11_run{N}.json → 早停判断                             │
+│   → 达标 break / 未达标继续下一轮                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+> `prepare-experiment` 和 `run-experiment` 是**自包含管道**，各自管理完整的 session 生命周期。不要在它们前面手动调用 `cst-session-open`。
+>
+> 管道由原子工具编排而成（见 `describe-pipeline`），如需在标准流程中插入自定义步骤（如改参后验证实体），可回退到原子工具。
+
+**原子工具模式（需要自定义步骤时）：**
 ```
 ┌─ 每轮迭代 ─────────────────────────────────────────┐
 │ cst-session-open                                    │
 │   → change-parameter → save-project                 │
 │   → start-simulation-async → wait-simulation        │
 │   → cst-session-close --save false                  │
-│   → export-run-results    ← 必须每轮执行，导出 S11 + 远场 │
+│   → export-run-results                              │
 │   → 早停判断 → 达标 break / 未达标继续下一轮              │
 └────────────────────────────────────────────────────┘
 ```
 
 - 每轮 S11 按 `s11_run{N}.json` 保存所有 run_id
-- 远场按 `farfield_{freq}ghz_run{N}.txt` 保存所有轮数据
+- 远场按 `farfield_{freq}ghz_port{port}_run{N}_{quantity}.json` 保存所有轮数据
 
-> **模式 A 远场红线**：同 `.cst` 工程内每轮新仿真会覆盖旧的远场结果。`export-run-results` 必须在每轮仿真后立即调用。不导出则永久丢失，无法在最终报告中展示所有轮的 3D 远场对比。
+> **远场红线**：每轮新仿真会覆盖同名的旧远场结果。`export-run-results` 必须在每轮仿真后立即调用。不导出则永久丢失。
 
 ### 模式 B：每次新建项目
 
 适合改变几何实体或需要完全独立数据。每轮独立 `run_00N` 目录。
 
 ```
-prepare-run(run_00N) → cst-session-open
-  → change-parameter / define-brick / boolean-...
-  → save-project
-  → start-simulation-async → wait-simulation → cst-session-close
-  → export-run-results
+prepare-run(run_00N) → prepare-experiment
+  → run-experiment
 ```
 
 ### 结果展示
 
-随时调用，传入 data_dir 即可：
-
+```powershell
+# 先用 args-template 生成参数，再调用
+uv run python .cst_runtime\cli.py args-template --tool generate-report
+# 编辑模板中的 data_dir、output_html、modules 字段
+uv run python .cst_runtime\cli.py generate-report --args-file <模板.json>
 ```
-generate-report --data_dir <run 或 task 目录>
-```
 
-自动读取 `exports/` 下所有约定文件，渲染 S11 曲线、3D 远场、2D 热力图、操作审计追踪。
+`modules` 默认 `s11,farfield3d,timeline`，可选 `metrics,optimization`。
+
+`generate-report` 自动读取 `exports/` 下的全部 `s11_run*.json` 和 `farfield/*.json`，渲染 S11 曲线、3D 远场、参数变更记录和操作审计。
+
+**3D 远场仪表板**：使用 WebGL Canvas 渲染，支持鼠标拖拽旋转、滚轮缩放、自动旋转。页面自包含（无 CDN 依赖），可作为独立 HTML 文件离线查看。
 
 ## 自动化优化循环红线
 
@@ -101,6 +118,15 @@ generate-report --data_dir <run 或 task 目录>
 - 每轮执行流程必须包含早停判断：`仿真 → 读结果 → 解析指标 → 判断是否达目标 → 达则 break，不达则继续`
 - "执行"和"评估"不得拆分为两个独立阶段；目标指标必须在每轮循环体内部实时解析和判断
 - 若未实现早停导致超过目标后继续执行额外轮次，任务输出必须明确标记为 `overrun`
+- 参数发现：使用 `inspect-project`（而非 `list-parameters`）一次性获取全部参数名、值、中文描述。避免逐一 `describe-tool` 查每个参数。
+
+### 已知问题与恢复
+
+| 问题 | 原因 | 恢复方式 |
+|------|------|---------|
+| 端口非均匀填充 | 修改 `g`(脊间距) 导致端口区域出现多种材料 | `cst-session-close --save false` 丢弃改参，恢复原值 |
+| 部分仿真未重跑 | CST 检测到网格未改变时可能返回缓存结果 | `run-experiment` 内置 run_id 预检对比，输出 `warning` 字段 |
+| 远场导后保存 | 远场导出使 CST 进入错误状态 | `close(save=False)` 自动处理；**不要额外调用 save** |
 
 ## 优化闭环流程
 
@@ -110,44 +136,43 @@ prepare-run → get-run-context
 ```
 后续所有路径使用返回的 `working_project`、`exports_dir`、`logs_dir`。
 
-### 2. 打开工程
+### 2. 了解工程
 ```
-cst-session-open → verify-project-identity → list-parameters
+inspect-project ← 自包含管道，自动开/关 session
 ```
-若返回 `ambiguous_open_projects`，必须先关闭无关 CST 工程。
+返回全部 19+ 参数及其值、全部几何实体。**这是了解工程参数的唯一步骤**，无需再用 `list-parameters`。
 
-### 3. 迭代循环（每轮重复执行 3a-3e）
+### 3. 迭代循环（每轮重复执行 3a-3d）
 
 > 以下为一轮的完整步骤。重复多轮直到早停条件满足。
 
-#### 3a. 修改参数
-```
-change-parameter --name <p> --value <v>
-list-parameters  ← 确认参数生效
-```
+推荐使用管道工具，每轮仅需两步：
 
-#### 3b. 仿真
+#### 3a. 改参
 ```
-start-simulation-async → wait-simulation
+prepare-experiment [--names [R,g] --values [0.16,23]]  ← 支持批量
 ```
+- 自动完成：open → 改参（循环逐一执行）→ list-parameters 确认 → save → close(kill DE)
+- 每轮可改一个或多个参数
 
-#### 3c. 关闭 modeler
+#### 3b. 仿真+导出
 ```
-cst-session-close --save false
+run-experiment
 ```
+- 自动完成：open → start-solver → poll(10s) → close → open(results) → 导出 S11+远场 → close
+- S11: `s11_run{N}.json`（每轮递增，不会覆盖）
+- 远场: `farfield_{freq}ghz_port{port}_run{N}_{quantity}.json`（每轮独立文件，不会覆盖）
 
-#### 3d. 导出本轮结果（远场红线）
-```
-export-run-results --project_path <.cst>
-```
-- 自动导出本轮 S11、2D、远场到 `exports/`，文件命名 `s11_run{N}.json`、`farfield_{freq}ghz_run{N}.txt`
-- **必须每轮执行**：同 `.cst` 内新仿真会覆盖远场，不导出则永久丢失，无法在报告中对比多轮 3D 远场
-- 远场导出会使 CST 处于错误状态，`export-run-results` 内部已 `close(save=False)`，工程不受影响
-
-#### 3e. 早停判断
+#### 3c. 早停判断
 - 解析 `exports/s11_run{N}.json`：`20*log10(hypot(real, imag))` 转 dB
 - 判断是否达目标 → 达则 **break**，不达则回到 3a 继续下一轮
 - 若超过目标后继续执行额外轮次，任务输出必须标记 `overrun`
+
+#### 3d. 进程清理
+```
+cleanup-cst-processes
+```
+- run-experiment 结束后可能残留 orphan DE，每轮末尾清理一次。
 
 ### 4. 生成报告
 ```
@@ -170,7 +195,8 @@ cleanup-cst-processes
 ## 引用
 
 以下通用规则详见 `cst-runtime-cli` SKILL.md：
-- **CLI 调用原则** — 入口模式、JSON 契约、args-template 优先、project_path 约束
+- **CLI 调用原则** — 入口模式、JSON 契约、args-template 优先（默认写到 `.cst_runtime/tmp/`）、project_path 约束
+- **管道工具自包含性** — `prepare-experiment`/`run-experiment`/`inspect-project` 各自管理 session，无需前置 `cst-session-open`
 - **错误处理** — `workspace_not_initialized`、`source_project_missing`、`ambiguous_open_projects`、`lock_not_released`、`Access is denied`
 - **进程管理前置 gate** — `cst-session-management-gate` 管道、硬性停止条件
 - **结果与远场红线** — S11 复数处理、modeler/results session 分离、仿真后关闭顺序、`close(save=False)` 规则

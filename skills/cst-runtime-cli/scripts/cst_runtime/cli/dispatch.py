@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import warnings
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -405,7 +406,7 @@ def _usage_guide() -> dict[str, Any]:
             _cmd("usage-guide"),
             _cmd("list-tools"),
             _cmd("list-pipelines"),
-            _cmd("describe-pipeline --pipeline latest-s11-preview"),
+            _cmd("describe-pipeline --pipeline prepare-experiment"),
             _cmd("describe-tool --tool get-1d-result"),
             _cmd("args-template --tool get-1d-result"),
         ],
@@ -804,10 +805,10 @@ def _add_direct_args(parser: argparse.ArgumentParser, tool_name: str) -> None:
 
 def _direct_args_from_namespace(args: argparse.Namespace, tool_name: str) -> dict[str, Any]:
     values: dict[str, Any] = {}
-    for field, target in DIRECT_ARG_SPECS.get(tool_name, {}).items():
+    for field, _default in DIRECT_ARG_SPECS.get(tool_name, {}).items():
         value = getattr(args, field, None)
         if value is not None:
-            values[target] = _parse_cli_scalar(str(value))
+            values[field] = _parse_cli_scalar(str(value))
     return values
 
 
@@ -819,6 +820,38 @@ def _attach_captured_stdout(result: dict[str, Any], captured: str) -> dict[str, 
     if len(lines) > len(preview):
         preview.append(f"... truncated {len(lines) - len(preview)} stdout lines")
     return {**result, "captured_stdout": preview}
+
+
+def _archive_args_file(src_path: str, tool_name: str, tool_args: dict[str, Any]) -> None:
+    src = Path(src_path).expanduser().resolve()
+    tmp_dir = Path.cwd().resolve() / ".cst_runtime" / "tmp"
+    is_temp = str(src.parent).lower() == str(tmp_dir).lower()
+
+    run_dir = None
+    candidate = tool_args.get("project_path") or tool_args.get("data_dir")
+    if candidate:
+        from ..core import identity
+        rd = identity.infer_run_dir_from_project(str(candidate))
+        if rd:
+            run_dir = rd
+    if run_dir is None:
+        candidate = tool_args.get("output_html") or tool_args.get("export_path")
+        if candidate:
+            p = Path(str(candidate)).expanduser().resolve()
+            for parent in [p.parent, *p.parents]:
+                if parent.name.startswith("run_") and (parent / "stages").is_dir():
+                    run_dir = parent
+                    break
+
+    if run_dir and (run_dir / "stages").is_dir():
+        dst = run_dir / "stages" / f"args_{tool_name}_{src.stem}.json"
+        shutil.copy2(str(src), str(dst))
+
+    if is_temp:
+        try:
+            src.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def _with_audit(tool_name: str, tool_args: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -1272,11 +1305,17 @@ def main() -> int:
                 }
             )
         output_path = ""
+        output = None
         if args.output:
             output = Path(args.output).expanduser().resolve()
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(template, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            output_path = str(output)
+        else:
+            tmp_dir = Path.cwd().resolve() / ".cst_runtime" / "tmp"
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output = tmp_dir / f"args_{args.tool}_{ts}.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(template, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        output_path = str(output)
         return _json_response(
             {
                 "status": "success",
@@ -1302,6 +1341,12 @@ def main() -> int:
                 "adapter": "cst_runtime_cli",
             }
         )
+
+    # Archive args file to run stages/ when --args-file is used
+    args_file_src = getattr(args, "args_file", None)
+    if args_file_src and Path(args_file_src).is_file():
+        _archive_args_file(str(args_file_src), tool_name, tool_args)
+
     tool_args = {**tool_args, **_direct_args_from_namespace(args, tool_name)}
     if tool_name in TOOLS and _tool_requires_workspace(tool_name):
         workspace_info = _workspace_status_for_command(str(getattr(args, "workspace", "") or ""), tool_args)

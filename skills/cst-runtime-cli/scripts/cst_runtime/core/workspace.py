@@ -233,19 +233,20 @@ def init_task(
 
         # Import source project into refs/ if outside refs/
         refs_root = root / "refs"
-        sp_path = Path(source_project).expanduser().resolve()
         sp_import_msg = ""
-        if sp_path.exists() and refs_root.resolve() not in sp_path.parents:
-            ref_target = refs_root / sp_path.name
-            ref_target.parent.mkdir(parents=True, exist_ok=True)
-            in_workspace_root = sp_path.parent == root.resolve()
-            if in_workspace_root:
-                _move_project(sp_path, ref_target)
-                sp_import_msg = f"已将源文件从工作区根目录移至 {ref_target.as_posix()}"
-            else:
-                _copy_project(sp_path, ref_target)
-                sp_import_msg = f"已从外部路径复制源文件至 {ref_target.as_posix()}"
-            source_project = ref_target.as_posix()
+        if source_project.strip():
+            sp_path = Path(source_project).expanduser().resolve()
+            if sp_path.exists() and refs_root.resolve() not in sp_path.parents:
+                ref_target = refs_root / sp_path.name
+                ref_target.parent.mkdir(parents=True, exist_ok=True)
+                in_workspace_root = sp_path.parent == root.resolve()
+                if in_workspace_root:
+                    _move_project(sp_path, ref_target)
+                    sp_import_msg = f"已将源文件从工作区根目录移至 {ref_target.as_posix()}"
+                else:
+                    _copy_project(sp_path, ref_target)
+                    sp_import_msg = f"已从外部路径复制源文件至 {ref_target.as_posix()}"
+                source_project = ref_target.as_posix()
 
         payload = {
             "task_id": resolved_task_id,

@@ -10,17 +10,17 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "when_to_use": "First contact in a fresh shell, migrated workspace, or external coding agent.",
         "required_context": ["skill_root", "workspace"],
         "commands": [
-            "uv run python -m cst_runtime doctor",
-            "uv run python -m cst_runtime usage-guide",
+            "uv run python -m cst_runtime health-check --auto-fix false",
+            "uv run python -m cst_runtime --help",
             "uv run python -m cst_runtime list-tools",
             "uv run python -m cst_runtime list-pipelines",
-            "uv run python -m cst_runtime describe-pipeline --pipeline latest-s11-preview",
+            "uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment",
             "uv run python -m cst_runtime describe-tool --tool get-1d-result",
             "uv run python -m cst_runtime args-template --tool get-1d-result --output <run-or-task>\\stages\\get_1d_result_args.json",
         ],
         "steps": [
-            {"tool": "doctor", "purpose": "Check entrypoint and CST Python import readiness."},
-            {"tool": "usage-guide", "purpose": "Read the CLI calling convention and JSON error contract."},
+            {"tool": "health-check", "purpose": "Check environment readiness (replaces former doctor)."},
+            {"tool": "--help", "purpose": "Read the CLI calling convention and JSON error contract."},
             {"tool": "list-tools", "purpose": "Discover available single-tool commands."},
             {"tool": "list-pipelines", "purpose": "Discover known multi-tool chains."},
             {"tool": "describe-pipeline", "purpose": "Read one pipeline recipe before composing commands."},
@@ -28,7 +28,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
             {"tool": "args-template", "purpose": "Generate UTF-8 JSON args files near the task/run."},
         ],
         "stop_rules": [
-            "If doctor returns readiness=blocked, stop and report the missing dependency.",
+            "If health-check returns overall=blocked, stop and report the missing dependency.",
             "If any command returns status=error, inspect error_type/message before continuing.",
         ],
     },
@@ -104,43 +104,6 @@ PIPELINES: dict[str, dict[str, Any]] = {
             "If multiple CST projects are open, stop before write or close actions unless the expected project is isolated.",
         ],
     },
-    "latest-s11-preview": {
-        "category": "results",
-        "risk": "filesystem-write",
-        "description": "Read latest S11 run_id, export JSON, then render an HTML preview.",
-        "when_to_use": "After a simulation has finished and the modeler project has been closed.",
-        "required_context": ["working_project", "S11 treepath"],
-        "commands": [
-            "@{ project_path = \"<run>\\projects\\working.cst\"; treepath = \"1D Results\\S-Parameters\\S1,1\"; module_type = \"3d\"; max_mesh_passes_only = $false } | ConvertTo-Json -Depth 8 | uv run python -m cst_runtime list-run-ids | uv run python -m cst_runtime get-1d-result | uv run python -m cst_runtime plot-exported-file",
-        ],
-        "steps": [
-            {"tool": "list-run-ids", "purpose": "Read available result run IDs for the S11 treepath."},
-            {"tool": "get-1d-result", "purpose": "Default to the largest run_id from run_ids and export S11 JSON."},
-            {"tool": "plot-exported-file", "purpose": "Use export_path from get-1d-result to create an HTML preview."},
-        ],
-        "stop_rules": [
-            "Do not use export_s_parameter in an optimization loop.",
-            "If list-run-ids does not return the expected new run_id, refresh/close/reopen results before reading.",
-        ],
-    },
-    "project-result-preview": {
-        "category": "results",
-        "risk": "filesystem-write",
-        "description": "Export a project result through cst.results and render an HTML preview with explicit project_path.",
-        "when_to_use": "When replacing current-context plot_project_result with a CLI call that names the .cst file.",
-        "required_context": ["working_project", "treepath", "exports_dir"],
-        "commands": [
-            "uv run python -m cst_runtime args-template --tool plot-project-result --output <stages>\\plot_project_result_args.json",
-            "uv run python -m cst_runtime plot-project-result --args-file <stages>\\plot_project_result_args.json",
-        ],
-        "steps": [
-            {"tool": "plot-project-result", "purpose": "Export 1D/2D result JSON and render HTML preview."},
-        ],
-        "stop_rules": [
-            "project_path must point to the run working .cst file.",
-            "This tool reads results and writes preview artifacts; it does not replace fresh-session result consistency checks.",
-        ],
-    },
     "async-simulation-refresh-results": {
         "category": "modeler-results",
         "risk": "long-running",
@@ -167,63 +130,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
             "If the latest run_id is missing, mark needs_validation instead of reading stale data.",
         ],
     },
-    "s11-json-comparison": {
-        "category": "results",
-        "risk": "filesystem-write",
-        "description": "Turn one or more exported S11 JSON files into an HTML comparison page.",
-        "when_to_use": "After get-1d-result has produced JSON files in the run exports directory.",
-        "required_context": ["S11 JSON export_path or file_paths", "output_html optional"],
-        "commands": [
-            "uv run python -m cst_runtime generate-report --data-dir <run_dir> --modules s11",
-        ],
-        "steps": [
-            {"tool": "get-1d-result", "purpose": "Produce JSON inputs; CSV is not allowed."},
-            {"tool": "generate-report", "purpose": "Render S11 comparison via --modules s11."},
-        ],
-        "stop_rules": [
-            "Only feed .json inputs produced by get-1d-result.",
-        ],
-    },
-    "s11-farfield-dashboard": {
-        "category": "results",
-        "risk": "filesystem-write",
-        "description": "Generate a combined S11 curve and farfield 3D dashboard from exported files.",
-        "when_to_use": "After S11 JSON and farfield JSON files are already exported into the run exports directory.",
-        "required_context": ["s11_json_files", "farfield_files", "exports_dir"],
-        "commands": [
-            "uv run python -m cst_runtime generate-report --data-dir <run_dir> --modules s11,farfield3d",
-        ],
-        "steps": [
-            {"tool": "get-1d-result", "purpose": "Produce S11 JSON inputs."},
-            {"tool": "export-farfield-grid", "purpose": "Produce Realized Gain/Gain/Directivity farfield JSON when needed."},
-            {"tool": "generate-report", "purpose": "Render combined HTML dashboard from exported files (--modules s11,farfield3d)."},
-        ],
-        "stop_rules": [
-            "Do not feed CSV into the dashboard.",
-            "Do not treat Abs(E) farfield files as dBi gain evidence.",
-            "This dashboard generation is file-based and does not replace fresh-session CST validation.",
-        ],
-    },
-    "farfield-realized-gain-preview": {
-        "category": "farfield",
-        "risk": "long-running",
-        "description": "Export Realized Gain JSON grid, inspect, and render HTML preview.",
-        "when_to_use": "At the end of a results workflow when true gain/dBi farfield evidence is required.",
-        "required_context": ["working_project", "farfield_name", "exports_dir"],
-        "commands": [
-            "uv run python -m cst_runtime export-farfield-grid --args-file <stages>\\export_farfield_grid_args.json",
-            "uv run python -m cst_runtime generate-report --args-file <stages>\\report_args.json",
-        ],
-        "steps": [
-            {"tool": "export-farfield-grid", "purpose": "Export Realized Gain/Gain/Directivity JSON grid through FarfieldCalculator."},
-            {"tool": "generate-report", "purpose": "Render farfield JSON to HTML via --modules farfield3d."},
-        ],
-        "stop_rules": [
-            "Never use Abs(E) as dBi gain evidence.",
-            "Farfield export/read is a terminal results step; close with save=false and do not save after reading.",
-            "Validate output_file/output_json existence and grid counts, not only status=success.",
-        ],
-    },
+
     "first-run": {
         "category": "meta",
         "risk": "read",
@@ -231,22 +138,19 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "when_to_use": "When using the CLI for the first time in a new environment, or after installing/upgrading CST.",
         "required_context": [],
         "commands": [
-            "python <skill-root>\\scripts\\cst_runtime_cli.py health-check",
-            "python <skill-root>\\scripts\\cst_runtime_cli.py doctor",
-            "python <skill-root>\\scripts\\cst_runtime_cli.py usage-guide",
+            "python <skill-root>\\scripts\\cst_runtime_cli.py health-check --auto-fix true",
+            "python <skill-root>\\scripts\\cst_runtime_cli.py --help",
             "python <skill-root>\\scripts\\cst_runtime_cli.py list-tools",
             "python <skill-root>\\scripts\\cst_runtime_cli.py list-pipelines",
         ],
         "steps": [
             {"tool": "health-check", "purpose": "Diagnose environment, auto-fix what's possible, report remaining issues."},
-            {"tool": "doctor", "purpose": "Confirm readiness after auto-fix."},
-            {"tool": "usage-guide", "purpose": "Read the CLI calling convention and JSON error contract."},
+            {"tool": "--help", "purpose": "Read the CLI calling convention and help categories."},
             {"tool": "list-tools", "purpose": "Discover available commands."},
             {"tool": "list-pipelines", "purpose": "Discover known multi-tool chains."},
         ],
         "stop_rules": [
             "If health-check returns overall=blocked, stop and follow user_instructions.",
-            "If doctor reports warnings after auto-fix, note them but may proceed with degraded functionality.",
         ],
     },
     "inspect-project": {

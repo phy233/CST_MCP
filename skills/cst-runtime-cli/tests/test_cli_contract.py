@@ -204,6 +204,28 @@ class CliContractAllPipelinesTests(unittest.TestCase):
         self.assertEqual(p["error_type"], "unknown_pipeline")
         self.assertIn("available_pipelines", p)
 
+    def test_every_pipeline_step_tool_exists(self) -> None:
+        """Ensure every pipeline step references a real tool or meta command."""
+        sys.path.insert(0, str(SKILL_ROOT / "scripts"))
+        from cst_runtime.cli.dispatch import TOOLS
+        from cst_runtime.cli.pipelines.registry import PIPELINES
+
+        known_tools = set(TOOLS) | {
+            "help", "list-tools", "list-pipelines", "describe-tool",
+            "describe-pipeline", "args-template", "pipeline-template",
+            "usage-guide", "invoke",
+        }
+        placeholders = {"<tool>", "--help"}
+        missing: list[str] = []
+        for pipe_name, pipe_def in PIPELINES.items():
+            for step in pipe_def.get("steps", []):
+                tool = step.get("tool", "")
+                if tool in placeholders:
+                    continue
+                if tool not in known_tools:
+                    missing.append(f"{pipe_name}: unknown tool {tool!r}")
+        self.assertFalse(missing, "\n".join(missing))
+
 
 class CliContractOutputFormatTests(unittest.TestCase):
     """All CLI output follows the JSON contract."""

@@ -44,6 +44,19 @@ def _parse_s11_json(file_path: str) -> dict[str, Any] | None:
         return None
 
 
+def _max_exported_run_id(project_path: str) -> int:
+    p = Path(project_path).expanduser().resolve()
+    exports_dir = p.parent.parent / "exports"
+    if not exports_dir.is_dir():
+        return 0
+    max_rid = 0
+    for f in exports_dir.glob("s11_run*.json"):
+        m = re.search(r"s11_run(\d+)\.json$", f.name)
+        if m:
+            max_rid = max(max_rid, int(m.group(1)))
+    return max_rid
+
+
 # ── inspect-project ──
 
 def pipeline_inspect_project(project_path: str) -> dict[str, Any]:
@@ -94,36 +107,52 @@ def pipeline_inspect_project(project_path: str) -> dict[str, Any]:
 
 def pipeline_prepare_experiment(
     project_path: str,
-    param_name: str,
-    param_value: float,
+    param_name: str = "",
+    param_value: float = 0,
+    names: list[str] | None = None,
+    values: list[float] | None = None,
 ) -> dict[str, Any]:
     from ...core.session import open_project as sm_open, close_project as sm_close
     from ...core.project import change_parameter, list_parameters, save_project
 
-    if not param_name:
+    resolved_names: list[str] = []
+    resolved_values: list[float] = []
+    if names and values:
+        resolved_names = names
+        resolved_values = values
+    elif param_name:
+        resolved_names = [param_name]
+        resolved_values = [param_value]
+    else:
         return error_response(
             "pipeline_param_missing",
-            "param_name cannot be empty",
+            "provide param_name+param_value or names+values",
+            step="prepare-experiment:validate",
+        )
+
+    if len(resolved_names) != len(resolved_values):
+        return error_response(
+            "pipeline_param_count_mismatch",
+            f"names ({len(resolved_names)}) != values ({len(resolved_values)})",
             step="prepare-experiment:validate",
         )
 
     open_result = sm_open(project_path)
     if open_result.get("status") != "success":
-        return error_response(
-            "pipeline_open_failed",
-            open_result.get("message", "failed to open project"),
-            step="prepare-experiment:open",
-        )
+        return open_result
 
-    change_result = change_parameter(project_path=project_path, name=param_name, value=param_value)
-    if change_result.get("status") != "success":
-        sm_close(project_path, save=False)
-        return error_response(
-            "pipeline_change_param_failed",
-            change_result.get("message", f"failed to change {param_name}={param_value}"),
-            step="prepare-experiment:change-param",
-            change_result=change_result,
-        )
+    all_changed: dict[str, Any] = {}
+    for n, v in zip(resolved_names, resolved_values):
+        cr = change_parameter(project_path=project_path, name=n, value=v)
+        if cr.get("status") != "success":
+            sm_close(project_path, save=False)
+            return error_response(
+                "pipeline_change_param_failed",
+                cr.get("message", f"failed to change {n}={v}"),
+                step="prepare-experiment:change-param",
+                change_result=cr,
+            )
+        all_changed.update(cr.get("changed", {}))
 
     confirm_result = list_parameters(project_path)
     if confirm_result.get("status") != "success":
@@ -134,7 +163,6 @@ def pipeline_prepare_experiment(
             step="prepare-experiment:confirm",
         )
 
-    changed = change_result.get("changed", {})
     save_result = save_project(project_path)
     if save_result.get("status") != "success":
         sm_close(project_path, save=False)
@@ -149,9 +177,9 @@ def pipeline_prepare_experiment(
         "status": "success",
         "pipeline": "prepare-experiment",
         "project_path": open_result.get("project_path", project_path),
-        "changed": changed,
-        "param_name": param_name,
-        "param_value": param_value,
+        "changed": all_changed,
+        "param_names": resolved_names,
+        "param_values": resolved_values,
         "parameters": confirm_result.get("parameters", {}),
     }
 
@@ -225,6 +253,8 @@ def pipeline_run_experiment(
             step="run-experiment:close",
         )
 
+    max_existing_run_id = _max_exported_run_id(project_path)
+
     export_result = export_run_results(
         project_path=project_path,
         farfield_names=farfield_names,
@@ -252,6 +282,13 @@ def pipeline_run_experiment(
 
     run_id = s11_metric.get("run_id") if s11_metric else None
 
+    re_run_warning = None
+    if run_id is not None and run_id <= max_existing_run_id:
+        re_run_warning = (
+            f"simulation may not have re-ran: exported run_id={run_id} <= pre-existing max={max_existing_run_id}. "
+            f"Parameter changes may not have triggered a new solver run."
+        )
+
     output: dict[str, Any] = {
         "status": "success",
         "pipeline": "run-experiment",
@@ -266,4 +303,6 @@ def pipeline_run_experiment(
     }
     if run_id is not None:
         output["run_id"] = run_id
+    if re_run_warning:
+        output["warning"] = re_run_warning
     return output

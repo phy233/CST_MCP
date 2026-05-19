@@ -154,7 +154,9 @@ uv run python -m cst_runtime list-pipelines
 - 低上下文 agent 不应自己发明管道；先跑 `list-pipelines`，再对目标链路跑 `describe-pipeline --pipeline <name>`。
 - 发现类命令不要求工作区已初始化；生产命令需要 task 目录和源 CST 工程。
 - 带路径或复杂参数的命令优先使用 `args-template` 生成 JSON，再用 `--args-file` 调用。
-- 只有已经通过 `describe-tool` 确认支持直接参数时，才使用 CLI flags。
+- `args-template` 不带 `--output` 时自动写到 `.cst_runtime/tmp/args_{tool}_{timestamp}.json`，不污染工作区根目录。
+- `--args-file` 加载后自动存档副本到 run 的 `stages/args_{tool}_{filename}.json`，纳入审计体系；若源文件在 `.cst_runtime/tmp/` 则自动清理。
+- 只有已经通过 `describe-tool` 确认支持直接参数时，才使用 CLI flags（注意：直接参数模式已经修复，对所有工具有效）。
 - 所有 `project_path`、`source_project`、`working_project` 都必须指向具体 `.cst` 文件。
 - `change-parameter` 的参数名固定为 `name` 和 `value`。
 - 每次调用必须检查 JSON 返回的 `status`；不得只看退出码。
@@ -215,22 +217,63 @@ python <skill-root>\scripts\cst_runtime_cli.py install-cst-libraries            
 python <skill-root>\scripts\cst_runtime_cli.py install-cst-libraries --cst-path "D:\CST\AMD64\python_cst_libraries"
 ```
 
-## 常用管道链
+## 管道工具与原子工具的关系
 
-所有管道定义和模板生成均通过 CLI 自身查询：
+管道是**原子工具的有序编排**，不是黑盒。每个管道内部调用若干原子工具完成工作流，agent 可随时查看管道定义，选择使用管道（便捷）或降级到原子工具（灵活）。
 
-```powershell
-uv run python -m cst_runtime list-pipelines
-uv run python -m cst_runtime describe-pipeline --pipeline <name>
-uv run python -m cst_runtime pipeline-template --pipeline <name> --output "$run\stages\pipeline_plan.json"
+```
+管道工具（便捷）         原子工具（灵活编排）
+─────────────────        ─────────────────────────
+inspect-project           cst-session-open → list-parameters → list-entities → cst-session-close
+prepare-experiment        cst-session-open → change-parameter → list-parameters → save-project → cst-session-close
+run-experiment            cst-session-open → start-simulation-async → wait-simulation → cst-session-close → open-results-project → export-run-results → cst-session-close
 ```
 
-关键管道：
-1. **first-run**：首次环境设置，health-check + 工具发现。
-2. **self-learn-cli**：新 agent 入场自学，不启动 CST。
-3. **args-file-tool-call**：复杂参数先生成 args 文件再调用。
-4. **project-unlock-check**：检查 `.lok` 锁文件。
-5. **cst-session-management-gate**：完整 CST session 生命周期验证。
+**原则：管道覆盖 80% 标准路径，原子工具覆盖 20% 非标场景。** agent 可在管道之间插入自定义步骤，或完全退回到原子工具。
+
+查看管道展开步骤：
+```powershell
+uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment
+```
+
+### 自包含性
+
+每个管道**自管理 session 生命周期**——自行创建 DE、打开/关闭工程：
+
+- `prepare-experiment`: open → 改参(可批量) → 确认 → save → close(kill DE)
+- `run-experiment`: open → start_solver → poll → close → open(results) → 导出 → close
+- `inspect-project`: open → 读参数+实体 → close
+
+**不要在管道工具前手动调用 `cst-session-open`**——管道内部会创建独立 DE 并自行清理。手动 open 会导致 session 冲突或 DE 泄漏。
+
+`list-open-projects` 和 `get-run-context` 需要 CST Design Environment 正在运行。无 DE 时必然返回 error，不是工具问题。
+
+## 管道参考表
+
+所有管道定义通过 `describe-pipeline --pipeline <name>` 查询，以下是 14 条管道的概览：
+
+| 管道 | 原子工具展开 | 用途 |
+|------|------------|------|
+| **inspect-project** | `cst-session-open` → `list-parameters` → `list-entities` → `cst-session-close` | 了解工程参数和实体 |
+| **prepare-experiment** | `cst-session-open` → `change-parameter` → `list-parameters` → `save-project` → `cst-session-close` | 改参→保存 |
+| **run-experiment** | `cst-session-open` → `start-simulation-async` → `wait-simulation` → `cst-session-close` → `export-run-results` | 仿真→导出 |
+
+| **async-simulation-refresh-results** | `start-simulation-async` → `wait-simulation` → `cst-session-close` → `list-run-ids` → `get-1d-result` | 异步仿真→读结果 |
+| **project-unlock-check** | `infer-run-dir` → `wait-project-unlocked` | 检查锁文件 |
+| **cst-session-management-gate** | 6 步完整 session 生命周期验证 | session 管理 |
+| **args-file-tool-call** | `describe-tool` → `args-template` → `<tool>` | 复杂参数调用 |
+| **first-run** | `health-check` → `help` → `list-tools` → `list-pipelines` | 首次环境设置 |
+| **self-learn-cli** | `health-check` → `help` → `list-tools` → `list-pipelines` → `describe-pipeline` → `describe-tool` → `args-template` | agent 入场自学 |
+
+用法：
+
+```powershell
+# 查看管道展开步骤
+uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment
+
+# 生成管道执行计划文件
+uv run python -m cst_runtime pipeline-template --pipeline run-experiment --output stages\pipeline_plan.json
+```
 
 管道停止规则：
 - 每一步都解析 stdout JSON，`status!="success"` 立即停止，除非下一步是明确恢复动作。
