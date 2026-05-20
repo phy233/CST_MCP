@@ -32,34 +32,6 @@ from .pipelines.impl import (
     pipeline_prepare_experiment,
 )
 
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-# ── 自动检测 CST 库路径并加入 sys.path ──
-_CST_SEARCH_PATHS = [
-    r"C:\Program Files\CST Studio Suite 2026\AMD64\python_cst_libraries",
-    r"C:\Program Files\CST Studio Suite 2025\AMD64\python_cst_libraries",
-    r"C:\Program Files (x86)\CST Studio Suite 2026\AMD64\python_cst_libraries",
-]
-_cst_found = False
-try:
-    _pp = Path.cwd().resolve() / "pyproject.toml"
-    if _pp.exists():
-        import tomllib
-        _src = tomllib.loads(_pp.read_text(encoding="utf-8")).get("tool", {}).get("uv", {}).get("sources", {}).get("cst-studio-suite-link", {})
-        if isinstance(_src, dict) and _src.get("path"):
-            _p = Path(_src["path"]).resolve()
-            if _p.is_dir() and (_p / "cst").is_dir() and str(_p) not in sys.path:
-                sys.path.insert(0, str(_p))
-                _cst_found = True
-except Exception:
-    pass
-if not _cst_found:
-    for _csp in _CST_SEARCH_PATHS:
-        _d = Path(_csp)
-        if _d.is_dir() and (_d / "cst").is_dir():
-            sys.path.insert(0, str(_d.resolve()))
-            break
-
 CLI_VERSION = "0.1.0"
 _BOOTSTRAP_ENTRYPOINT = "python <skill-root>\\scripts\\cst_runtime_cli.py"
 _UV_ENTRYPOINT = "uv run python -m cst_runtime"
@@ -76,8 +48,6 @@ SAFE_WORKSPACE_COMMANDS = {
 WORKSPACE_OPTIONAL_TOOLS = {
     "init-workspace",
     "init-task",
-    "inspect-cst-environment",
-    "cleanup-cst-processes",
     "cst-session-inspect",
     "cst-session-quit",
     "export-run-results",
@@ -96,7 +66,6 @@ CST_INTERFACE_TOOLS = {
     "list-parameters",
     "list-entities",
     "change-parameter",
-    "start-simulation",
     "start-simulation-async",
     "is-simulation-running",
     "wait-simulation",
@@ -118,7 +87,6 @@ CST_INTERFACE_TOOLS = {
     "create-component",
     "change-material",
     "define-frequency-range",
-    "change-frequency-range",
     "change-solver-type",
     "define-background",
     "define-boundary",
@@ -176,7 +144,6 @@ CST_RESULTS_TOOLS = {
     "get-2d-result",
     "get-version-info",
     "list-result-items",
-    "plot-project-result",
 }
 CST_FARFIELD_TOOLS = {
     "export-farfield-grid",
@@ -422,10 +389,9 @@ def _usage_guide() -> dict[str, Any]:
             "audit": ["record-stage", "update-status", "stage-evidence"],
             "project_identity": ["infer-run-dir", "wait-project-unlocked", "verify-project-identity", "list-open-projects"],
             "session_manager": ["cst-session-inspect", "cst-session-open", "cst-session-reattach", "cst-session-close", "cst-session-quit", "create-blank-project", "save-project"],
-            "process_cleanup": ["inspect-cst-environment", "cleanup-cst-processes"],
-            "project_ops": ["list-parameters", "change-parameter", "define-parameters", "define-frequency-range", "change-frequency-range", "define-background", "define-boundary", "define-mesh", "define-solver", "define-port", "define-monitor", "change-solver-type", "start-simulation", "start-simulation-async", "is-simulation-running", "wait-simulation", "pause-simulation", "resume-simulation", "stop-simulation", "set-solver-acceleration", "set-fdsolver-extrude-open-bc", "set-mesh-fpbavoid-nonreg-unite", "set-mesh-minimum-step-number"],
+            "project_ops": ["list-parameters", "change-parameter", "define-parameters", "define-frequency-range", "define-background", "define-boundary", "define-mesh", "define-solver", "define-port", "define-monitor", "change-solver-type", "start-simulation-async", "is-simulation-running", "wait-simulation", "pause-simulation", "resume-simulation", "stop-simulation", "set-solver-acceleration", "set-fdsolver-extrude-open-bc", "set-mesh-fpbavoid-nonreg-unite", "set-mesh-minimum-step-number"],
             "modeling": ["define-brick", "define-cylinder", "define-cone", "define-rectangle", "define-units", "define-polygon-3d", "define-analytical-curve", "define-extrude-curve", "define-loft", "transform-shape", "transform-curve", "create-horn-segment", "create-loft-sweep", "create-hollow-sweep", "boolean-add", "boolean-subtract", "boolean-intersect", "boolean-insert", "create-component", "delete-entity", "rename-entity", "set-entity-color", "change-material", "define-material-from-mtd", "list-materials", "list-entities", "set-farfield-monitor", "set-efield-monitor", "set-field-monitor", "set-probe", "delete-probe", "delete-monitor", "set-background-with-space", "set-farfield-plot-cuts", "show-bounding-box", "activate-post-process", "create-mesh-group", "pick-face", "add-to-history", "export-e-field", "export-surface-current", "export-voltage"],
-            "results": ["open-results-project", "list-subprojects", "list-run-ids", "get-parameter-combination", "get-1d-result", "get-2d-result", "export-run-results", "generate-report", "plot-exported-file", "plot-project-result"],
+            "results": ["open-results-project", "list-subprojects", "list-run-ids", "get-parameter-combination", "get-1d-result", "get-2d-result", "export-run-results", "generate-report", "plot-exported-file"],
             "farfield": ["export-farfield-grid", "export-farfield-cut", "inspect-farfield-monitors"],
         },
         "hard_rules": [

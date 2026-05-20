@@ -104,10 +104,13 @@ def _read_active_cst_path() -> str | None:
     return None
 
 
-def _write_pyproject_cst_path(cst_path: str) -> dict[str, Any]:
-    pyproject = Path.cwd().resolve() / "pyproject.toml"
-    if not pyproject.exists():
-        pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
+def _write_pyproject_cst_path(cst_path: str, pyproject_path: str = "") -> dict[str, Any]:
+    if pyproject_path:
+        pyproject = Path(pyproject_path).resolve()
+    else:
+        pyproject = Path.cwd().resolve() / "pyproject.toml"
+        if not pyproject.exists():
+            pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
     if not pyproject.exists():
         return error_response("pyproject_not_found", "No pyproject.toml found in workspace or repo root")
 
@@ -148,13 +151,44 @@ def _write_pyproject_cst_path(cst_path: str) -> dict[str, Any]:
     ds = new_content.find(deps_start)
     if ds >= 0:
         de = new_content.find("]", ds)
-        if de >= 0 and dep_name not in new_content[ds:de]:
-            existing = new_content[ds + len(deps_start):de].strip()
-            prefix = f'{dep_name}' if not existing else f', {dep_name}'
+        if de >= 0 and f'"{dep_name}"' not in new_content[ds:de]:
+            body = new_content[ds:de].rstrip()
+            needs_comma = body.endswith('"')
+            prefix = f',\n    "{dep_name}",' if needs_comma else f'\n    "{dep_name}",'
             new_content = new_content[:de] + prefix + new_content[de:]
 
     pyproject.write_text(new_content, encoding="utf-8")
     return {"status": "success", "cst_path": cst_path, "updated_file": str(pyproject)}
+
+
+def auto_register_cst(workspace_root: str = "") -> dict[str, Any]:
+    """Scan for CST installation and register in workspace pyproject.toml if unconfigured."""
+    scan = scan_cst_installations()
+    if not scan["found_count"]:
+        return {"status": "success", "cst_registered": False, "reason": "no_cst_found"}
+
+    valid = [inst for inst in scan["installations"] if inst["has_interface"] and inst["has_results"]]
+    if not valid:
+        return {"status": "success", "cst_registered": False, "reason": "cst_incomplete"}
+
+    target = valid[0]["path"]
+    pyproj = Path(workspace_root).resolve() / "pyproject.toml" if workspace_root else Path.cwd().resolve() / "pyproject.toml"
+    if not pyproj.exists():
+        return {"status": "success", "cst_registered": False, "reason": "no_pyproject"}
+
+    # Already configured with the same path?
+    try:
+        import tomllib
+        data = tomllib.loads(pyproj.read_text(encoding="utf-8"))
+        existing = data.get("tool", {}).get("uv", {}).get("sources", {}).get("cst-studio-suite-link", {})
+        if isinstance(existing, dict) and existing.get("path") == target:
+            return {"status": "success", "cst_registered": True, "already_configured": True}
+    except Exception:
+        pass
+
+    write_result = _write_pyproject_cst_path(target, str(pyproj))
+    write_result["cst_registered"] = write_result.get("status") == "success"
+    return write_result
 
 
 def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str, Any]:
@@ -229,27 +263,6 @@ def _verify_cst_imports(cst_path: str) -> dict[str, Any]:
     return results
 
 
-def _run_uv_cmd(args: list[str], workspace_root: str, timeout: int = 120, label: str = "uv") -> dict[str, Any]:
-    try:
-        result = subprocess.run(args, cwd=workspace_root, capture_output=True, text=True, timeout=timeout)
-        if result.returncode != 0:
-            return {"status": "error", "message": f"{label} failed (exit {result.returncode}):\n{result.stderr.strip()[:500]}"}
-        return {"status": "success"}
-    except FileNotFoundError:
-        return {"status": "error", "message": f"uv not on PATH, cannot run {label}"}
-    except subprocess.TimeoutExpired:
-        return {"status": "error", "message": f"{label} timed out after {timeout}s"}
-    except Exception as exc:
-        return {"status": "error", "message": f"{label} error: {exc}"}
-
-
-def _record_check(checks: list[dict[str, Any]], remaining: list[dict[str, Any]], name: str, status: str, message: str = "", *, auto_fixed: bool = False, user_action: str = "") -> None:
-    item = {"name": name, "status": status, "message": message, "auto_fixed": auto_fixed, "user_action": user_action}
-    checks.append(item)
-    if status != "pass":
-        remaining.append(item)
-
-
 def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
     from . import workspace as ws_mod
     import platform
@@ -315,6 +328,22 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
         stdout_encoding=getattr(sys.stdout, "encoding", None),
         stderr_encoding=getattr(sys.stderr, "encoding", None),
         filesystem_encoding=sys.getfilesystemencoding()))
+
+    # 1g. cst_runtime package deployment
+    _ws_root = Path(str(ws_info.get("workspace_root", ""))) if ws_info.get("workspace_root") else None
+    rt_dir = (_ws_root / ".cst_runtime") if _ws_root else None
+    rt_deployed = bool(rt_dir and (rt_dir / "cst_runtime").is_dir())
+    rt_importable = False
+    if rt_deployed:
+        try:
+            __import__("cst_runtime")
+            rt_importable = True
+        except Exception:
+            pass
+    ws_checks.append(_r("cst_runtime_package", "pass" if rt_importable else "error",
+        deployed=rt_deployed, importable=rt_importable,
+        path=str(rt_dir) if rt_dir else "",
+        user_action="" if rt_importable else "Run bootstrap.py or uv pip install -e .cst_runtime/"))
 
     ws_status = "pass"
     for c in ws_checks:
@@ -389,29 +418,50 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
             cst_status_agg = "degraded"
     phases["cst"] = {"status": cst_status_agg, "checks": cst_checks, "auto_fixed": cst_fixed}
 
-    # ── Phase 3: Integration (auto-fix only) ──
-    if auto_fix and not any(c["status"] == "error" for c in ws_checks + cst_checks):
-        sync_result = _run_uv_cmd(["uv", "sync"], str(ws_root), label="uv sync")
-        sync_ok = sync_result["status"] == "success"
-        phases["integration"] = {
-            "status": "pass" if sync_ok else "error",
-            "message": sync_result.get("message", "uv sync completed" if sync_ok else "uv sync failed"),
-        }
-        if sync_ok:
-            first_setup = not (ws_root / ".venv").is_dir() or True
-            if first_setup:
-                fixes_applied.append("uv_sync: dependencies installed to .venv")
-    else:
-        phases["integration"] = {"status": "skipped", "message": "uv sync skipped (blocking issues exist or auto_fix=False)"}
+    # ── Phase 3: Integration (diagnostic only) ──
+    venv_ok = (ws_root / ".venv").is_dir()
+    cst_runtime_ok = rt_importable
+    status_checks_ok = all(c["status"] != "error" for c in ws_checks + cst_checks)
+    integration_status = "pass" if (venv_ok and cst_runtime_ok) else "degraded" if status_checks_ok else "skipped"
+    integration_msg = []
+    if not venv_ok:
+        integration_msg.append("no .venv (run bootstrap.py to deploy)")
+    if not cst_runtime_ok:
+        integration_msg.append("cst_runtime not importable (run bootstrap.py to deploy)")
+    phases["integration"] = {
+        "status": integration_status,
+        "check": {"venv": venv_ok, "cst_runtime_importable": cst_runtime_ok},
+        "message": "; ".join(integration_msg) if integration_msg else "ready",
+    }
 
     # ── Overall readiness ──
     has_error = any(p.get("status") == "error" for p in phases.values())
     has_warning = any(p.get("status") in ("degraded", "warning") for p in phases.values())
     overall = "blocked" if has_error else ("degraded" if has_warning else "pass")
 
+    # ── remaining_issues + user_instructions ──
+    remaining_issues: list[dict[str, str]] = []
+    for phase_name, phase_data in phases.items():
+        for c in phase_data.get("checks", []):
+            if c.get("status") not in ("pass", "success"):
+                remaining_issues.append({
+                    "phase": phase_name,
+                    "name": c["name"],
+                    "status": c["status"],
+                    "detail": c.get("message", c.get("user_action", c.get("status", ""))),
+                })
+
+    _instructions_by_status: dict[str, str] = {
+        "blocked": "Fix the issues listed in remaining_issues before proceeding.",
+        "degraded": "System is usable but has non-blocking issues. See remaining_issues.",
+        "pass": "All checks passed. System is ready.",
+    }
+
     return {
         "status": "success",
         "overall": overall,
+        "remaining_issues": remaining_issues,
+        "user_instructions": _instructions_by_status.get(overall, "Unknown system status."),
         "phases": phases,
         "fixes_applied": fixes_applied,
         "workspace": {

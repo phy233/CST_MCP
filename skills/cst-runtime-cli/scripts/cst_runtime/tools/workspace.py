@@ -67,7 +67,12 @@ from ..core import environment as _ce
 
 
 def tool_init_workspace(args: dict) -> dict:
-    return _ws.init_workspace(str(args.get("workspace") or ""))
+    result = _ws.init_workspace(str(args.get("workspace") or ""))
+    if result.get("status") == "success":
+        ws_root = result.get("workspace_root", "")
+        cst_result = _ce.auto_register_cst(ws_root)
+        result["cst_auto_registered"] = cst_result.get("cst_registered", False)
+    return result
 
 
 def tool_init_task(args: dict) -> dict:

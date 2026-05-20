@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import subprocess
 import sys
 import tempfile
@@ -16,8 +17,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILL_ROOT = REPO_ROOT / "skills" / "cst-runtime-cli"
-CLI = SKILL_ROOT / "scripts" / "cst_runtime_cli.py"
 PYTHON = sys.executable
+_PYTHONPATH = str(SKILL_ROOT / "scripts")
 
 # Tools that require CST session — cannot test without real CST
 _CST_REQUIRED_TOOLS = {
@@ -71,13 +72,15 @@ _NO_CST_TOOLS = _NO_WORKSPACE_TOOLS | {
 
 
 def run_cli(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+    env = {**os.environ, "PYTHONPATH": _PYTHONPATH}
     return subprocess.run(
-        [PYTHON, str(CLI), *args],
+        [PYTHON, "-m", "cst_runtime", *args],
         cwd=REPO_ROOT,
         input=input_text,
         text=True,
         capture_output=True,
         check=False,
+        env=env,
     )
 
 
@@ -237,7 +240,7 @@ class CliContractOutputFormatTests(unittest.TestCase):
                 p = json.loads(r.stdout)
                 self.assertIn("status", p)
                 self.assertIn("adapter", p)
-                self.assertEqual(p["adapter"], "cst_runtime_cli")
+                self.assertIn(p["adapter"], ("cst_runtime_cli", "cst_runtime"))
 
     def test_error_outputs_have_error_type(self) -> None:
         r = run_cli("prepare-run")

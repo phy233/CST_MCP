@@ -1,6 +1,6 @@
 ---
 name: cst-runtime-optimization
-description: 当用户要求使用 CLI/runtime 执行 CST 参数优化循环、S11 指标迭代、多轮仿真对比时调用此 Skill。本 Skill 依赖 cst-runtime-cli 提供基础设施，不携带 runtime scripts，所有 CLI 调用走 base skill 的 scripts/cst_runtime_cli.py。
+description: 当用户要求使用 CLI/runtime 执行 CST 参数优化循环、S11 指标迭代、多轮仿真对比时调用此 Skill。本 Skill 依赖 cst-runtime-cli 提供基础设施，不携带 runtime scripts，所有 CLI 调用走 base skill 的 uv run python -m cst_runtime 入口。
 ---
 
 # CST Runtime 优化 Skill
@@ -15,13 +15,13 @@ description: 当用户要求使用 CLI/runtime 执行 CST 参数优化循环、S
 
 ## 依赖声明
 
-本 Skill 不实现 CST 操作，以下工具全部由 `cst-runtime-cli` 提供。调用时 `<skill-root>` 指向 base skill 目录。
+本 Skill 不实现 CST 操作，以下工具全部由 `cst-runtime-cli` 提供。所有 CLI 调用通过工作区的 `.cst_runtime\cli.py` 入口执行。
 
 | 职责 | CLI 工具 |
 |---|---|
 | run 创建 | `prepare-run`、`get-run-context` |
 | 审计 | `record-stage`、`update-status` |
-| 进程/session | `cst-session-open`、`cst-session-close`、`cleanup-cst-processes` |
+| 进程/session | `cst-session-open`、`cst-session-close`、`cst-session-quit` |
 | 参数 | `list-parameters`、`change-parameter` |
 | 仿真 | `start-simulation-async`、`wait-simulation` |
 | 结果导出 | **`export-run-results`**（统一导出 S11+2D+远场） |
@@ -55,6 +55,10 @@ exports/
 ### 模式 A：同项目多 run_id（推荐）
 
 适合仅调参数、不改变几何结构。参数变更在同一个 `.cst` 中累积多个 CST run_id。
+
+**两阶段策略：粗网格探针 → 全网格精确优化**
+
+参数 >5 个时先做探针（`design-probes`），用粗网格（`define-mesh` 降低 `steps_per_wave`）跑完折因实验，筛选关键参数 + 检测交互效应，数据注入优化器后开始精确仿真。
 
 **管道工具模式（推荐）：**
 ```
@@ -142,20 +146,48 @@ inspect-project ← 自包含管道，自动开/关 session
 ```
 返回全部 19+ 参数及其值、全部几何实体。**这是了解工程参数的唯一步骤**，无需再用 `list-parameters`。
 
-### 3. 迭代循环（每轮重复执行 3a-3d）
+### 3. 探针阶段：粗网格筛参数（可选但推荐）
+
+参数 >5 个时，用折因实验主动设计方案筛选重要参数，避免优化器在无关参数上浪费轮数。
+
+探针每个点都是一次 CST 仿真。建议先降低网格密度加速，趋势正确但快 3-5x：
+
+```powershell
+# 降低网格密度 → 复制为 _coarse.cst
+uv run python .cst_runtime\cli.py cst-session-open --project-path <run>\projects\working.cst
+uv run python .cst_runtime\cli.py define-mesh --project-path <run>\projects\working.cst `
+  --steps-per-wave-near 3 --steps-per-wave-far 3 --steps-per-box-near 3 --steps-per-box-far 1
+uv run python .cst_runtime\cli.py set-mesh-minimum-step-number --project-path <run>\projects\working.cst --num-steps 3
+uv run python .cst_runtime\cli.py save-project --project-path <run>\projects\working.cst
+uv run python .cst_runtime\cli.py cst-session-close --project-path <run>\projects\working.cst
+
+# 探针设计 + 执行
+uv run python .cst_runtime\cli.py design-probes --args-file <...>
+# 遍历每个探针: prepare-experiment → run-experiment
+
+# 分析主效应 + 交互 → 确定正式优化的参数集
+uv run python .cst_runtime\cli.py analyze-probes --args-file <...>
+
+# 探针数据注入优化器，TPE 从首轮就有信息量
+uv run python .cst_runtime\cli.py study-add-trials --args-file <...>
+```
+
+筛选出的参数子集后，用回原始工程（全网格）进入正式优化迭代。
+
+### 4. 迭代循环（每轮重复执行 4a-4d）
 
 > 以下为一轮的完整步骤。重复多轮直到早停条件满足。
 
 推荐使用管道工具，每轮仅需两步：
 
-#### 3a. 改参
+#### 4a. 改参
 ```
 prepare-experiment [--names [R,g] --values [0.16,23]]  ← 支持批量
 ```
 - 自动完成：open → 改参（循环逐一执行）→ list-parameters 确认 → save → close(kill DE)
 - 每轮可改一个或多个参数
 
-#### 3b. 仿真+导出
+#### 4b. 仿真+导出
 ```
 run-experiment
 ```
@@ -163,14 +195,14 @@ run-experiment
 - S11: `s11_run{N}.json`（每轮递增，不会覆盖）
 - 远场: `farfield_{freq}ghz_port{port}_run{N}_{quantity}.json`（每轮独立文件，不会覆盖）
 
-#### 3c. 早停判断
+#### 4c. 早停判断
 - 解析 `exports/s11_run{N}.json`：`20*log10(hypot(real, imag))` 转 dB
-- 判断是否达目标 → 达则 **break**，不达则回到 3a 继续下一轮
+- 判断是否达目标 → 达则 **break**，不达则回到 4a 继续下一轮
 - 若超过目标后继续执行额外轮次，任务输出必须标记 `overrun`
 
-#### 3d. 进程清理
+#### 4d. 进程清理
 ```
-cleanup-cst-processes
+cst-session-quit
 ```
 - run-experiment 结束后可能残留 orphan DE，每轮末尾清理一次。
 
@@ -188,7 +220,7 @@ update-status --status "validated"
 
 ### 6. 进程清理
 ```
-cleanup-cst-processes
+cst-session-quit
 ```
 强杀白名单固定，Access is denied 残留只能记录。
 
