@@ -885,6 +885,18 @@ def _with_audit(tool_name: str, tool_args: dict[str, Any], result: dict[str, Any
     return {**result, "audit": audit_paths}
 
 
+def _lazy_tool(mod_name: str, func_name: str) -> Callable:
+    """Return a wrapper that imports and calls the tool function on first invocation."""
+    import importlib
+    from functools import wraps
+    @wraps(lambda: None)
+    def wrapper(args: dict):
+        mod = importlib.import_module(f"..tools.{mod_name}", __package__)
+        fn = getattr(mod, f"tool_{func_name}")
+        return fn(args)
+    return wrapper
+
+
 # Build handler map from all tool_* functions defined above
 _HANDLER_MAP: dict[str, Callable] = {
     "tool_run_experiment": tool_run_experiment,
@@ -994,6 +1006,12 @@ _HANDLER_MAP: dict[str, Callable] = {
     "tool_export_surface_current": tool_export_surface_current,
     "tool_export_voltage": tool_export_voltage,
 }
+_HANDLER_MAP["tool_create_study"] = _lazy_tool("optimization", "create_study")
+_HANDLER_MAP["tool_ask_study"] = _lazy_tool("optimization", "ask_study")
+_HANDLER_MAP["tool_tell_study"] = _lazy_tool("optimization", "tell_study")
+_HANDLER_MAP["tool_best_study"] = _lazy_tool("optimization", "best_study")
+_HANDLER_MAP["tool_param_importances"] = _lazy_tool("optimization", "param_importances")
+_HANDLER_MAP["tool_terminate_check"] = _lazy_tool("optimization", "terminate_check")
 assert len(_HANDLER_MAP) > 100, f"Handler map too small: {len(_HANDLER_MAP)}"
 _TOOLS: dict[str, dict[str, Any]] = build_tools(_HANDLER_MAP)
 TOOLS = _TOOLS

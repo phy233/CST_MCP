@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from .errors import error_response
+
+
+def _try_import_optuna():
+    try:
+        import optuna
+        return optuna, None
+    except ImportError:
+        return None, error_response(
+            "optuna_not_installed",
+            "optuna is required for optimization. Install with: pip install optuna",
+            runtime_module="cst_runtime.core.optimizer",
+        )
+
+
+_parse_json = lambda v, d=None: json.loads(v) if isinstance(v, str) and v.strip() else (v or d)
+
+
+def create_study(
+    storage_path: str,
+    study_name: str,
+    parameters: str | dict,
+    direction: str = "minimize",
+    directions: list[str] | None = None,
+    value_names: list[str] | None = None,
+    sampler: str = "tpe",
+    n_startup_trials: int = 10,
+) -> dict[str, Any]:
+    optuna, err = _try_import_optuna()
+    if err:
+        return err
+    sp = Path(storage_path).expanduser().resolve()
+    sp.parent.mkdir(parents=True, exist_ok=True)
+    storage = f"sqlite:///{sp.as_posix()}"
+    try:
+        params_dict = _parse_json(parameters, {})
+    except (json.JSONDecodeError, TypeError) as e:
+        return error_response("invalid_parameters", str(e))
+    try:
+        resolved_directions = directions or [direction]
+        is_multi = len(resolved_directions) > 1
+        if is_multi:
+            dir_map = {"minimize": optuna.study.StudyDirection.MINIMIZE, "maximize": optuna.study.StudyDirection.MAXIMIZE}
+            study = optuna.create_study(
+                storage=storage, study_name=study_name,
+                directions=[dir_map[d] for d in resolved_directions],
+                load_if_exists=True,
+            )
+        else:
+            study = optuna.create_study(
+                storage=storage, study_name=study_name,
+                direction=resolved_directions[0],
+                load_if_exists=True,
+            )
+        study.set_user_attr("parameters", json.dumps(params_dict, ensure_ascii=False))
+        if value_names:
+            study.set_user_attr("value_names", json.dumps(value_names, ensure_ascii=False))
+        if is_multi:
+            study.set_user_attr("multi_objective", "true")
+        return {
+            "status": "success", "study_name": study_name, "storage": str(sp),
+            "directions": resolved_directions, "sampler": sampler,
+            "parameters": params_dict, "number_of_trials": len(study.trials),
+            "multi_objective": is_multi,
+            "runtime_module": "cst_runtime.core.optimizer",
+        }
+    except Exception as exc:
+        return error_response("create_study_failed", str(exc), study_name=study_name)
+
+
+def ask_study(storage_path: str, study_name: str) -> dict[str, Any]:
+    optuna, err = _try_import_optuna()
+    if err:
+        return err
+    sp = Path(storage_path).expanduser().resolve()
+    storage = f"sqlite:///{sp.as_posix()}"
+    try:
+        study = optuna.load_study(storage=storage, study_name=study_name)
+        param_raw = study.user_attrs.get("parameters", "{}")
+        params_def = _parse_json(param_raw, {})
+        trial = study.ask()
+        params: dict[str, Any] = {}
+        for pname, pdef in params_def.items():
+            ptype = pdef.get("type", "float")
+            low = pdef.get("min", pdef.get("low", 0))
+            high = pdef.get("max", pdef.get("high", 1))
+            if ptype == "int":
+                params[pname] = trial.suggest_int(pname, int(low), int(high))
+            elif ptype == "categorical":
+                params[pname] = trial.suggest_categorical(pname, pdef.get("choices", []))
+            else:
+                params[pname] = trial.suggest_float(pname, float(low), float(high), log=pdef.get("log", False))
+        return {
+            "status": "success", "study_name": study_name,
+            "trial_number": trial.number, "params": params,
+            "runtime_module": "cst_runtime.core.optimizer",
+        }
+    except Exception as exc:
+        return error_response("ask_study_failed", str(exc), study_name=study_name)
+
+
+def tell_study(
+    storage_path: str, study_name: str, trial_number: int,
+    value: float | None = None, values: list[float] | None = None,
+    constraints: list[float] | None = None,
+    state: str = "complete",
+) -> dict[str, Any]:
+    optuna, err = _try_import_optuna()
+    if err:
+        return err
+    sp = Path(storage_path).expanduser().resolve()
+    storage = f"sqlite:///{sp.as_posix()}"
+    try:
+        study = optuna.load_study(storage=storage, study_name=study_name)
+        state_obj = optuna.trial.TrialState.COMPLETE if state == "complete" else optuna.trial.TrialState.PRUNED
+        resolved_values = values if values is not None else ([value] if value is not None else None)
+        if resolved_values is None:
+            return error_response("tell_no_value", "provide value or values")
+        study.tell(trial_number, resolved_values, state=state_obj)
+        trials = study.trials
+        completed = [t for t in trials if t.state == optuna.trial.TrialState.COMPLETE]
+        result: dict[str, Any] = {
+            "status": "success", "study_name": study_name,
+            "trial_number": trial_number, "values": resolved_values, "state": state,
+            "total_trials": len(trials),
+            "runtime_module": "cst_runtime.core.optimizer",
+        }
+        if completed:
+            try:
+                best = study.best_trial
+                result["best_value"] = best.values[0] if len(best.values) == 1 else best.values
+                result["best_params"] = best.params
+                result["best_trial_number"] = best.number
+            except Exception:
+                best_trials = study.best_trials[:10]
+                result["best_values"] = [t.values for t in best_trials]
+                result["best_params_list"] = [t.params for t in best_trials]
+        return result
+    except Exception as exc:
+        return error_response("tell_study_failed", str(exc), study_name=study_name, trial_number=trial_number)
+
+
+def best_study(storage_path: str, study_name: str) -> dict[str, Any]:
+    optuna, err = _try_import_optuna()
+    if err:
+        return err
+    sp = Path(storage_path).expanduser().resolve()
+    storage = f"sqlite:///{sp.as_posix()}"
+    try:
+        study = optuna.load_study(storage=storage, study_name=study_name)
+        trials = study.trials
+        completed = [t for t in trials if t.state == optuna.trial.TrialState.COMPLETE]
+        result: dict[str, Any] = {
+            "status": "success", "study_name": study_name,
+            "total_trials": len(trials), "completed_trials": len(completed),
+            "runtime_module": "cst_runtime.core.optimizer",
+        }
+        is_mo = study.user_attrs.get("multi_objective") == "true"
+        if completed:
+            if is_mo:
+                result["best_values"] = [t.values for t in completed[:10]]
+                result["n_objectives"] = len(completed[0].values)
+            else:
+                try:
+                    best = study.best_trial
+                    result["best_value"] = best.value
+                    result["best_params"] = best.params
+                    result["best_trial_number"] = best.number
+                except Exception:
+                    pass
+        return result
+    except Exception as exc:
+        return error_response("best_study_failed", str(exc), study_name=study_name)
+
+
+def param_importances(storage_path: str, study_name: str) -> dict[str, Any]:
+    optuna, err = _try_import_optuna()
+    if err:
+        return err
+    sp = Path(storage_path).expanduser().resolve()
+    storage = f"sqlite:///{sp.as_posix()}"
+    try:
+        study = optuna.load_study(storage=storage, study_name=study_name)
+        try:
+            from optuna.importance import get_param_importances
+            importances = get_param_importances(study)
+        except ImportError:
+            return error_response("sklearn_missing", "scikit-learn is required for parameter importance. Install with: pip install scikit-learn", study_name=study_name)
+        sorted_params = sorted(importances.items(), key=lambda x: -x[1])
+        return {
+            "status": "success", "study_name": study_name,
+            "importances": {name: round(val, 4) for name, val in sorted_params},
+            "top_param": sorted_params[0][0] if sorted_params else None,
+            "runtime_module": "cst_runtime.core.optimizer",
+        }
+    except Exception as exc:
+        return error_response("param_importances_failed", str(exc), study_name=study_name)
+
+
+def terminate_check(storage_path: str, study_name: str) -> dict[str, Any]:
+    optuna, err = _try_import_optuna()
+    if err:
+        return err
+    sp = Path(storage_path).expanduser().resolve()
+    storage = f"sqlite:///{sp.as_posix()}"
+    try:
+        study = optuna.load_study(storage=storage, study_name=study_name)
+        from optuna.terminator import Terminator
+        terminator = Terminator()
+        should_terminate = terminator.should_terminate(study)
+        return {
+            "status": "success", "study_name": study_name,
+            "should_terminate": should_terminate,
+            "total_trials": len(study.trials),
+            "runtime_module": "cst_runtime.core.optimizer",
+        }
+    except Exception as exc:
+        return error_response("terminate_check_failed", str(exc), study_name=study_name)
