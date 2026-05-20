@@ -41,7 +41,7 @@ uv run python .cst_runtime\cli.py run-experiment --args-file <args>
 ### ③ 报告 + 清理
 ```powershell
 uv run python .cst_runtime\cli.py generate-report --args-file <args>
-uv run python .cst_runtime\cli.py cleanup-cst-processes
+uv run python .cst_runtime\cli.py cst-session-quit
 ```
 
 > 此流程覆盖 90% 的标准调优任务。如需建模、改边界、设端口等操作，在上述步骤之间插入原子工具即可，管道自管理的 session 不受影响。
@@ -247,7 +247,7 @@ python <skill-root>\scripts\cst_runtime_cli.py health-check --auto-fix false    
 
 ```powershell
 python <skill-root>\scripts\cst_runtime_cli.py health-check --auto-fix false
-python <skill-root>\scripts\cst_runtime_cli.py inspect-cst-environment
+python <skill-root>\scripts\cst_runtime_cli.py cst-session-inspect
 python <skill-root>\scripts\cst_runtime_cli.py cst-session-inspect
 ```
 
@@ -333,7 +333,7 @@ uv run python -m cst_runtime pipeline-template --pipeline run-experiment --outpu
 
 ## 进程管理前置 gate
 
-CLI 命令：`inspect-cst-environment` / `cst-session-inspect` / `cst-session-open` / `cst-session-reattach` / `cst-session-close` / `cst-session-quit` / `cleanup-cst-processes`
+CLI 命令：`cst-session-inspect` / `cst-session-open` / `cst-session-reattach` / `cst-session-close` / `cst-session-quit`
 
 完整 gate 顺序见 `describe-pipeline --pipeline cst-session-management-gate`。
 

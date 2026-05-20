@@ -101,15 +101,6 @@ TOOL_DEFS = {
     "direct_flags": True,
     "args_template": {"file_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\s11_run1.json", "output_html": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\result_preview.html", "page_title": "CST Result Preview"},
 },
-
-"plot-project-result": {
-    "category": "results",
-    "risk": "filesystem-write",
-    "description": "Export a project result with explicit project_path and render it to an HTML preview.",
-    "handler": "tool_plot_project_result",
-    "direct_flags": True,
-    "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst", "treepath": "1D Results\\S-Parameters\\S1,1", "module_type": "3d", "run_id": 1, "load_impedances": True, "output_html": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\project_result_preview.html", "page_title": "Project Result Preview", "allow_interactive": True, "subproject_treepath": "", "result_kind": "auto", "intermediate_json": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\exports\\project_result_preview.json"},
-},
 }
 
 
@@ -222,22 +213,6 @@ def tool_plot_exported_file(args: dict) -> dict:
         file_path=str(file_path or ""),
         output_html=str(args.get("output_html", "")),
         page_title=str(args.get("page_title", "")),
-    )
-
-
-def tool_plot_project_result(args: dict) -> dict:
-    return _res.plot_project_result(
-        project_path=project_path_from_args(args),
-        treepath=str(args.get("treepath", "")),
-        module_type=str(args.get("module_type", "3d")),
-        run_id=run_id_from_args(args),
-        load_impedances=bool(args.get("load_impedances", True)),
-        output_html=str(args.get("output_html", "")),
-        page_title=str(args.get("page_title", "")),
-        allow_interactive=bool(args.get("allow_interactive", False)),
-        subproject_treepath=str(args.get("subproject_treepath", "")),
-        result_kind=str(args.get("result_kind", "auto")),
-        intermediate_json=str(args.get("intermediate_json", "")),
     )
 
 

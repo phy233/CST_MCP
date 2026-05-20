@@ -3,15 +3,6 @@ from . import _register_tool_defs
 
 
 TOOL_DEFS = {
-"change-frequency-range": {
-    "category": "project_ops",
-    "risk": "write",
-    "description": "Change the simulation frequency range.",
-    "handler": "tool_change_frequency_range",
-    "direct_flags": True,
-    "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst", "min_frequency": "2", "max_frequency": "18"},
-},
-
 "change-parameter": {
     "category": "project_ops",
     "risk": "write",
@@ -210,15 +201,6 @@ TOOL_DEFS = {
     "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst", "use_parallelization": True, "max_threads": 1024},
 },
 
-"start-simulation": {
-    "category": "project_ops",
-    "risk": "long-running",
-    "description": "Run the CST solver synchronously for the verified working project.",
-    "handler": "tool_start_simulation",
-    "direct_flags": True,
-    "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"},
-},
-
 "start-simulation-async": {
     "category": "project_ops",
     "risk": "long-running",
@@ -272,19 +254,26 @@ from ..core import project as _po
 from ..core import modeling as _md
 from ..core import identity as _pi
 from ..core.utils import project_path_from_args
-from ..cli.pipelines.impl import pipeline_inspect_project as _inspect
-from ..cli.pipelines.impl import pipeline_prepare_experiment as _prepare
 from pathlib import Path
 import time
 
 
+def _lazy_pipeline(name: str):
+    """Lazy-import a pipeline function to break circular dependency."""
+    import importlib
+    mod = importlib.import_module("..cli.pipelines.impl", __package__)
+    return getattr(mod, name)
+
+
 def tool_inspect_project(args: dict) -> dict:
+    _inspect = _lazy_pipeline("pipeline_inspect_project")
     return _inspect(
         project_path=str(args.get("project_path", "")),
     )
 
 
 def tool_prepare_experiment(args: dict) -> dict:
+    _prepare = _lazy_pipeline("pipeline_prepare_experiment")
     names = args.get("names") or args.get("param_names")
     values = args.get("values") or args.get("param_values")
     if isinstance(names, list) and isinstance(values, list):
@@ -445,10 +434,6 @@ def tool_wait_project_unlocked(args: dict) -> dict:
 
 def tool_define_frequency_range(args: dict) -> dict:
     return _md.define_frequency_range(**args)
-
-
-def tool_change_frequency_range(args: dict) -> dict:
-    return _md.change_frequency_range(**args)
 
 
 def tool_change_solver_type(args: dict) -> dict:

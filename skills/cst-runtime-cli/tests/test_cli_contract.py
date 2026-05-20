@@ -26,13 +26,13 @@ _CST_REQUIRED_TOOLS = {
     "boolean-subtract", "boolean-add", "boolean-intersect", "boolean-insert",
     "delete-entity", "create-component", "change-material",
     "list-entities", "list-parameters", "change-parameter",
-    "start-simulation", "start-simulation-async", "is-simulation-running",
+    "start-simulation-async", "is-simulation-running",
     "wait-simulation", "stop-simulation", "pause-simulation", "resume-simulation",
     "save-project", "verify-project-identity", "define-material-from-mtd",
     "list-open-projects", "open-results-project", "list-subprojects",
     "list-run-ids", "get-parameter-combination", "get-1d-result", "get-2d-result",
-    "plot-project-result", "create-blank-project",
-    "define-frequency-range", "change-frequency-range", "change-solver-type",
+    "create-blank-project",
+    "define-frequency-range", "change-solver-type",
     "define-background", "define-boundary", "define-mesh", "define-solver",
     "define-port", "define-monitor", "rename-entity", "set-entity-color",
     "define-units", "set-farfield-monitor", "set-efield-monitor",
@@ -53,10 +53,9 @@ _CST_REQUIRED_TOOLS = {
 
 # Tools that can be tested without any workspace
 _NO_WORKSPACE_TOOLS = {
-    "doctor", "usage-guide", "list-tools", "list-pipelines",
+    "usage-guide", "list-tools", "list-pipelines",
     "describe-tool", "describe-pipeline", "args-template", "pipeline-template",
     "init-workspace", "init-task",
-    "inspect-cst-environment", "cleanup-cst-processes",
     "cst-session-inspect", "cst-session-quit",
     "plot-exported-file",
     "calculate-farfield-neighborhood-flatness",
@@ -265,22 +264,6 @@ class CliContractOutputFormatTests(unittest.TestCase):
 class CliContractNoCstFunctionalTests(unittest.TestCase):
     """Functional tests for tools that work without CST."""
 
-    def test_inspect_cst_environment_returns_structure(self) -> None:
-        r = run_cli("inspect-cst-environment")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        p = json.loads(r.stdout)
-        self.assertIn("process_count", p)
-        self.assertIn("lock_count", p)
-        self.assertIn("project_path", p)
-        self.assertIn("readiness", p)
-
-    def test_cleanup_cst_processes_dry_run_does_not_kill(self) -> None:
-        r = run_cli("cleanup-cst-processes", "--dry-run", "true")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "success")
-        self.assertEqual(p["cleanup_status"], "dry_run")
-
     def test_list_materials_returns_names(self) -> None:
         r = run_cli("list-materials")
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -443,7 +426,7 @@ class CliContractGovernanceTests(unittest.TestCase):
 
     def test_read_tools_do_not_require_check_solid(self) -> None:
         read_tools = {"list-parameters", "list-entities", "list-materials",
-                       "inspect-cst-environment", "cst-session-inspect"}
+                       "cst-session-inspect"}
         for tool in read_tools:
             with self.subTest(tool=tool):
                 r = run_cli("describe-tool", "--tool", tool)

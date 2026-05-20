@@ -68,7 +68,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         ],
         "recovery": [
             "If wait-project-unlocked reports a lock, close the matching CST project before retrying.",
-            "If cleanup is needed, use cleanup-cst-processes and record Access is denied residuals.",
+            "If cleanup is needed, use cst-session-quit or close_project (kill_processes=True) and record Access is denied residuals.",
         ],
         "stop_rules": [
             "Do not copy or reopen a locked project.",

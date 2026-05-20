@@ -3,15 +3,6 @@ from . import _register_tool_defs
 
 
 TOOL_DEFS = {
-"cleanup-cst-processes": {
-    "category": "process_cleanup",
-    "risk": "process-control",
-    "description": "Force-kill only allowlisted CST processes and report Access is denied residuals with lock-file evidence.",
-    "handler": "tool_cleanup_cst_processes",
-    "direct_flags": True,
-    "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst", "dry_run": False, "settle_seconds": 0.5},
-},
-
 "create-blank-project": {
     "category": "session_manager",
     "risk": "write",
@@ -66,15 +57,6 @@ TOOL_DEFS = {
     "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"},
 },
 
-"inspect-cst-environment": {
-    "category": "process_cleanup",
-    "risk": "read",
-    "description": "Inspect allowlisted CST processes, project locks, open projects, and attach readiness.",
-    "handler": "tool_inspect_cst_environment",
-    "direct_flags": True,
-    "args_template": {"project_path": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"},
-},
-
 "save-project": {
     "category": "session_manager",
     "risk": "filesystem-write",
@@ -89,17 +71,8 @@ TOOL_DEFS = {
 # --- Handlers ---
 
 from ..core import session as _sm
-from ..core import process as _pc
 from ..core import project as _po
 from ..core.utils import project_path_from_args
-
-
-def tool_cleanup_cst_processes(args: dict) -> dict:
-    return _pc.cleanup_cst_processes(
-        project_path=str(args.get("project_path") or ""),
-        dry_run=bool(args.get("dry_run", False)),
-        settle_seconds=float(args.get("settle_seconds", 0.5)),
-    )
 
 
 def tool_create_blank_project(args: dict) -> dict:
@@ -134,12 +107,6 @@ def tool_cst_session_quit(args: dict) -> dict:
 
 def tool_cst_session_reattach(args: dict) -> dict:
     return _sm.reattach_project(project_path_from_args(args))
-
-
-def tool_inspect_cst_environment(args: dict) -> dict:
-    return _pc.inspect_cst_environment(
-        project_path=str(args.get("project_path") or ""),
-    )
 
 
 def tool_save_project(args: dict) -> dict:
