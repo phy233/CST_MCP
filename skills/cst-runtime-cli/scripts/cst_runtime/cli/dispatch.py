@@ -184,7 +184,7 @@ CST_FARFIELD_TOOLS = {
 }
 
 TOP_LEVEL_HELP = """Examples:
-  python <skill-root>\\scripts\\cst_runtime_cli.py doctor
+  python <skill-root>\\scripts\\cst_runtime_cli.py health-check --auto-fix false
   python <skill-root>\\scripts\\cst_runtime_cli.py init-workspace --workspace C:\\path\\to\\workspace
   python <skill-root>\\scripts\\cst_runtime_cli.py list-tools
   python <skill-root>\\scripts\\cst_runtime_cli.py describe-tool --tool get-1d-result
@@ -384,7 +384,7 @@ def _usage_guide() -> dict[str, Any]:
             "resolution_order": ["--workspace", "CST_WORKSPACE", "ancestor marker", "current directory"],
         },
         "agent_steps": [
-            "Run doctor first when using a new shell, machine, IDE agent, or migrated workspace.",
+            "Run health-check --auto-fix false first when using a new shell, machine, IDE agent, or migrated workspace.",
             "Run list-tools to discover tool names.",
             "Run list-pipelines to discover known pipeable chains before inventing one.",
             "Run describe-pipeline --pipeline <pipeline> before using a multi-tool chain.",
@@ -500,7 +500,7 @@ def _workspace_required_error(workspace_info: dict[str, Any]) -> dict[str, Any]:
         "message": "production commands require an initialized CST runtime workspace",
         "workspace": workspace_info,
         "next_steps": [
-            _cmd("doctor --workspace <workspace>"),
+            _cmd("health-check --workspace <workspace>"),
             _cmd("init-workspace --workspace <workspace>"),
             _cmd("init-task --workspace <workspace> --task-id task_001_demo --source-project C:\\path\\model.cst --goal demo"),
         ],
@@ -533,7 +533,7 @@ def _production_dependency_error(tool_name: str, missing_modules: list[str]) -> 
         "tool": tool_name,
         "missing_modules": missing_modules,
         "next_steps": [
-            _cmd("doctor --workspace <workspace>"),
+            _cmd("health-check --workspace <workspace>"),
             "Configure CST Studio Suite Python libraries for the Python executable running this Skill.",
         ],
         "adapter": "cst_runtime_cli",

@@ -53,12 +53,22 @@ def build_args_templates() -> dict[str, dict]:
 
 
 def build_direct_arg_specs() -> dict[str, dict]:
-    """从 TOOL_DEFS 中提取 direct_flags=True 的 args_template。"""
-    return {
-        name: defn["args_template"]
-        for name, defn in _ALL_DEFS.items()
-        if defn.get("direct_flags", False)
-    }
+    """从 TOOL_DEFS 中提取 direct_flags=True 的 args_template 标量字段。
+
+    只暴露字符串、数字、布尔值字段作为直接参数 `--flag value`。
+    数组/对象/None 字段必须通过 `--args-file` 传入。
+    """
+    result: dict[str, dict] = {}
+    for name, defn in _ALL_DEFS.items():
+        if not defn.get("direct_flags", False):
+            continue
+        scalar_fields: dict[str, str] = {}
+        for key, val in defn["args_template"].items():
+            if isinstance(val, (str, int, float, bool)):
+                scalar_fields[key] = str(val) if not isinstance(val, str) else val
+        if scalar_fields:
+            result[name] = scalar_fields
+    return result
 
 
 def count() -> int:
