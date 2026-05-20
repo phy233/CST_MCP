@@ -5,7 +5,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .errors import error_response
+
+def error_response(error_type: str, message: str, **extra: Any) -> dict[str, Any]:
+    return {"status": "error", "error_type": error_type, "message": message, **extra}
 
 
 def _try_import_optuna():
