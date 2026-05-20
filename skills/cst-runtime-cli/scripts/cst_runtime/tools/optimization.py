@@ -20,6 +20,7 @@ _register_tool_defs({
             "direction": "minimize",
             "directions": ["minimize", "maximize"],
             "value_names": ["S11_dB", "Gain_dBi"],
+            "constraints": [{"name": "VSWR", "operator": "<=", "threshold": 2.0}],
             "sampler": "tpe",
             "n_startup_trials": 10,
         },
@@ -47,6 +48,7 @@ _register_tool_defs({
             "trial_number": 3,
             "value": -35.5,
             "values": [-35.5, 12.3],
+            "constraints": [-1.0, 0.5],
             "state": "complete",
         },
     },
@@ -94,6 +96,7 @@ def tool_create_study(args: dict) -> dict:
         direction=str(args.get("direction", "minimize")),
         directions=args.get("directions"),
         value_names=args.get("value_names"),
+        constraints=args.get("constraints"),
         sampler=str(args.get("sampler", "tpe")),
         n_startup_trials=int(args.get("n_startup_trials", 10)),
     )

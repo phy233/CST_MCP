@@ -23,6 +23,17 @@ def _try_import_optuna():
 _parse_json = lambda v, d=None: json.loads(v) if isinstance(v, str) and v.strip() else (v or d)
 
 
+def _make_constraints_func(constraint_defs: list[dict]) -> Any:
+    """Return a constraints_func for create_study that reads from trial.user_attrs."""
+    import optuna
+    def constraints_func(trial: "optuna.trial.Trial") -> list[float]:
+        vals = trial.user_attrs.get("constraints", [])
+        if not vals:
+            return [0.0] * len(constraint_defs)
+        return vals
+    return constraints_func
+
+
 def create_study(
     storage_path: str,
     study_name: str,
@@ -30,6 +41,7 @@ def create_study(
     direction: str = "minimize",
     directions: list[str] | None = None,
     value_names: list[str] | None = None,
+    constraints: list[dict] | None = None,
     sampler: str = "tpe",
     n_startup_trials: int = 10,
 ) -> dict[str, Any]:
@@ -46,29 +58,28 @@ def create_study(
     try:
         resolved_directions = directions or [direction]
         is_multi = len(resolved_directions) > 1
+        cfunc = _make_constraints_func(constraints) if constraints else None
+        kwargs: dict[str, Any] = dict(storage=storage, study_name=study_name, load_if_exists=True)
         if is_multi:
             dir_map = {"minimize": optuna.study.StudyDirection.MINIMIZE, "maximize": optuna.study.StudyDirection.MAXIMIZE}
-            study = optuna.create_study(
-                storage=storage, study_name=study_name,
-                directions=[dir_map[d] for d in resolved_directions],
-                load_if_exists=True,
-            )
+            kwargs["directions"] = [dir_map[d] for d in resolved_directions]
         else:
-            study = optuna.create_study(
-                storage=storage, study_name=study_name,
-                direction=resolved_directions[0],
-                load_if_exists=True,
-            )
+            kwargs["direction"] = resolved_directions[0]
+        if cfunc:
+            kwargs["constraints_func"] = cfunc
+        study = optuna.create_study(**kwargs)
         study.set_user_attr("parameters", json.dumps(params_dict, ensure_ascii=False))
         if value_names:
             study.set_user_attr("value_names", json.dumps(value_names, ensure_ascii=False))
         if is_multi:
             study.set_user_attr("multi_objective", "true")
+        if constraints:
+            study.set_user_attr("constraint_defs", json.dumps(constraints, ensure_ascii=False))
         return {
             "status": "success", "study_name": study_name, "storage": str(sp),
             "directions": resolved_directions, "sampler": sampler,
             "parameters": params_dict, "number_of_trials": len(study.trials),
-            "multi_objective": is_multi,
+            "multi_objective": is_multi, "constrained": bool(constraints),
             "runtime_module": "cst_runtime.core.optimizer",
         }
     except Exception as exc:
@@ -106,6 +117,19 @@ def ask_study(storage_path: str, study_name: str) -> dict[str, Any]:
         return error_response("ask_study_failed", str(exc), study_name=study_name)
 
 
+def _trial_set_constraints(study, trial_number: int, constraints: list[float]) -> None:
+    """Set constraint values on a trial using its internal trial_id."""
+    for t in study.trials:
+        if t.number == trial_number:
+            trial_id = t._trial_id
+            break
+    else:
+        raise ValueError(f"trial {trial_number} not found")
+    import optuna.trial as tmod
+    trial_obj = tmod.Trial(study, trial_id)
+    trial_obj.set_user_attr("constraints", constraints)
+
+
 def tell_study(
     storage_path: str, study_name: str, trial_number: int,
     value: float | None = None, values: list[float] | None = None,
@@ -123,6 +147,8 @@ def tell_study(
         resolved_values = values if values is not None else ([value] if value is not None else None)
         if resolved_values is None:
             return error_response("tell_no_value", "provide value or values")
+        if constraints is not None:
+            _trial_set_constraints(study, trial_number, [float(c) for c in constraints])
         study.tell(trial_number, resolved_values, state=state_obj)
         trials = study.trials
         completed = [t for t in trials if t.state == optuna.trial.TrialState.COMPLETE]
