@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..core import audit, identity as project_identity, workspace, utils
-from ..tools import build_tools, build_args_templates, build_direct_arg_specs
+from ..tools import build_tools, build_args_templates, build_direct_arg_specs, build_json_schemas
 from ..tools.simulation import tool_run_experiment
 from ..tools.audit import tool_record_stage, tool_update_status, tool_stage_evidence
 from ..tools.workspace import tool_init_workspace, tool_init_task, tool_prepare_run, tool_get_run_context, tool_install_cst_libraries, tool_health_check
@@ -976,6 +976,8 @@ _HANDLER_MAP["tool_analyze_probes"] = _lazy_tool("doe", "analyze_probes")
 _HANDLER_MAP["tool_add_trials"] = _lazy_tool("optimization", "add_trials")
 _HANDLER_MAP["tool_param_importances"] = _lazy_tool("optimization", "param_importances")
 _HANDLER_MAP["tool_terminate_check"] = _lazy_tool("optimization", "terminate_check")
+_HANDLER_MAP["tool_run_probe_phase"] = _lazy_tool("optimization", "run_probe_phase")
+_HANDLER_MAP["tool_run_optimization_step"] = _lazy_tool("optimization", "run_optimization_step")
 assert len(_HANDLER_MAP) > 100, f"Handler map too small: {len(_HANDLER_MAP)}"
 _TOOLS: dict[str, dict[str, Any]] = build_tools(_HANDLER_MAP)
 TOOLS = _TOOLS
@@ -1211,12 +1213,14 @@ def main() -> int:
                     "available_tools": sorted(TOOLS),
                 }
             )
+        schemas = build_json_schemas()
         return _json_response(
             {
                 "status": "success",
                 "adapter": "cst_runtime_cli",
                 "tool": _public_tool_record(args.tool, record),
                 "args_template": _tool_args_template(args.tool),
+                "json_schema": schemas.get(args.tool),
                 "runbook": _tool_runbook(args.tool),
                 "input_style": "Preferred: generate args-template, edit JSON, invoke with --args-file. Direct flags are available for common fields only. Stdin args merge first; --args-file/--args-json/direct flags override earlier values.",
                 "direct_flags": sorted("--" + field.replace("_", "-") for field in DIRECT_ARG_SPECS.get(args.tool, {})),

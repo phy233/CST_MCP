@@ -18,7 +18,11 @@ from .svg_linechart import (
 )
 from .svg_heatmap import svg_heatmap
 from .svg_page import svg_page, metric_cards_html
-from .canvas_3d import render_3d_farfield
+from .canvas_3d import render_3d_farfield, render_3d_farfield_lazy, FF3D_SHARED_JS
+from .components import (
+    section_header, foldable_panel, iteration_header_html,
+    step_card_html, data_table, badge, empty_state, s11_snippet, audit_foldable,
+)
 
 _TIMELINE_TOOLS = {
     "change-parameter",
@@ -33,6 +37,8 @@ _TIMELINE_TOOLS = {
     "inspect-project",
     "prepare-experiment",
     "run-experiment",
+    "run-probe-phase",
+    "run-optimization-step",
     "generate-report",
     "record-stage",
     "update-status",
@@ -59,6 +65,7 @@ _SECTION_LABELS = {
     "optimization": "优化总览",
     "audit": "完整审计追踪",
     "cuts": "远场切面分析",
+    "narrative": "优化历程",
 }
 
 
@@ -232,7 +239,10 @@ def _categorize_step(record: dict[str, Any]) -> str:
         return "audit"
     if tool in {"cleanup-cst-processes"}:
         return "cleanup"
-    return "other"
+    if tool in {"run-probe-phase"}:
+        return "probe"
+    if tool in {"run-optimization-step"}:
+        return "optimization"
     if tool in {"get-1d-result"}:
         return "result"
     if tool in {"stage-evidence"}:
@@ -264,9 +274,26 @@ def _step_summary(record: dict[str, Any]) -> str:
         return "simulate"
     if tool in {"get-1d-result"}:
         return f'read S11 run={args.get("run_id", "?")}'
+    if tool == "run-probe-phase":
+        res = record.get("result", {})
+        n = res.get("n_probes", res.get("n_simulated", "?"))
+        return f'probe phase: {n} trials'
+    if tool == "run-optimization-step":
+        res = record.get("result", {})
+        trial = res.get("trial_id", "?")
+        s11 = res.get("s11_metric", {})
+        db = s11.get("min_db", "?")
+        if isinstance(db, float):
+            db = f"{db:.1f}"
+        return f'optimize trial {trial}: S11={db} dB'
     if tool in {"stage-evidence"}:
         return f'capture: {args.get("stage_name", "?")}'
     if tool == "prepare-experiment":
+        names = args.get("names") or args.get("param_names")
+        values = args.get("values") or args.get("param_values")
+        if names and values:
+            pairs = ", ".join(f"{n}={v}" for n, v in zip(names, values))
+            return pairs
         return f'{args.get("param_name", "?")} = {args.get("param_value", "?")}'
     if tool == "run-experiment":
         return f'simulate + export'
@@ -291,6 +318,11 @@ def _rationale_from_step(record: dict[str, Any]) -> str:
     if tool == "define-parameters":
         return "定义优化参数"
     if tool == "prepare-experiment":
+        names = args.get("names") or args.get("param_names")
+        values = args.get("values") or args.get("param_values")
+        if names and values:
+            pairs = ", ".join(f"{n}={v}" for n, v in zip(names, values))
+            return f"改参 {pairs}"
         return f"改参 {args.get('param_name', '?')} = {args.get('param_value', '?')}"
     if tool == "run-experiment":
         result = record.get("result", {})
@@ -361,71 +393,154 @@ def _load_s11_exports(export_dir: str) -> dict[int, dict[str, Any]]:
     return exports
 
 
-# ── HTML component builders ──
+# ── Iteration building (narrative timeline core) ──
+
+
+def _build_iterations(timeline: list[dict[str, Any]], s11_exports: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group timeline steps into simulation iterations for narrative layout."""
+    if not timeline:
+        return []
+
+    SIM_STEPS = {"start-simulation", "start-simulation-async", "run-experiment"}
+
+    iterations: list[dict[str, Any]] = []
+    prep_steps: list[dict[str, Any]] = []
+    result_steps: list[dict[str, Any]] = []
+    current_sim = None
+    in_result_phase = False
+
+    for step in timeline:
+        tool = step["tool"]
+        cat = _categorize_step(step)
+
+        if tool in SIM_STEPS:
+            if current_sim is not None:
+                # Finalize previous iteration if sim found without result phase
+                iterations.append(_make_iteration(prep_steps, current_sim, result_steps, s11_exports))
+                prep_steps = []
+                result_steps = []
+            current_sim = step
+            in_result_phase = True
+        elif cat == "result" and current_sim is not None:
+            result_steps.append(step)
+        elif cat == "param_change" or cat == "param_define":
+            if current_sim is not None and in_result_phase:
+                # New param change after a result -> start of next iteration
+                iterations.append(_make_iteration(prep_steps, current_sim, result_steps, s11_exports))
+                prep_steps = [step]
+                current_sim = None
+                result_steps = []
+                in_result_phase = False
+            else:
+                prep_steps.append(step)
+        else:
+            if current_sim is not None:
+                result_steps.append(step)
+            else:
+                prep_steps.append(step)
+
+    if current_sim is not None:
+        iterations.append(_make_iteration(prep_steps, current_sim, result_steps, s11_exports))
+    elif prep_steps or result_steps:
+        iterations.append(_make_iteration(prep_steps, None, result_steps, s11_exports))
+
+    return iterations
+
+
+def _make_iteration(
+    prep_steps: list[dict],
+    sim_step: dict | None,
+    result_steps: list[dict],
+    s11_exports: dict[int, dict[str, Any]],
+) -> dict[str, Any]:
+    """Build an iteration dict from grouped steps."""
+    run_id = 0
+
+    # Priority 1: extract from sim_step result (run-experiment records run_id here)
+    if sim_step:
+        sim_res = sim_step.get("result", {})
+        if isinstance(sim_res, dict):
+            rid = sim_res.get("run_id", 0)
+            if rid:
+                run_id = int(rid)
+
+    # Priority 2: extract from result steps (get-1d-result, export-run-results)
+    if not run_id:
+        for step in result_steps:
+            rid = step.get("args", {}).get("run_id", 0) or step.get("result", {}).get("run_id", 0)
+            if rid:
+                run_id = int(rid)
+                break
+
+    # Priority 3: check export-run-results run_ids list
+    if not run_id:
+        for step in result_steps:
+            res = step.get("result", {})
+            if isinstance(res, dict):
+                for key in ("run_ids", "runs"):
+                    val = res.get(key, [])
+                    if val and isinstance(val, list) and len(val) > 0:
+                        run_id = int(val[-1])
+                        break
+
+    # Get S11 data for this run
+    s11 = s11_exports.get(run_id, None)
+
+    # Build param summary from prep + sim result
+    param_summary = _extract_param_summary(prep_steps, sim_step)
+
+    # Collect all steps into one list for audit display
+    all_steps = list(prep_steps)
+    if sim_step:
+        all_steps.append(sim_step)
+    all_steps.extend(result_steps)
+
+    return {
+        "run_id": run_id,
+        "s11": s11,
+        "param_summary": param_summary,
+        "sim_step": sim_step,
+        "prep_steps": prep_steps,
+        "result_steps": result_steps,
+        "all_steps": all_steps,
+        "step_count": len(all_steps),
+    }
+
+
+def _extract_param_summary(prep_steps: list[dict], sim_step: dict | None = None) -> str:
+    """Extract parameter change summary from preparation steps."""
+    params: list[str] = []
+    for step in prep_steps:
+        args = step.get("args", {})
+        tool = step["tool"]
+        if tool == "change-parameter":
+            params.append(f'{args.get("name", "?")}={args.get("value", "?")}')
+        elif tool == "prepare-experiment":
+            names = args.get("names") or args.get("param_names", [])
+            values = args.get("values") or args.get("param_values", [])
+            if names and values:
+                for n, v in zip(names, values):
+                    params.append(f"{n}={v}")
+            else:
+                params.append(f'{args.get("param_name", "?")}={args.get("param_value", "?")}')
+        elif tool == "define-parameters":
+            params.append("define params")
+
+    if sim_step and sim_step["tool"] == "run-experiment":
+        result = sim_step.get("result", {})
+        if isinstance(result, dict) and "param_changes" in result:
+            pc = result["param_changes"]
+            if isinstance(pc, dict):
+                for k, v in pc.items():
+                    params.append(f"{k}={v}")
+    return ", ".join(params) if params else "基线仿真"
+
+
+# ── HTML component builders (kept for backward compat) ──
 
 
 def _step_card_html(step_idx: int, record: dict[str, Any], s11_exports: dict[int, dict[str, Any]]) -> str:
-    tool = record["tool"]
-    category = _categorize_step(record)
-    summary = _step_summary(record)
-    rationale = _rationale_from_step(record)
-    ts = record.get("timestamp", "")
-    status = record.get("status", "unknown")
-    args = record.get("args", {})
-    result = record.get("result", {})
-
-    status_badge = f'<span class="badge badge-{"success" if status == "success" else "warn"}">{"成功" if status == "success" else "失败"}</span>'
-
-    detail_json = json.dumps({"tool": tool, "args": args, "result": result}, indent=2, ensure_ascii=False)
-
-    s11_snippet = ""
-    if category == "result":
-        export_path = args.get("export_path", "")
-        if export_path:
-            try:
-                payload = json.loads((Path(export_path) if Path(export_path).is_file() else Path(export_path).expanduser()).read_text(encoding="utf-8-sig"))
-                if "xdata" in payload and "ydata" in payload:
-                    xs = payload.get("xdata", [])
-                    ys_raw = payload.get("ydata", [])
-                    db_vals = []
-                    for item in ys_raw:
-                        real = item.get("real", 0) if isinstance(item, dict) else float(item) if isinstance(item, (int, float)) else 0
-                        imag = item.get("imag", 0) if isinstance(item, dict) else 0
-                        db_vals.append(safe_log_db(math.hypot(real, imag)))
-                    if db_vals:
-                        min_db = min(db_vals)
-                        min_idx = db_vals.index(min_db)
-                        best_freq = xs[min_idx] if min_idx < len(xs) else 0
-                        s11_snippet = f'<div class="s11-snippet"><span class="s11-min">S11={min_db:.2f} dB</span> <span class="s11-freq">@ {best_freq:.3f} GHz</span></div>'
-            except Exception:
-                pass
-
-    card_class = "step-card"
-    if category == "param_change":
-        card_class += " step-param"
-    elif category == "simulation":
-        card_class += " step-sim"
-    elif category == "result":
-        card_class += " step-result"
-
-    html = f'''<div class="{card_class}">
-  <div class="step-header">
-    <span class="step-idx">#{step_idx}</span>
-    <span class="step-tool {category}">{category}</span>
-    {status_badge}
-    <span class="step-ts">{ts}</span>
-  </div>
-  <div class="step-body">
-    <div class="step-summary"><strong>{escape(summary)}</strong></div>
-    {f'<div class="step-rationale">{escape(rationale)}</div>' if rationale else ''}
-    {s11_snippet}
-  </div>
-  <details class="step-detail">
-    <summary>原始 JSON</summary>
-    <pre>{escape(detail_json)}</pre>
-  </details>
-</div>'''
-    return html
+    return step_card_html(step_idx, record)
 
 
 def _optimization_s11_chart(s11_exports: dict[int, dict[str, Any]], dark: bool = False) -> str:
@@ -439,27 +554,31 @@ def _optimization_s11_chart(s11_exports: dict[int, dict[str, Any]], dark: bool =
     return f'<div class="chart-panel">{svg}</div>'
 
 
-def _s11_table_html(s11_exports: dict[int, dict[str, Any]]) -> str:
+def _s11_table_html(s11_exports: dict[int, dict[str, Any]], show_file: bool = True) -> str:
     if not s11_exports:
         return ""
     best = min(s11_exports.values(), key=lambda e: e["min_db"])
     rows = []
+    headers = ["运行", "最优频率", "最低 S11", "参数组合"]
+    if show_file:
+        headers.insert(1, "文件")
     for rid in sorted(s11_exports.keys()):
         e = s11_exports[rid]
         is_best = rid == best["run_id"]
         row_class = ' class="best"' if is_best else ""
-        badge = '<span class="badge badge-best">最优</span>' if is_best else ""
+        badge_html = badge("最优", "best") if is_best else ""
         params = e.get("parameter_combination", {})
         param_str = ", ".join(f"{k}={v}" for k, v in params.items()) if params else "-"
-        rows.append(
-            f'<tr{row_class}><td>{rid}{badge}</td><td>{escape(e["file"])}</td>'
-            f'<td>{e["best_freq"]:.3f} GHz</td><td>{e["min_db"]:.3f} dB</td>'
-            f'<td style="font-size:0.85em;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{escape(param_str)}">{escape(param_str)}</td></tr>'
-        )
+        cells = [f'{rid}{badge_html}', f'{e["best_freq"]:.3f} GHz', f'{e["min_db"]:.3f} dB', f'<span style="font-size:0.85em;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{escape(param_str)}">{escape(param_str)}</span>']
+        if show_file:
+            cells.insert(1, escape(e["file"]))
+        row_cells = "".join(f"<td>{c}</td>" for c in cells)
+        rows.append(f'<tr{row_class}>{row_cells}</tr>')
+    hdr = "".join(f"<th>{escape(h)}</th>" for h in headers)
     return (
         f'<div class="data-section">'
-        f'<div class="section-title">S11 结果</div>'
-            f'<table><thead><tr><th>运行</th><th>文件</th><th>最优频率</th><th>最低 S11</th><th>参数组合</th></tr></thead><tbody>'
+        f'{section_header("S11 结果")}'
+        f'<table><thead><tr>{hdr}</tr></thead><tbody>'
         + "".join(rows)
         + "</tbody></table></div>"
     )
@@ -496,12 +615,18 @@ def _param_changes_table_html(timeline: list[dict[str, Any]]) -> str:
     rows = []
     for r in changes:
         args = r.get("args", {})
-        name = args.get("param_name") or args.get("name", "?")
-        value = args.get("param_value") or args.get("value", "?")
-        rows.append(f'<tr><td>{escape(str(name))}</td><td>{escape(str(value))}</td><td>{r.get("timestamp", "")}</td></tr>')
+        names = args.get("names") or args.get("param_names")
+        values = args.get("values") or args.get("param_values")
+        if names and values:
+            display = ", ".join(f"{escape(str(n))}={escape(str(v))}" for n, v in zip(names, values))
+        else:
+            name = args.get("param_name") or args.get("name", "?")
+            value = args.get("param_value") or args.get("value", "?")
+            display = f"{escape(str(name))}={escape(str(value))}"
+        rows.append(f'<tr><td colspan="2">{display}</td><td>{r.get("timestamp", "")}</td></tr>')
     return (
         f'<div class="data-section">'
-        f'<div class="section-title">参数变更记录</div>'
+        f'{section_header("参数变更记录")}'
         f'<table><thead><tr><th>参数</th><th>新值</th><th>时间</th></tr></thead><tbody>'
         + "".join(rows)
         + "</tbody></table></div>"
@@ -604,14 +729,300 @@ def plot_exported_file(file_path: str, output_html: str = "", page_title: str = 
         )
 
 
-# ── Report module system ──
+# ── Narrative timeline module (new) ──
+
+
+def _report_module_narrative(exports_d: Path, data_dir: Path, include_all_farfield: bool = False) -> tuple[str, list[dict], dict[str, Any]]:
+    """Narrative timeline layout: iterations grouped by simulation round."""
+    s11_exports = _load_s11_exports(str(exports_d))
+    timeline = _build_timeline(str(data_dir))
+    if not timeline and not s11_exports:
+        return "", [], {}
+
+    iterations = _build_iterations(timeline, s11_exports)
+    parts: list[str] = []
+
+    # ── Overview metrics ──
+    all_metrics: list[dict[str, str]] = []
+    best_run_id = None
+    if s11_exports:
+        best = min(s11_exports.values(), key=lambda e: e["min_db"])
+        best_run_id = best["run_id"]
+        all_metrics = [
+            {"label": "最优 S11", "value": f"{best['min_db']:.2f}", "unit": "dB", "css_class": "success"},
+            {"label": "最优频率", "value": f"{best['best_freq']:.3f}" if best['best_freq'] else "-", "unit": "GHz", "css_class": "accent"},
+            {"label": "仿真轮次", "value": str(len(iterations)), "css_class": ""},
+            {"label": "S11 导出", "value": str(len(s11_exports)), "css_class": ""},
+        ]
+        if len(s11_exports) > 1:
+            sorted_rids = sorted(s11_exports.keys())
+            min_dbs = [s11_exports[rid]["min_db"] for rid in sorted_rids]
+            all_metrics.append({"label": "最终 S11", "value": f"{min_dbs[-1]:.2f}", "unit": "dB", "css_class": "" if min_dbs[-1] > best["min_db"] else "success"})
+    metrics_html = metric_cards_html(all_metrics)
+
+    # ── Multi-run S11 comparison chart (with sequential draw animation) ──
+    if len(s11_exports) > 1:
+        sorted_rids = sorted(s11_exports.keys())
+        min_dbs = [s11_exports[rid]["min_db"] for rid in sorted_rids]
+        traces = []
+        for rid in sorted_rids:
+            e = s11_exports[rid]
+            traces.append({"x": e["xdata"], "y": e["ydata"], "name": f"Run {rid}"})
+        comp_svg = svg_linechart(traces, stagger_ms=400)
+        parts.append(f'<div class="section-header"><h2>{_SECTION_LABELS["narrative"]}</h2><span class="section-count">{len(iterations)} 轮</span></div>')
+        parts.append(f'<div class="chart-panel">{comp_svg}</div>')
+
+        # ── Interactive convergence chart (sliding target frequency) ──
+        first_s11 = next(iter(s11_exports.values()))
+        freq_min = min(first_s11["xdata"])
+        freq_max = max(first_s11["xdata"])
+        freq_step = (first_s11["xdata"][1] - first_s11["xdata"][0]) if len(first_s11["xdata"]) > 1 else 0.01
+
+        # Guess target frequency: try 10 if in data_dir path, else midpoint
+        target_freq = 10.0 if "10ghz" in str(data_dir).lower() or "10ghz" in _SECTION_LABELS.get("narrative", "").lower() else round((freq_min + freq_max) / 2, 2)
+
+        # Embed all runs' freq/s11 arrays as compact JSON
+        s11_data_json = json.dumps({
+            "rids": sorted_rids,
+            "freqs": [s11_exports[rid]["xdata"] for rid in sorted_rids],
+            "s11s": [s11_exports[rid]["ydata"] for rid in sorted_rids],
+        }, separators=(",", ":"))
+
+        # Compute initial convergence values at target_freq
+        def _interp_s11_at_freq(xdata: list[float], ydata: list[float], f: float) -> float:
+            idx = min(range(len(xdata)), key=lambda i: abs(xdata[i] - f))
+            return ydata[idx]
+
+        init_conv = [_interp_s11_at_freq(s11_exports[rid]["xdata"], s11_exports[rid]["ydata"], target_freq) for rid in sorted_rids]
+        init_svg = svg_mini_trend(init_conv, width=640, height=120, label=f"S11 @ {target_freq:.2f} GHz", show_axes=True)
+
+        parts.append(f'''<div class="chart-panel" style="padding:16px 28px">
+<div class="convergence-controls" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+<label style="font-size:12px;color:var(--text-secondary);white-space:nowrap">目标频率:</label>
+<input type="range" id="conv-freq-slider" min="{freq_min:.2f}" max="{freq_max:.2f}" step="{freq_step:.4f}" value="{target_freq:.2f}" style="flex:1;min-width:100px;accent-color:var(--accent)">
+<input type="number" id="conv-freq-input" value="{target_freq:.2f}" step="{freq_step:.4f}" min="{freq_min:.2f}" max="{freq_max:.2f}" style="width:76px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);color:var(--text);font-size:12px;font-family:var(--font-mono)">
+<span id="conv-freq-display" style="font-size:12px;color:var(--text);font-weight:600;min-width:60px;font-family:var(--font-mono)">{target_freq:.2f} GHz</span>
+</div>
+<div id="conv-chart-container">{init_svg}</div>
+<script>
+(function(){{
+var CONV_DATA = {s11_data_json};
+var rids=CONV_DATA.rids||[], freqs=CONV_DATA.freqs||[], s11s=CONV_DATA.s11s||[];
+if(!rids.length||!freqs.length||!s11s.length)return;
+var slider=document.getElementById("conv-freq-slider");
+var input=document.getElementById("conv-freq-input");
+var display=document.getElementById("conv-freq-display");
+var container=document.getElementById("conv-chart-container");
+if(!slider||!input||!container)return;
+
+function findIdx(arr,f){{
+    var lo=0,hi=arr.length-1;
+    while(lo<hi){{var m=(lo+hi)>>1;if(arr[m]<f)lo=m+1;else hi=m;}}
+    if(lo>0&&f-arr[lo-1]<arr[lo]-f)return lo-1;
+    return lo;
+}}
+
+function update(f){{
+    try{{
+    var vals=[];
+    for(var i=0;i<rids.length;i++){{
+        var fx=freqs[i],s11y=s11s[i];
+        if(!fx||!s11y||!fx.length)continue;
+        var idx=findIdx(fx,f);
+        vals.push(s11y[idx]!==undefined?s11y[idx]:null);
+    }}
+    var valid=vals.filter(function(v){{return v!==null;}});
+    if(valid.length<2){{container.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">数据不足</div>';return;}}
+    var n=valid.length,pad=36,w=640,h=120,pw=w-pad*2,ph=h-pad*2;
+    var yMin=Math.min.apply(null,valid),yMax=Math.max.apply(null,valid),yRng=yMax-yMin||1;
+    yMin-=yRng*0.1;yMax+=yRng*0.1;
+    function sx(i){{return pad+i/(n-1||1)*pw;}}
+    function sy(v){{return pad+ph-(v-yMin)/(yMax-yMin)*ph;}}
+    var pts=[];
+    for(var i=0;i<n;i++){{if(valid[i]!==null)pts.push(sx(i)+','+sy(valid[i]));}}
+    var fillPts=pts.slice();fillPts.push(sx(n-1)+','+(h-pad));fillPts.push(sx(0)+','+(h-pad));
+    var svg='<svg width="640" height="120" xmlns="http://www.w3.org/2000/svg">';
+    svg+='<rect x="0" y="0" width="640" height="120" fill="transparent" rx="4"/>';
+    var ySteps=4;
+    for(var i=0;i<=ySteps;i++){{var v=yMin+(yMax-yMin)*i/ySteps;var yy=sy(v);svg+='<line x1="'+pad+'" y1="'+yy+'" x2="'+(w-pad)+'" y2="'+yy+'" stroke="#e4e4e7" stroke-width=".5" stroke-dasharray="2,2"/>';svg+='<text x="'+(pad-4)+'" y="'+(yy+3)+'" text-anchor="end" fill="#a1a1aa" font-family="system-ui,sans-serif" font-size="8">'+v.toFixed(1)+'</text>';}}
+    var xSteps=Math.min(n-1,6);
+    for(var i=0;i<=xSteps;i++){{var xi=Math.round(i*(n-1)/xSteps);var xx=sx(xi);svg+='<text x="'+xx+'" y="'+(h-2)+'" text-anchor="middle" fill="#a1a1aa" font-family="system-ui,sans-serif" font-size="8">'+(xi+1)+'</text>';}}
+    svg+='<text x="10" y="'+(pad+ph/2)+'" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="8" transform="rotate(-90,10,'+(pad+ph/2)+')">S11 dB</text>';
+    svg+='<text x="'+(pad+pw/2)+'" y="'+(h-14)+'" text-anchor="middle" fill="#71717a" font-family="system-ui,sans-serif" font-size="8">Run</text>';
+    svg+='<polygon points="'+fillPts.join(' ')+'" fill="#0d9488" fill-opacity="0.08"/>';
+    svg+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    svg+='<circle cx="'+sx(n-1)+'" cy="'+sy(valid[n-1])+'" r="3" fill="#0d9488"/>';
+    svg+='<text x="'+(w-pad)+'" y="'+(pad+8)+'" text-anchor="end" fill="#a1a1aa" font-family="system-ui,sans-serif" font-size="9">S11 @ '+f.toFixed(2)+' GHz</text>';
+    svg+='</svg>';
+    container.innerHTML=svg;
+    display.textContent=f.toFixed(2)+' GHz';
+    }}catch(e){{container.innerHTML='<div style="color:red;padding:8px;font-size:12px">JS: '+e.message+'</div>';}}
+}}
+
+slider.addEventListener("input",function(){{var f=parseFloat(this.value);input.value=f.toFixed(2);update(f);}});
+input.addEventListener("input",function(){{var f=parseFloat(this.value);if(isNaN(f))return;f=Math.max({freq_min:.2f},Math.min({freq_max:.2f},f));slider.value=f;update(f);}});
+update(parseFloat(slider.value));
+}}());
+</script>
+</div>''')
+    else:
+        parts.append(f'<div class="section-header"><h2>{_SECTION_LABELS["narrative"]}</h2></div>')
+
+    # ── Iteration timeline with connectors ──
+    baseline_rid = sorted(s11_exports.keys())[0] if s11_exports else None
+    baseline_s11 = s11_exports.get(baseline_rid) if baseline_rid else None
+    last_idx = len(iterations) - 1
+
+    # Load farfield files and match by run_id
+    ff_files = sorted(exports_d.glob("farfield/*.json"))
+    ff_by_run: dict[int, Path] = {}
+    for ff_file in ff_files:
+        m = re.search(r"run(\d+)", ff_file.stem, re.IGNORECASE)
+        if m:
+            ff_by_run[int(m.group(1))] = ff_file
+
+    # Pre-render farfield for self-contained mode
+    ff_render_cache: dict[int, str] = {}
+    if include_all_farfield:
+        for run_id, ff_path in ff_by_run.items():
+            try:
+                ff_data = _load_exported_payload(str(ff_path))
+                ff_render_cache[run_id] = render_3d_farfield(ff_data, f"ff_narrative_{run_id}")
+            except Exception:
+                pass
+
+    timeline_parts: list[str] = []
+    for idx, it in enumerate(iterations):
+        run_id = it["run_id"]
+        s11 = it["s11"]
+        is_first = idx == 0
+        is_last = idx == last_idx
+        is_best = s11 is not None and best_run_id is not None and s11["run_id"] == best_run_id
+
+        # Delta from baseline (plain text, no HTML)
+        delta_text = ""
+        if s11 and baseline_s11 and run_id != baseline_rid:
+            delta = s11["min_db"] - baseline_s11["min_db"]
+            delta_sign = "+" if delta > 0 else ""
+            delta_text = f" ({delta_sign}{delta:.1f} dB)"
+
+        # Build foldable title (plain text for escaping)
+        tag, tag_class, title = iteration_header_html(
+            run_id=run_id,
+            summary=it["param_summary"] or f"轮次 {idx+1}",
+            s11_value=f"{s11['min_db']:.2f}" if s11 else None,
+            freq=f"{s11['best_freq']:.3f}" if s11 and s11.get("best_freq") else None,
+            is_best=is_best,
+        )
+        title += delta_text
+
+        # Build iteration body
+        body_parts = []
+
+        # S11 display: mini trend snapshot + expandable full chart
+        if s11 and len(s11_exports) > 1 and run_id != baseline_rid:
+            # Mini S11 snapshot (single trace)
+            mini_svg = svg_mini_trend(s11["ydata"], width=280, height=60, label=f"Run {run_id} S11={s11['min_db']:.1f}dB")
+            # Full comparison chart (expandable)
+            comparison_traces = [
+                {"x": baseline_s11["xdata"], "y": baseline_s11["ydata"], "name": f"基线 (Run {baseline_rid})"},
+                {"x": s11["xdata"], "y": s11["ydata"], "name": f"本轮 (Run {run_id})"},
+            ]
+            full_svg = svg_linechart(comparison_traces)
+            body_parts.append(
+                f'<div class="iteration-s11-preview" style="margin-bottom:8px">{mini_svg}</div>'
+                f'<details class="foldable-nested" style="margin-top:4px">'
+                f'<summary>S11 对比图</summary>'
+                f'<div class="foldable-body">{full_svg}</div>'
+                f'</details>'
+            )
+        elif s11:
+            mini_svg = svg_mini_trend(s11["ydata"], width=280, height=60, label=f"Run {run_id} S11={s11['min_db']:.1f}dB")
+            body_parts.append(f'<div class="iteration-s11-preview" style="margin-bottom:8px">{mini_svg}</div>')
+
+        # Farfield: snapshot link + expandable 3D
+        ff_path = ff_by_run.get(run_id)
+        if ff_path:
+            ff_rel = ff_path.relative_to(exports_d)
+            if include_all_farfield and run_id in ff_render_cache:
+                # Self-contained: mini preview + expandable full 3D (embedded data)
+                body_parts.append(
+                    f'<div class="iteration-ff-preview" style="margin-top:8px;padding:6px 10px;background:var(--bg-raised);border-radius:var(--radius-sm);border:1px solid var(--border);font-size:11px;color:var(--text-secondary)">'
+                    f'<span style="font-weight:500;color:var(--text)">远场快照:</span> '
+                    f'<a href="{escape(str(ff_rel))}" style="color:var(--accent);text-decoration:none">{escape(ff_path.name)}</a>'
+                    f'</div>'
+                    f'<details class="foldable-nested" style="margin-top:4px">'
+                    f'<summary>远场 3D 方向图</summary>'
+                    f'<div class="foldable-body"><div class="chart-panel" style="padding:12px;margin-top:8px">{ff_render_cache[run_id]}</div></div>'
+                    f'</details>'
+                )
+            else:
+                # Non-self-contained: 3D renderer with embedded data (works with file:// protocol)
+                container_id = f"ff3d_lazy_{run_id}"
+                try:
+                    ff_data = _load_exported_payload(str(ff_path))
+                    lazy_3d = render_3d_farfield_lazy(ff_data, container_id)
+                except Exception:
+                    lazy_3d = '<div class="chart-panel"><p>远场数据加载失败</p></div>'
+                body_parts.append(
+                    f'<div class="iteration-ff-preview" style="margin-top:8px;padding:6px 10px;background:var(--bg-raised);border-radius:var(--radius-sm);border:1px solid var(--border);font-size:11px;color:var(--text-secondary)">'
+                    f'<span style="font-weight:500;color:var(--text)">远场快照:</span> '
+                    f'<a href="{escape(str(ff_rel))}" style="color:var(--accent);text-decoration:none">{escape(ff_path.name)}</a>'
+                    f'</div>'
+                    f'<details class="foldable-nested" style="margin-top:4px">'
+                    f'<summary>远场 3D 方向图</summary>'
+                    f'<div class="foldable-body"><div class="chart-panel" style="padding:12px;margin-top:8px">{lazy_3d}</div></div>'
+                    f'</details>'
+                )
+
+        # Audit details (nested foldable)
+        if it["all_steps"]:
+            step_cards_list = []
+            for s_idx, rec in enumerate(it["all_steps"], 1):
+                step_cards_list.append(step_card_html(s_idx, rec))
+            audit_body = f'<div class="step-list">{"".join(step_cards_list)}</div>'
+            body_parts.append(
+                f'<details class="foldable-nested" style="margin-top:12px">'
+                f'<summary>审计明细 ({it["step_count"]} 步)</summary>'
+                f'<div class="foldable-body">{audit_body}</div>'
+                f'</details>'
+            )
+
+        meta = f'{it["step_count"]} 步操作'
+        timeline_parts.append(
+            f'<div class="timeline-item">'
+            f'{foldable_panel(title, meta, "".join(body_parts), tag=tag, tag_class=tag_class, open=is_first or is_best)}'
+            f'</div>'
+        )
+
+    # Wrap timeline items in a timeline container
+    parts.append(f'<div class="timeline-container">{"".join(timeline_parts)}</div>')
+
+    # Inject shared 3D farfield JS once (lazy init on button click)
+    if ff_by_run:
+        parts.append(FF3D_SHARED_JS)
+
+    html = "\n".join(parts)
+    meta = {"iteration_count": len(iterations), "s11_count": len(s11_exports)}
+    return html, all_metrics, meta
+
+
+# ── Report module system (legacy modules preserved for fallback) ──
+
 
 _AUTO_MODULES: dict[str, callable] = {}
 
 
 def _auto_detect_modules(exports_d: Path) -> list[str]:
-    """Detect available data modules from exports directory."""
     modules: list[str] = []
+
+    # Prefer narrative if we have timeline data
+    if (exports_d.parent / "stages").is_dir():
+        timeline = _build_timeline(str(exports_d.parent))
+        s11_exports = _load_s11_exports(str(exports_d))
+        if timeline and s11_exports:
+            return ["narrative"]
+
     if list(exports_d.glob("s11_run*.json")):
         modules.append("s11")
     if list(exports_d.glob("farfield/*.json")):
@@ -643,7 +1054,7 @@ def _report_module_s11(exports_d: Path) -> tuple[str, list[dict], dict[str, Any]
         return "", [], {}
     traces = [{"x": e["xdata"], "y": e["ydata"], "name": f"Run {e['run_id']}"} for e in s11_data.values()]
     svg = svg_linechart(traces)
-    html = f'<h2 class="section-h2">{_SECTION_LABELS["s11"]}</h2><div class="chart-panel">{svg}</div>'
+    html = f'{section_header(_SECTION_LABELS["s11"])}<div class="chart-panel">{svg}</div>'
     best = min(s11_data.values(), key=lambda e: e["min_db"])
     metrics = [
         {"label": "最优 S11", "value": f"{best['min_db']:.2f}", "unit": "dB", "css_class": "success"},
@@ -676,7 +1087,7 @@ def _report_module_farfield3d(exports_d: Path) -> tuple[str, list[dict], dict[st
         opts = "".join(f'<option value="{i}">{ff.name}</option>' for i, ff in enumerate(ff_files))
         selector = f'<select id="ffSelect" onchange="switchFF(this.value)" style="margin-bottom:12px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-raised);color:var(--text);font-size:13px">{opts}</select>'
         panels.append('<script>function switchFF(v){var ps=document.querySelectorAll(".ff-panel");for(var i=0;i<ps.length;i++)ps[i].style.display=i==v?"block":"none";}</script>')
-    html = f'<h2 class="section-h2">{_SECTION_LABELS["farfield"]}</h2>{selector}\n{"".join(panels)}'
+    html = f'{section_header(_SECTION_LABELS["farfield"])}{selector}\n{"".join(panels)}'
     metrics = [{"label": "远场文件数", "value": str(len(ff_files)), "css_class": ""}]
     return html, metrics, {"ff_files": ff_files}
 
@@ -700,7 +1111,7 @@ def _report_module_2d(exports_d: Path) -> tuple[str, list[dict], dict[str, Any]]
             pass
     if not panels:
         return "", [], {}
-    html = f'<h2 class="section-h2">{_SECTION_LABELS["2d"]}</h2>\n{"".join(panels)}'
+    html = f'{section_header(_SECTION_LABELS["2d"])}\n{"".join(panels)}'
     return html, [], {}
 
 
@@ -710,12 +1121,12 @@ def _report_module_timeline(exports_d: Path, data_dir: Path) -> tuple[str, list[
         return "", [], {}
     s11_data = _load_s11_exports(str(exports_d))
     parts: list[str] = []
-    parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["timeline"]}（{len(timeline)} 步）</h2>')
+    parts.append(f'{section_header(f"{_SECTION_LABELS["timeline"]}（{len(timeline)} 步）")}')
     for idx, rec in enumerate(timeline, 1):
         parts.append(_step_card_html(idx, rec, s11_data))
     param_changes = [r for r in timeline if _categorize_step(r) == "param_change"]
     if param_changes:
-        parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["params"]}</h2>')
+        parts.append(f'{section_header(_SECTION_LABELS["params"])}')
         parts.append(_param_changes_table_html(timeline))
     html = "\n".join(parts)
     metrics = [{"label": "操作步数", "value": str(len(timeline)), "css_class": ""}]
@@ -728,7 +1139,7 @@ def _report_module_efield(exports_d: Path, label_key: str, glob_pattern: str, se
     files = sorted(exports_d.glob(glob_pattern))
     if not files:
         return "", [], {}
-    html = f'<h2 class="section-h2">{_SECTION_LABELS[section_label_key]}（{len(files)} 文件）</h2>'
+    html = f'{section_header(f"{_SECTION_LABELS[section_label_key]}（{len(files)} 文件）")}'
     html += f'<table><thead><tr><th>文件</th></tr></thead><tbody>{"".join(f"<tr><td>{escape(f.name)}</td></tr>" for f in files)}</tbody></table>'
     return html, [], {}
 
@@ -740,7 +1151,7 @@ def _report_module_optimization(exports_d: Path, data_dir: Path) -> tuple[str, l
         return "", [], {}
     parts: list[str] = []
     metrics = _optimization_metrics_html(s11_exports, timeline)
-    parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["optimization"]}</h2>')
+    parts.append(f'{section_header(_SECTION_LABELS["optimization"])}')
     s11_chart = _optimization_s11_chart(s11_exports)
     if s11_chart:
         parts.append(s11_chart)
@@ -783,7 +1194,7 @@ def _report_module_audit(exports_d: Path, data_dir: Path) -> tuple[str, list[dic
         step_cards: list[str] = []
         for idx, r in enumerate(timeline, 1):
             step_cards.append(_step_card_html(idx, r, s11_exports))
-        parts.append(f'<h2 class="section-h2">{_SECTION_LABELS["audit"]}（{len(timeline)} 条操作）</h2><div class="step-list">{"".join(step_cards)}</div>')
+        parts.append(f'{section_header(f"{_SECTION_LABELS["audit"]}（{len(timeline)} 条操作）")}<div class="step-list">{"".join(step_cards)}</div>')
     html = "\n".join(parts)
     return html, [], {"timeline_count": len(timeline), "s11_count": len(s11_exports)}
 
@@ -820,7 +1231,7 @@ def _report_module_cuts(exports_d: Path) -> tuple[str, list[dict], dict[str, Any
     if not rows:
         return "", [], {}
     html = (
-        f'<h2 class="section-h2">{_SECTION_LABELS["cuts"]}（{len(rows)} 切面）</h2>'
+        f'{section_header(f"{_SECTION_LABELS["cuts"]}（{len(rows)} 切面）")}'
         f'<table><thead><tr><th>切面</th><th>采样点</th><th>最小值(dB)</th><th>最大值(dB)</th><th>波动(dB)</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
     )
@@ -828,6 +1239,7 @@ def _report_module_cuts(exports_d: Path) -> tuple[str, list[dict], dict[str, Any
 
 
 _REPORT_MODULES: dict[str, callable] = {
+    "narrative": _report_module_narrative,
     "s11": lambda d, dd: _report_module_s11(d),
     "farfield3d": lambda d, dd: _report_module_farfield3d(d),
     "2d": lambda d, dd: _report_module_2d(d),
@@ -841,7 +1253,7 @@ _REPORT_MODULES: dict[str, callable] = {
 }
 
 
-# ── Public API: generate_report report ──
+# ── Public API: generate_report ──
 
 
 def generate_report(

@@ -47,14 +47,54 @@ def build_tools(handler_map: dict[str, Callable]) -> dict[str, dict]:
     return tools
 
 
+def _schema_to_template(schema: dict) -> dict:
+    """从 JSON Schema 生成示例值模板。"""
+    template: dict = {}
+    for key, prop in schema.get("properties", {}).items():
+        if "default" in prop:
+            template[key] = prop["default"]
+        elif "examples" in prop and prop["examples"]:
+            template[key] = prop["examples"][0]
+        else:
+            ptype = prop.get("type", "string")
+            if ptype == "string":
+                template[key] = ""
+            elif ptype in ("number", "integer"):
+                template[key] = prop.get("minimum", 0)
+            elif ptype == "boolean":
+                template[key] = False
+            elif ptype == "array":
+                template[key] = []
+            elif ptype == "object":
+                if "default" in prop:
+                    template[key] = prop["default"]
+                else:
+                    template[key] = _schema_to_template(prop)
+            else:
+                template[key] = None
+    return template
+
+
 def build_args_templates() -> dict[str, dict]:
-    """从 TOOL_DEFS 提取 args_template 子集。"""
-    return {name: defn["args_template"] for name, defn in _ALL_DEFS.items()}
+    """从 TOOL_DEFS 提取 args_template 或从 json_schema 生成。"""
+    result: dict[str, dict] = {}
+    for name, defn in _ALL_DEFS.items():
+        if "json_schema" in defn:
+            result[name] = _schema_to_template(defn["json_schema"])
+        elif "args_template" in defn:
+            result[name] = dict(defn["args_template"])
+    return result
+
+
+def build_json_schemas() -> dict[str, dict]:
+    """从 TOOL_DEFS 提取 json_schema 子集。"""
+    return {name: defn["json_schema"] for name, defn in _ALL_DEFS.items() if "json_schema" in defn}
 
 
 def build_direct_arg_specs() -> dict[str, dict]:
-    """从 TOOL_DEFS 中提取 direct_flags=True 的 args_template 标量字段。
+    """从 TOOL_DEFS 中提取 direct_flags=True 的标量字段。
 
+    优先从 json_schema，回退到 args_template。
     只暴露字符串、数字、布尔值字段作为直接参数 `--flag value`。
     数组/对象/None 字段必须通过 `--args-file` 传入。
     """
@@ -63,9 +103,16 @@ def build_direct_arg_specs() -> dict[str, dict]:
         if not defn.get("direct_flags", False):
             continue
         scalar_fields: dict[str, str] = {}
-        for key, val in defn["args_template"].items():
-            if isinstance(val, (str, int, float, bool)):
-                scalar_fields[key] = str(val) if not isinstance(val, str) else val
+        if "json_schema" in defn:
+            for key, prop in defn["json_schema"].get("properties", {}).items():
+                ptype = prop.get("type", "string")
+                if ptype in ("string", "number", "integer", "boolean"):
+                    example = str(prop.get("default", prop.get("minimum", "")))
+                    scalar_fields[key] = example
+        elif "args_template" in defn:
+            for key, val in defn["args_template"].items():
+                if isinstance(val, (str, int, float, bool)):
+                    scalar_fields[key] = str(val) if not isinstance(val, str) else val
         if scalar_fields:
             result[name] = scalar_fields
     return result

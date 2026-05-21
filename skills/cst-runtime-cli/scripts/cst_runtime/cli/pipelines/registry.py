@@ -216,4 +216,40 @@ PIPELINES: dict[str, dict[str, Any]] = {
             "farfield_names is optional — all monitors are auto-discovered when omitted.",
         ],
     },
+    "run-probe-phase": {
+        "category": "optimization",
+        "risk": "long-running",
+        "description": "Run the complete probe phase: design probes, simulate each via prepare-experiment + run-experiment, analyze effects, and inject into study.",
+        "when_to_use": "When designing a new optimization study with 4+ parameters. Run before the optimization loop to identify which parameters matter most.",
+        "required_context": ["working_project", "parameter_ranges", "study_storage"],
+        "commands": [
+            "uv run python -m cst_runtime run-probe-phase --project-path <run>\\projects\\working.cst --parameters '{\"R\":{\"min\":0.1,\"max\":0.5}}' --study-storage <run>\\studies\\optimization.db --study-name horn_matching",
+        ],
+        "steps": [
+            {"tool": "run-probe-phase", "purpose": "One-call probe phase. Copies working.cst to working_probe.cst, runs all probes, analyzes effects, injects into study."},
+        ],
+        "stop_rules": [
+            "Review top_params in output to decide which parameters to use in optimization.",
+            "Results are in exports/probe/ — working.cst is untouched.",
+            "If n_failed approaches n_probes, check CST solver state before retrying.",
+        ],
+    },
+    "run-optimization-step": {
+        "category": "optimization",
+        "risk": "long-running",
+        "description": "Run one optimization iteration: ask Optuna for next parameters, prepare, simulate, read S11, tell result. Agent loops this and checks s11_metric for early stopping.",
+        "when_to_use": "Inside an optimization loop. Call repeatedly until s11_metric meets the target or agent decides to stop.",
+        "required_context": ["working_project", "active_study"],
+        "commands": [
+            "uv run python -m cst_runtime run-optimization-step --project-path <run>\\projects\\working.cst --study-storage <run>\\studies\\optimization.db --study-name horn_matching",
+        ],
+        "steps": [
+            {"tool": "run-optimization-step", "purpose": "One optimization iteration. Returns s11_metric and study_best for agent to evaluate."},
+        ],
+        "stop_rules": [
+            "Check s11_metric.min_db against target after each step.",
+            "Check study_best.value for overall progress.",
+            "If ask_study returns study_complete, stop the loop.",
+        ],
+    },
 }

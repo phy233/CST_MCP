@@ -297,28 +297,7 @@ def pipeline_run_experiment(
     max_after_export = _max_exported_run_id(project_path)
     solver_produced_new_data = max_after_export > max_before_export
 
-    if not solver_produced_new_data:
-        return {
-            "status": "error",
-            "error_type": "solver_did_not_complete",
-            "message": (
-                f"Solver did not produce new results: "
-                f"exported file number {max_after_export} <= pre-existing {max_before_export}. "
-                f"The simulation may have failed silently (e.g. mesh error, geometry issue). "
-                f"Check CST solver logs in Result/*.log for details."
-            ),
-            "pipeline": "run-experiment",
-            "project_path": project_path,
-            "polls": polls,
-            "waited_seconds": waited,
-            "exported_count": len(exported_files),
-            "exported": exported_files,
-            "pre_export_max_file_num": max_before_export,
-            "post_export_max_file_num": max_after_export,
-        }
-
     output: dict[str, Any] = {
-        "status": "success",
         "pipeline": "run-experiment",
         "project_path": open_result.get("project_path", project_path),
         "polls": polls,
@@ -328,10 +307,215 @@ def pipeline_run_experiment(
         "s11_export_path": s11_export_path,
         "s11_metric": s11_metric,
         "farfield_exported": farfield_files,
-        "solver_completed": True,
         "pre_export_max_file_num": max_before_export,
         "post_export_max_file_num": max_after_export,
     }
     if run_id is not None:
         output["run_id"] = run_id
+
+    if not solver_produced_new_data:
+        if exported_files:
+            output["status"] = "success"
+            output["solver_completed"] = False
+            output["warning"] = "solver_result_cached"
+            output["message"] = (
+                f"Solver completed but produced no new run_id (exported file number "
+                f"{max_after_export} unchanged). Existing results were re-exported. "
+                f"This is a cache hit: the parameter combination already exists."
+            )
+        else:
+            return {
+                "status": "error",
+                "error_type": "solver_did_not_complete",
+                "message": (
+                    f"Solver did not produce new results: "
+                    f"exported file number {max_after_export} <= pre-existing {max_before_export}. "
+                    f"No existing results were found either. "
+                    f"The simulation may have failed silently (e.g. mesh error, geometry issue). "
+                    f"Check CST solver logs in Result/*.log for details."
+                ),
+                **output,
+            }
+        return output
+
+    output["status"] = "success"
+    output["solver_completed"] = True
     return output
+
+
+# ── run-probe-phase ──
+
+def pipeline_run_probe_phase(
+    project_path: str,
+    parameters: dict,
+    study_storage: str,
+    study_name: str,
+    max_probes: int = 12,
+    include_center: bool = True,
+) -> dict[str, Any]:
+    import shutil
+    from pathlib import Path
+    from ...core import doe as _doe
+    from ...core import optimizer as _opt
+
+    p = Path(project_path).expanduser().resolve()
+    if not p.is_file():
+        return error_response("project_not_found", f"project not found: {p}", step="probe-phase:validate")
+
+    # 1. Copy working.cst → working_probe.cst (baseline isolation)
+    probe_project = p.parent / "working_probe.cst"
+    shutil.copy2(str(p), str(probe_project))
+    probe_path = str(probe_project)
+
+    # 2. Design probes via DOE
+    design = _doe.design_probes(parameters, max_probes=max_probes, include_center=include_center)
+    if design.get("status") != "success":
+        return error_response("probe_design_failed",
+            design.get("message", "failed to design probes"), step="probe-phase:design")
+
+    probes = design["probes"]
+    param_names = design["parameters"]
+
+    # 3. Simulate each probe
+    simulated: list[dict] = []
+    cached: list[dict] = []
+    failed: list[dict] = []
+    for probe in probes:
+        names = list(probe.keys())
+        values = [probe[n] for n in names]
+        prep = pipeline_prepare_experiment(probe_path, names=names, values=values)
+        if prep.get("status") != "success":
+            failed.append({"params": probe, "error": "prepare_failed"})
+            continue
+        sim = pipeline_run_experiment(probe_path)
+        if sim.get("status") != "success":
+            metric = sim.get("s11_metric")
+            if metric:
+                simulated.append({"params": probe, "value": metric["min_db"]})
+            else:
+                failed.append({"params": probe, "error": sim.get("error_type", "sim_failed")})
+            continue
+        metric = sim.get("s11_metric")
+        if metric:
+            result = {"params": probe, "value": metric["min_db"]}
+            simulated.append(result)
+            if not sim.get("solver_completed", True):
+                cached.append(result)
+        else:
+            failed.append({"params": probe, "error": "no_s11_metric"})
+
+    # 4. Move exported files to exports/probe/
+    exports_dir = p.parent.parent / "exports"
+    probe_exports = exports_dir / "probe"
+    probe_exports.mkdir(parents=True, exist_ok=True)
+    for f in exports_dir.glob("s11_run*.json"):
+        shutil.move(str(f), str(probe_exports / f.name))
+    for f in exports_dir.glob("farfield_*"):
+        shutil.move(str(f), str(probe_exports / f.name))
+
+    if not simulated:
+        return error_response("all_probes_failed",
+            "no probe simulations produced valid results", step="probe-phase:simulate",
+            n_total=len(probes), n_failed=len(failed))
+
+    # 5. Analyze probe results
+    analysis = _doe.analyze_probes(param_names, simulated)
+
+    # 6. Inject probe results into study
+    trials = [{"params": s["params"], "values": [s["value"]]} for s in simulated]
+    inject = _opt.add_trials(study_storage, study_name, trials)
+    trials_injected = inject.get("trials_added", 0)
+
+    return {
+        "status": "success" if len(simulated) >= len(probes) / 2 else "warning",
+        "pipeline": "run-probe-phase",
+        "n_probes": len(probes),
+        "n_simulated": len(simulated),
+        "n_cached": len(cached),
+        "n_failed": len(failed),
+        "failed_probes": failed,
+        "mean_value": analysis.get("mean_value"),
+        "main_effects": analysis.get("main_effects", {}),
+        "main_effects_normalized": analysis.get("main_effects_normalized", {}),
+        "interactions": analysis.get("interactions", {}),
+        "top_params": analysis.get("top_params", []),
+        "trials_injected": trials_injected,
+        "probe_project": str(probe_project),
+        "exports_dir": str(probe_exports),
+    }
+
+
+# ── run-optimization-step ──
+
+def pipeline_run_optimization_step(
+    project_path: str,
+    study_storage: str,
+    study_name: str,
+) -> dict[str, Any]:
+    from ...core import optimizer as _opt
+
+    # 1. Ask study for next parameter suggestion
+    ask = _opt.ask_study(study_storage, study_name)
+    if ask.get("status") != "success":
+        return error_response("ask_study_failed",
+            ask.get("message", "study may be complete"), step="opt-step:ask",
+            ask_result=ask)
+
+    trial_number = ask["trial_number"]
+    params = ask.get("params", {})
+    names = list(params.keys())
+    values = [params[n] for n in names]
+
+    # 2. Prepare experiment (change params, save, close)
+    prep = pipeline_prepare_experiment(project_path, names=names, values=values)
+    if prep.get("status") != "success":
+        _opt.tell_study(study_storage, study_name, trial_number, value=0.0, state="pruned")
+        return error_response("prepare_failed",
+            prep.get("message", "failed to prepare experiment"), step="opt-step:prepare")
+
+    # 3. Run simulation and export
+    sim = pipeline_run_experiment(project_path)
+    if sim.get("status") != "success":
+        metric = sim.get("s11_metric")
+        if metric:
+            _opt.tell_study(study_storage, study_name, trial_number, value=metric["min_db"])
+            return {
+                "status": "success",
+                "pipeline": "run-optimization-step",
+                "trial_id": trial_number,
+                "params_used": params,
+                "s11_metric": metric,
+                "study_best": None,
+                "cache_hit": not sim.get("solver_completed", True),
+            }
+        _opt.tell_study(study_storage, study_name, trial_number, value=0.0, state="pruned")
+        return error_response("simulation_failed",
+            sim.get("message", "simulation did not complete"), step="opt-step:simulate")
+
+    # 4. Read S11 metric
+    metric = sim.get("s11_metric")
+    if not metric:
+        _opt.tell_study(study_storage, study_name, trial_number, value=0.0, state="pruned")
+        return error_response("no_s11_metric",
+            "S11 metric not found in run-experiment output", step="opt-step:parse")
+
+    objective = metric["min_db"]
+
+    # 5. Tell study the result
+    _opt.tell_study(study_storage, study_name, trial_number, value=objective)
+
+    # 6. Read current best
+    best = _opt.best_study(study_storage, study_name)
+    study_best = None
+    if best.get("best_value") is not None:
+        study_best = {"value": best["best_value"], "params": best.get("best_params")}
+
+    return {
+        "status": "success",
+        "pipeline": "run-optimization-step",
+        "trial_id": trial_number,
+        "params_used": params,
+        "s11_metric": metric,
+        "study_best": study_best,
+        "cache_hit": not sim.get("solver_completed", True),
+    }

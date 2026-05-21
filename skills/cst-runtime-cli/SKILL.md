@@ -59,7 +59,7 @@ uv run python -m cst_runtime cst-session-quit
 
 `cst_runtime` 是 skill 自带的包（`scripts/cst_runtime/`），首次使用需部署到工作区。
 
-```
+```text
 1. agent 准备 python + uv → 缺则下载静默装
 2. agent Read skill/scripts/bootstrap.py → Write 为 bootstrap.py
 3. uv run python bootstrap.py --skill-path <skill-root>\scripts
@@ -81,7 +81,7 @@ uv run python -m cst_runtime cst-session-quit
 
 ### 生产入口
 
-```
+```text
 uv run python -m cst_runtime <tool> [args]
 ```
 
@@ -205,11 +205,10 @@ uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment
 所有管道定义通过 `describe-pipeline --pipeline <name>` 查询，以下是 9 条管道的概览：
 
 | 管道 | 原子工具展开 | 用途 |
-|------|------------|------|
+|------|-------------|------|
 | **inspect-project** | `cst-session-open` → `list-parameters` → `list-entities` → `inspect-farfield-monitors` → `cst-session-close` | 了解工程（参数+实体+远场） |
 | **prepare-experiment** | `cst-session-open` → `change-parameter` → `list-parameters` → `save-project` → `cst-session-close` | 改参→保存 |
 | **run-experiment** | `cst-session-open` → `start-simulation-async` → `wait-simulation` → `cst-session-close` → `export-run-results` | 仿真→导出 |
-
 | **async-simulation-refresh-results** | `start-simulation-async` → `wait-simulation` → `cst-session-close` → `list-run-ids` → `get-1d-result` | 异步仿真→读结果 |
 | **project-unlock-check** | `infer-run-dir` → `wait-project-unlocked` | 检查锁文件 |
 | **cst-session-management-gate** | 6 步完整 session 生命周期验证 | session 管理 |

@@ -6,6 +6,12 @@ from ..core import optimizer as _opt
 from . import _register_tool_defs
 
 
+def _lazy_pipeline(name: str):
+    import importlib
+    mod = importlib.import_module("..cli.pipelines.impl", __package__)
+    return getattr(mod, name)
+
+
 _register_tool_defs({
     "create-study": {
         "category": "optimization",
@@ -97,6 +103,88 @@ _register_tool_defs({
             "study_name": "horn_matching",
         },
     },
+    "run-probe-phase": {
+        "category": "optimization",
+        "risk": "long-running",
+        "description": "Run the complete probe phase: design Plackett-Burman probes, simulate each, analyze main effects and interactions, then inject results into an Optuna study. The working.cst is copied to working_probe.cst for isolation; exports go to exports/probe/. Returns top_params for agent to decide which parameters to carry into optimization.",
+        "handler": "tool_run_probe_phase",
+        "direct_flags": True,
+        "json_schema": {
+            "$schema": "https://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["project_path", "parameters", "study_storage", "study_name"],
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Path to working.cst",
+                    "default": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
+                },
+                "parameters": {
+                    "type": "object",
+                    "description": "Parameter ranges for DOE screening, keyed by parameter name. Each value: {min, max, type?}",
+                    "default": {"R": {"min": 0.1, "max": 0.5}, "g": {"min": 20, "max": 30}},
+                    "additionalProperties": {
+                        "type": "object",
+                        "required": ["min", "max"],
+                        "properties": {
+                            "min": {"type": "number"},
+                            "max": {"type": "number"},
+                            "type": {"type": "string", "enum": ["float", "int"]}
+                        }
+                    }
+                },
+                "study_storage": {
+                    "type": "string",
+                    "description": "Path to Optuna SQLite storage file",
+                    "default": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\studies\\optimization.db"
+                },
+                "study_name": {
+                    "type": "string",
+                    "description": "Name for the Optuna study",
+                    "default": "horn_matching"
+                },
+                "max_probes": {
+                    "type": "integer",
+                    "default": 12,
+                    "description": "Maximum number of probe points"
+                },
+                "include_center": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Include center point in probe design"
+                }
+            }
+        }
+    },
+    "run-optimization-step": {
+        "category": "optimization",
+        "risk": "long-running",
+        "description": "Run one optimization iteration: ask Optuna for next parameters, apply them, simulate, read S11 objective, and report back. Agent inspects the s11_metric output to decide whether to stop or continue the loop.",
+        "handler": "tool_run_optimization_step",
+        "direct_flags": True,
+        "json_schema": {
+            "$schema": "https://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["project_path", "study_storage", "study_name"],
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Path to working.cst",
+                    "default": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
+                },
+                "study_storage": {
+                    "type": "string",
+                    "description": "Path to Optuna SQLite storage file",
+                    "default": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\studies\\optimization.db"
+                },
+                "study_name": {
+                    "type": "string",
+                    "description": "Name of the Optuna study",
+                    "default": "horn_matching"
+                }
+            }
+        }
+    },
 })
 
 
@@ -159,4 +247,25 @@ def tool_terminate_check(args: dict) -> dict:
     return _opt.terminate_check(
         storage_path=str(args.get("storage_path", "")),
         study_name=str(args.get("study_name", "")),
+    )
+
+
+def tool_run_probe_phase(args: dict) -> dict:
+    _run = _lazy_pipeline("pipeline_run_probe_phase")
+    return _run(
+        project_path=str(args["project_path"]),
+        parameters=args.get("parameters", {}),
+        study_storage=str(args["study_storage"]),
+        study_name=str(args["study_name"]),
+        max_probes=int(args.get("max_probes", 12)),
+        include_center=bool(args.get("include_center", True)),
+    )
+
+
+def tool_run_optimization_step(args: dict) -> dict:
+    _run = _lazy_pipeline("pipeline_run_optimization_step")
+    return _run(
+        project_path=str(args["project_path"]),
+        study_storage=str(args["study_storage"]),
+        study_name=str(args["study_name"]),
     )
