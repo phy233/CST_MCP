@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import os
-import json
-import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -82,26 +80,11 @@ def _connect_to_any():
 
 
 def _discover_design_environment_pids() -> list[int]:
-    command = """
-Get-Process -Name "CST DESIGN ENVIRONMENT_AMD64" -ErrorAction SilentlyContinue |
-  Sort-Object Id |
-  ForEach-Object { [pscustomobject]@{ pid = $_.Id } } |
-  ConvertTo-Json -Depth 4
-"""
-    result = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
+    try:
+        import cst.interface
+        return list(cst.interface.running_design_environments())
+    except Exception:
         return []
-    payload = json.loads(result.stdout)
-    if isinstance(payload, dict):
-        payload = [payload]
-    if not isinstance(payload, list):
-        return []
-    return [int(item["pid"]) for item in payload if isinstance(item, dict) and item.get("pid")]
 
 
 def _connected_design_environments() -> tuple[list[tuple[Any, int | None]], str]:

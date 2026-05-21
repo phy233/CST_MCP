@@ -39,6 +39,8 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
     try:
         import cst.interface
         de = cst.interface.DesignEnvironment.new()
+        # 目前仅创建 MWS(微波工作室)。若需拓展其他类型，可用：
+        # de.new_cs() / new_ds() / new_ems() / new_fd3d() / new_mps() / new_pcbs() / new_ps()
         project = de.new_mws()
         project.save(normalized_project)
         return {

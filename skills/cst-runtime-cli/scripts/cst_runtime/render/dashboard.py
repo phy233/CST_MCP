@@ -449,13 +449,17 @@ def _s11_table_html(s11_exports: dict[int, dict[str, Any]]) -> str:
         is_best = rid == best["run_id"]
         row_class = ' class="best"' if is_best else ""
         badge = '<span class="badge badge-best">最优</span>' if is_best else ""
+        params = e.get("parameter_combination", {})
+        param_str = ", ".join(f"{k}={v}" for k, v in params.items()) if params else "-"
         rows.append(
-            f'<tr{row_class}><td>{rid}{badge}</td><td>{escape(e["file"])}</td><td>{e["best_freq"]:.3f} GHz</td><td>{e["min_db"]:.3f} dB</td></tr>'
+            f'<tr{row_class}><td>{rid}{badge}</td><td>{escape(e["file"])}</td>'
+            f'<td>{e["best_freq"]:.3f} GHz</td><td>{e["min_db"]:.3f} dB</td>'
+            f'<td style="font-size:0.85em;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{escape(param_str)}">{escape(param_str)}</td></tr>'
         )
     return (
         f'<div class="data-section">'
         f'<div class="section-title">S11 结果</div>'
-            f'<table><thead><tr><th>运行</th><th>文件</th><th>最优频率</th><th>最低 S11</th></tr></thead><tbody>'
+            f'<table><thead><tr><th>运行</th><th>文件</th><th>最优频率</th><th>最低 S11</th><th>参数组合</th></tr></thead><tbody>'
         + "".join(rows)
         + "</tbody></table></div>"
     )
