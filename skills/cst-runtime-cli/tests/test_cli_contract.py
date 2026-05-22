@@ -7,12 +7,10 @@ that can be validated without starting CST Studio Suite.
 from __future__ import annotations
 
 import json
-import math
 import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -104,107 +102,102 @@ def _run_in_workspace(args: list[str]) -> subprocess.CompletedProcess[str]:
         return run_cli(*args, "--workspace", str(ws))
 
 
-class CliContractAllToolsTests(unittest.TestCase):
+class CliContractAllToolsTests:
     """Every tool has valid metadata, args template, and consistent JSON output."""
 
     def test_all_tools_are_listed(self) -> None:
         names = get_all_tool_names()
-        self.assertGreater(len(names), 50, f"Only {len(names)} tools found")
+        assert len(names) > 50, f"Only {len(names)} tools found"
 
     def test_every_tool_describe_returns_success(self) -> None:
         for tool in get_all_tool_names():
             if tool in _CST_REQUIRED_TOOLS:
                 continue
-            with self.subTest(tool=tool):
-                r = run_cli("describe-tool", "--tool", tool)
-                self.assertEqual(r.returncode, 0, r.stderr[:200])
-                p = json.loads(r.stdout)
-                self.assertEqual(p["status"], "success")
-                self.assertEqual(p["tool"]["name"], tool)
-                self.assertIn("category", p["tool"])
-                self.assertIn("risk", p["tool"])
-                self.assertIn("description", p["tool"])
+            r = run_cli("describe-tool", "--tool", tool)
+            assert r.returncode == 0, r.stderr[:200]
+            p = json.loads(r.stdout)
+            assert p["status"] == "success"
+            assert p["tool"]["name"] == tool
+            assert "category" in p["tool"]
+            assert "risk" in p["tool"]
+            assert "description" in p["tool"]
 
     def test_every_tool_has_args_template(self) -> None:
         for tool in get_all_tool_names():
             if tool in _CST_REQUIRED_TOOLS:
                 continue
-            with self.subTest(tool=tool):
-                r = run_cli("args-template", "--tool", tool)
-                self.assertEqual(r.returncode, 0, r.stderr[:200])
-                p = json.loads(r.stdout)
-                self.assertEqual(p["status"], "success")
-                self.assertEqual(p["tool"], tool)
-                self.assertIsInstance(p["args_template"], dict)
+            r = run_cli("args-template", "--tool", tool)
+            assert r.returncode == 0, r.stderr[:200]
+            p = json.loads(r.stdout)
+            assert p["status"] == "success"
+            assert p["tool"] == tool
+            assert isinstance(p["args_template"], dict)
 
     def test_args_template_writes_valid_json_file(self) -> None:
         for tool in get_all_tool_names():
             if tool in _CST_REQUIRED_TOOLS:
                 continue
-            with self.subTest(tool=tool):
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    out = Path(tmpdir) / f"{tool}_args.json"
-                    r = run_cli("args-template", "--tool", tool, "--output", str(out))
-                    self.assertEqual(r.returncode, 0, r.stderr[:200])
-                    p = json.loads(r.stdout)
-                    self.assertEqual(p["status"], "success")
-                    self.assertEqual(Path(p["output_path"]), out)
-                    written = json.loads(out.read_text(encoding="utf-8"))
-                    self.assertIsInstance(written, dict)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out = Path(tmpdir) / f"{tool}_args.json"
+                r = run_cli("args-template", "--tool", tool, "--output", str(out))
+                assert r.returncode == 0, r.stderr[:200]
+                p = json.loads(r.stdout)
+                assert p["status"] == "success"
+                assert Path(p["output_path"]) == out
+                written = json.loads(out.read_text(encoding="utf-8"))
+                assert isinstance(written, dict)
 
     def test_unknown_tool_returns_json_error(self) -> None:
         r = run_cli("describe-tool", "--tool", "nonexistent-tool-xyz")
-        self.assertEqual(r.returncode, 1)
+        assert r.returncode == 1
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "error")
-        self.assertEqual(p["error_type"], "unknown_tool")
-        self.assertIn("available_tools", p)
+        assert p["status"] == "error"
+        assert p["error_type"] == "unknown_tool"
+        assert "available_tools" in p
 
     def test_unknown_arg_template_returns_json_error(self) -> None:
         r = run_cli("args-template", "--tool", "nonexistent-tool-xyz")
-        self.assertEqual(r.returncode, 1)
+        assert r.returncode == 1
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "error")
-        self.assertEqual(p["error_type"], "unknown_tool")
+        assert p["status"] == "error"
+        assert p["error_type"] == "unknown_tool"
 
 
-class CliContractAllPipelinesTests(unittest.TestCase):
+class CliContractAllPipelinesTests:
     """Every pipeline has valid metadata and is documented."""
 
     def test_all_pipelines_are_listed(self) -> None:
         names = get_all_pipeline_names()
-        self.assertGreater(len(names), 5, f"Only {len(names)} pipelines found")
+        assert len(names) > 5, f"Only {len(names)} pipelines found"
 
     def test_every_pipeline_describe_returns_success(self) -> None:
         for pipe in get_all_pipeline_names():
-            with self.subTest(pipeline=pipe):
-                r = run_cli("describe-pipeline", "--pipeline", pipe)
-                self.assertEqual(r.returncode, 0, r.stderr[:200])
-                p = json.loads(r.stdout)
-                self.assertEqual(p["status"], "success")
-                self.assertEqual(p["pipeline"], pipe)
-                self.assertIn("category", p["recipe"])
-                self.assertIn("risk", p["recipe"])
-                self.assertIn("steps", p["recipe"])
+            r = run_cli("describe-pipeline", "--pipeline", pipe)
+            assert r.returncode == 0, r.stderr[:200]
+            p = json.loads(r.stdout)
+            assert p["status"] == "success"
+            assert p["pipeline"] == pipe
+            assert "category" in p["recipe"]
+            assert "risk" in p["recipe"]
+            assert "steps" in p["recipe"]
 
     def test_every_pipeline_template_generates_plan(self) -> None:
         for pipe in get_all_pipeline_names():
-            with self.subTest(pipeline=pipe):
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    out = Path(tmpdir) / f"{pipe}_plan.json"
-                    r = run_cli("pipeline-template", "--pipeline", pipe, "--output", str(out))
-                    self.assertEqual(r.returncode, 0, r.stderr[:200])
-                    self.assertTrue(out.exists())
-                    plan = json.loads(out.read_text(encoding="utf-8"))
-                    self.assertEqual(plan["pipeline"], pipe)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out = Path(tmpdir) / f"{pipe}_plan.json"
+                r = run_cli("pipeline-template", "--pipeline", pipe, "--output", str(out))
+                assert r.returncode == 0, r.stderr[:200]
+                assert out.exists()
+                plan = json.loads(out.read_text(encoding="utf-8"))
+                assert plan["pipeline"] == pipe
 
     def test_unknown_pipeline_returns_json_error(self) -> None:
         r = run_cli("describe-pipeline", "--pipeline", "nonexistent-pipeline-xyz")
-        self.assertEqual(r.returncode, 1)
+        assert r.returncode == 1
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "error")
-        self.assertEqual(p["error_type"], "unknown_pipeline")
-        self.assertIn("available_pipelines", p)
+        assert p["status"] == "error"
+        assert p["error_type"] == "unknown_pipeline"
+        assert "available_pipelines" in p
 
     def test_every_pipeline_step_tool_exists(self) -> None:
         """Ensure every pipeline step references a real tool or meta command."""
@@ -226,81 +219,78 @@ class CliContractAllPipelinesTests(unittest.TestCase):
                     continue
                 if tool not in known_tools:
                     missing.append(f"{pipe_name}: unknown tool {tool!r}")
-        self.assertFalse(missing, "\n".join(missing))
+        assert not missing, "\n".join(missing)
 
 
-class CliContractOutputFormatTests(unittest.TestCase):
+class CliContractOutputFormatTests:
     """All CLI output follows the JSON contract."""
 
     def test_all_outputs_have_required_fields(self) -> None:
         for cmd in ("usage-guide", "list-tools", "list-pipelines"):
-            with self.subTest(command=cmd):
-                r = run_cli(cmd)
-                self.assertEqual(r.returncode, 0, r.stderr)
-                p = json.loads(r.stdout)
-                self.assertIn("status", p)
-                self.assertIn("adapter", p)
-                self.assertIn(p["adapter"], ("cst_runtime_cli", "cst_runtime"))
+            r = run_cli(cmd)
+            assert r.returncode == 0, r.stderr
+            p = json.loads(r.stdout)
+            assert "status" in p
+            assert "adapter" in p
+            assert p["adapter"] in ("cst_runtime_cli", "cst_runtime")
 
     def test_error_outputs_have_error_type(self) -> None:
         r = run_cli("prepare-run")
-        self.assertIn(r.returncode, {1, 2})
+        assert r.returncode in {1, 2}
         p = json.loads(r.stdout)
-        self.assertIn("error_type", p)
-        self.assertIn("adapter", p)
+        assert "error_type" in p
+        assert "adapter" in p
 
     def test_stdout_is_always_json(self) -> None:
         for cmd in ("--version", "--help"):
-            with self.subTest(command=cmd):
-                r = run_cli(cmd)
-                self.assertEqual(r.returncode, 0, r.stderr)
-                # version/help are plain text, ok
+            r = run_cli(cmd)
+            assert r.returncode == 0, r.stderr
+            # version/help are plain text, ok
 
     def test_pipeline_template_is_serializable(self) -> None:
         for pipe in get_all_pipeline_names():
-            with self.subTest(pipeline=pipe):
-                r = run_cli("pipeline-template", "--pipeline", pipe)
-                self.assertEqual(r.returncode, 0, r.stderr[:200])
-                json.loads(r.stdout)
+            r = run_cli("pipeline-template", "--pipeline", pipe)
+            assert r.returncode == 0, r.stderr[:200]
+            json.loads(r.stdout)
 
 
-class CliContractNoCstFunctionalTests(unittest.TestCase):
+class CliContractNoCstFunctionalTests:
     """Functional tests for tools that work without CST."""
 
     def test_list_materials_returns_names(self) -> None:
         r = run_cli("list-materials")
-        self.assertEqual(r.returncode, 0, r.stderr)
+        assert r.returncode == 0, r.stderr
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "success")
-        self.assertGreater(p["count"], 0)
-        self.assertIsInstance(p["material_names"], list)
+        assert p["status"] == "success"
+        assert p["count"] > 0
+        assert isinstance(p["material_names"], list)
 
     def test_install_cst_libraries_dry_run_scans(self) -> None:
         r = run_cli("install-cst-libraries", "--dry-run", "true")
-        self.assertEqual(r.returncode, 0, r.stderr)
+        assert r.returncode == 0, r.stderr
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "success")
-        self.assertTrue(p["dry_run"])
-        self.assertIn("target_path", p)
-        self.assertIn("scan", p)
+        assert p["status"] == "success"
+        assert p["dry_run"]
+        assert "target_path" in p
+        assert "scan" in p
 
     def test_health_check_reports_status(self) -> None:
         r = run_cli("health-check", "--auto-fix", "true")
-        self.assertEqual(r.returncode, 0, r.stderr)
+        assert r.returncode == 0, r.stderr
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "success")
-        self.assertIn("overall", p)
-        self.assertIn("phases", p)
-        self.assertIn("fixes_applied", p)
-        self.assertIn("workspace", p)
-        self.assertIn("platform", p)
+        assert p["status"] == "success"
+        assert "overall" in p
+        assert "phases" in p
+        assert "fixes_applied" in p
+        assert "workspace" in p
+        assert "platform" in p
 
     def test_health_check_without_auto_fix(self) -> None:
         r = run_cli("health-check", "--auto-fix", "false")
-        self.assertEqual(r.returncode, 0, r.stderr)
+        assert r.returncode == 0, r.stderr
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "success")
-        self.assertIn("overall", p)
+        assert p["status"] == "success"
+        assert "overall" in p
 
     def test_plot_exported_file_with_s11_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -311,10 +301,10 @@ class CliContractNoCstFunctionalTests(unittest.TestCase):
                 "ydata": [{"real": 0.3, "imag": 0.0}, {"real": 0.1, "imag": 0.0}, {"real": 0.2, "imag": 0.0}],
             }), encoding="utf-8")
             r = run_cli("plot-exported-file", "--file-path", str(s11), "--output-html", str(d / "preview.html"), "--page-title", "Test")
-            self.assertEqual(r.returncode, 0, r.stderr)
+            assert r.returncode == 0, r.stderr
             p = json.loads(r.stdout)
-            self.assertEqual(p["status"], "success")
-            self.assertTrue((d / "preview.html").exists())
+            assert p["status"] == "success"
+            assert (d / "preview.html").exists()
 
     def test_calculate_farfield_flatness_with_stub_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -330,9 +320,9 @@ class CliContractNoCstFunctionalTests(unittest.TestCase):
                 "file_paths": [str(d / "cut0.json"), str(d / "cut90.json")],
                 "theta_max_deg": 15.0, "output_json": str(d / "flatness.json")
             }))
-            self.assertEqual(r.returncode, 0, r.stderr)
+            assert r.returncode == 0, r.stderr
             p = json.loads(r.stdout)
-            self.assertEqual(p["status"], "success")
+            assert p["status"] == "success"
 
     def test_record_and_update_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -340,7 +330,7 @@ class CliContractNoCstFunctionalTests(unittest.TestCase):
             run_cli("init-workspace", "--workspace", str(ws))
             run_cli("init-task", "--workspace", str(ws), "--task-id", "task_test", "--source-project", str(ws / "missing.cst"), "--goal", "test")
             task_json = ws / "tasks" / "task_test" / "task.json"
-            self.assertTrue(task_json.exists())
+            assert task_json.exists()
 
             run_dir = ws / "tasks" / "task_test" / "runs" / "run_001"
             run_dir.mkdir(parents=True, exist_ok=True)
@@ -349,17 +339,17 @@ class CliContractNoCstFunctionalTests(unittest.TestCase):
                 "task_path": str(task_json.parent), "run_id": "run_001",
                 "stage": "test", "status": "completed", "message": "test",
             }), "--workspace", str(ws))
-            self.assertEqual(stage.returncode, 0, stage.stderr)
+            assert stage.returncode == 0, stage.stderr
             sp = json.loads(stage.stdout)
-            self.assertEqual(sp["status"], "success")
+            assert sp["status"] == "success"
 
             status = run_cli("update-status", "--args-json", json.dumps({
                 "task_path": str(task_json.parent), "run_id": "run_001",
                 "status": "validated", "stage": "test",
             }), "--workspace", str(ws))
-            self.assertEqual(status.returncode, 0, status.stderr)
+            assert status.returncode == 0, status.stderr
             up = json.loads(status.stdout)
-            self.assertEqual(up["status"], "success")
+            assert up["status"] == "success"
 
     def test_wait_project_unlocked_no_project(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -369,9 +359,9 @@ class CliContractNoCstFunctionalTests(unittest.TestCase):
             fake_project.parent.mkdir(parents=True, exist_ok=True)
             fake_project.write_text("fake", encoding="utf-8")
             r = run_cli("wait-project-unlocked", "--project-path", str(fake_project), "--timeout-seconds", "1", "--workspace", str(ws))
-            self.assertEqual(r.returncode, 0, r.stderr)
+            assert r.returncode == 0, r.stderr
             p = json.loads(r.stdout)
-            self.assertIn("locked", p)
+            assert "locked" in p
 
     def test_infer_run_dir_no_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -381,10 +371,10 @@ class CliContractNoCstFunctionalTests(unittest.TestCase):
             fake.parent.mkdir(parents=True, exist_ok=True)
             fake.write_text("fake", encoding="utf-8")
             r = run_cli("infer-run-dir", "--project-path", str(fake), "--workspace", str(ws))
-            self.assertEqual(r.returncode, 0, r.stderr)
+            assert r.returncode == 0, r.stderr
             p = json.loads(r.stdout)
-            self.assertEqual(p["status"], "success")
-            self.assertIsNone(p["run_dir"])
+            assert p["status"] == "success"
+            assert p["run_dir"] is None
 
     def test_prepare_run_missing_source_reports_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -393,21 +383,21 @@ class CliContractNoCstFunctionalTests(unittest.TestCase):
             run_cli("init-task", "--workspace", str(ws), "--task-id", "task_test", "--source-project", str(ws / "missing.cst"), "--goal", "test")
             task_path = ws / "tasks" / "task_test"
             r = run_cli("prepare-run", "--args-json", json.dumps({"task_path": str(task_path)}), "--workspace", str(ws))
-            self.assertEqual(r.returncode, 1)
+            assert r.returncode == 1
             p = json.loads(r.stdout)
-            self.assertEqual(p["status"], "error")
-            self.assertEqual(p["error_type"], "source_project_missing")
+            assert p["status"] == "error"
+            assert p["error_type"] == "source_project_missing"
 
     def test_production_tool_requires_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             r = run_cli("prepare-run", "--workspace", tmpdir, "--args-json", json.dumps({"task_path": str(Path(tmpdir) / "tasks" / "task_001")}))
-            self.assertEqual(r.returncode, 1)
+            assert r.returncode == 1
             p = json.loads(r.stdout)
-            self.assertEqual(p["status"], "error")
-            self.assertEqual(p["error_type"], "workspace_not_initialized")
+            assert p["status"] == "error"
+            assert p["error_type"] == "workspace_not_initialized"
 
 
-class CliContractGovernanceTests(unittest.TestCase):
+class CliContractGovernanceTests:
     """Governance rules embedded in tool metadata."""
 
     def test_modeling_write_tools_have_governance(self) -> None:
@@ -417,28 +407,26 @@ class CliContractGovernanceTests(unittest.TestCase):
             "delete-entity", "create-component", "change-material",
         }
         for tool in modeling_writes:
-            with self.subTest(tool=tool):
-                r = run_cli("describe-tool", "--tool", tool)
-                if r.returncode != 0:
-                    continue
-                p = json.loads(r.stdout)
-                meta = p.get("tool", {})
-                self.assertIn("pipeline_mode", meta)
-                self.assertIn("requires_run_context", meta)
-                self.assertIn("requires_check_solid", meta)
+            r = run_cli("describe-tool", "--tool", tool)
+            if r.returncode != 0:
+                continue
+            p = json.loads(r.stdout)
+            meta = p.get("tool", {})
+            assert "pipeline_mode" in meta
+            assert "requires_run_context" in meta
+            assert "requires_check_solid" in meta
 
     def test_read_tools_do_not_require_check_solid(self) -> None:
         read_tools = {"list-parameters", "list-entities", "list-materials",
                        "cst-session-inspect"}
         for tool in read_tools:
-            with self.subTest(tool=tool):
-                r = run_cli("describe-tool", "--tool", tool)
-                if r.returncode != 0:
-                    continue
-                p = json.loads(r.stdout)
-                meta = p.get("tool", {})
-                if meta.get("requires_check_solid"):
-                    self.assertEqual(meta.get("pipeline_mode"), "read_only")
+            r = run_cli("describe-tool", "--tool", tool)
+            if r.returncode != 0:
+                continue
+            p = json.loads(r.stdout)
+            meta = p.get("tool", {})
+            if meta.get("requires_check_solid"):
+                assert meta.get("pipeline_mode") == "read_only"
 
     def test_session_tools_have_correct_risk_labels(self) -> None:
         session_risks = {
@@ -449,26 +437,25 @@ class CliContractGovernanceTests(unittest.TestCase):
             "cst-session-reattach": "read",
         }
         for tool, expected_risk in session_risks.items():
-            with self.subTest(tool=tool):
-                r = run_cli("describe-tool", "--tool", tool)
-                self.assertEqual(r.returncode, 0, r.stderr)
-                p = json.loads(r.stdout)
-                self.assertEqual(p["tool"]["risk"], expected_risk)
+            r = run_cli("describe-tool", "--tool", tool)
+            assert r.returncode == 0, r.stderr
+            p = json.loads(r.stdout)
+            assert p["tool"]["risk"] == expected_risk
 
 
-class CliContractSessionTests(unittest.TestCase):
+class CliContractSessionTests:
     """Session/process management tools (no CST needed for dry-runs)."""
 
     def test_session_inspect_no_project_safe_json(self) -> None:
         r = run_cli("cst-session-inspect")
-        self.assertEqual(r.returncode, 0, r.stderr)
+        assert r.returncode == 0, r.stderr
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "success")
-        self.assertIn("force_kill_allowlist", p)
-        self.assertIn("process_count", p)
-        self.assertIn("lock_count", p)
-        self.assertIn("readiness", p)
-        self.assertIn(p["readiness"], {"clear", "attention_required", "blocked"})
+        assert p["status"] == "success"
+        assert "force_kill_allowlist" in p
+        assert "process_count" in p
+        assert "lock_count" in p
+        assert "readiness" in p
+        assert p["readiness"] in {"clear", "attention_required", "blocked"}
 
     def test_stage_evidence_capture_and_compare(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -508,23 +495,19 @@ class CliContractSessionTests(unittest.TestCase):
                 "compare": [str(before), str(after)],
                 "output_html": str(d / "report.html"),
             }))
-            self.assertEqual(r.returncode, 0, r.stderr)
+            assert r.returncode == 0, r.stderr
             p = json.loads(r.stdout)
-            self.assertEqual(p["status"], "success")
+            assert p["status"] == "success"
             report = (d / "report.html").read_text(encoding="utf-8")
-            self.assertIn("参数对比", report)
-            self.assertIn("Entities", report)
-            self.assertIn("changed", report)
-            self.assertIn("added", report)
-            self.assertIn("ev_brick", report)
+            assert "参数对比" in report
+            assert "Entities" in report
+            assert "changed" in report
+            assert "added" in report
+            assert "ev_brick" in report
 
     def test_session_quit_dry_run_safe(self) -> None:
         r = run_cli("cst-session-quit", "--dry-run", "true")
-        self.assertEqual(r.returncode, 0, r.stderr)
+        assert r.returncode == 0, r.stderr
         p = json.loads(r.stdout)
-        self.assertEqual(p["status"], "success")
-        self.assertTrue(p["dry_run"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert p["status"] == "success"
+        assert p["dry_run"]

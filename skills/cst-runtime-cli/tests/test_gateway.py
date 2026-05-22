@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import math
 import sys
-import unittest
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILL_ROOT = REPO_ROOT / "skills" / "cst-runtime-cli"
@@ -37,277 +38,258 @@ from cst_runtime.core.gateway import (
 )
 
 
-class GatewayRegistryTests(unittest.TestCase):
-    def setUp(self):
-        _registry.clear()
-
+class GatewayRegistryTests:
     def test_normalize_windows_path(self):
         result = _normalize("C:\\foo\\bar\\test.cst")
-        self.assertEqual(result, "C:/foo/bar/test.cst")
+        assert result == "C:/foo/bar/test.cst"
 
     def test_ensure_state_creates_entry(self):
         st = _ensure_state("C:/test.cst")
-        self.assertEqual(st.path, "C:/test.cst")
-        self.assertEqual(st.session_type, "unknown")
-        self.assertEqual(st.stage, "clean")
-        self.assertIn("C:/test.cst", _registry)
+        assert st.path == "C:/test.cst"
+        assert st.session_type == "unknown"
+        assert st.stage == "clean"
+        assert "C:/test.cst" in _registry
 
     def test_ensure_state_idempotent(self):
         st1 = _ensure_state("C:/test.cst")
         st2 = _ensure_state("C:/test.cst")
-        self.assertIs(st1, st2)
+        assert st1 is st2
 
     def test_remove_state(self):
         _ensure_state("C:/test.cst")
         _remove_state("C:/test.cst")
-        self.assertIsNone(_get_state("C:/test.cst"))
+        assert _get_state("C:/test.cst") is None
 
 
-class GatewayT10ProjectPathTests(unittest.TestCase):
-    def setUp(self):
-        _registry.clear()
-
+class GatewayT10ProjectPathTests:
     def test_empty_path_raises(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             validate_project_path("")
 
     def test_directory_path_raises(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             validate_project_path("C:/some/dir")
 
     def test_wrong_suffix_raises(self):
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             validate_project_path("C:/test.txt")
 
     def test_cst_file_passes(self):
         result = validate_project_path("C:/path/working.cst")
-        self.assertEqual(result, "C:/path/working.cst")
+        assert result == "C:/path/working.cst"
 
 
-class GatewayT2ParamsDirtyTests(unittest.TestCase):
-    def setUp(self):
-        _registry.clear()
-
+class GatewayT2ParamsDirtyTests:
     def test_mark_params_dirty_sets_stage(self):
         _ensure_state("C:/test.cst")
         mark_params_dirty("C:/test.cst")
         st = _get_state("C:/test.cst")
-        self.assertEqual(st.stage, "params_dirty")
+        assert st.stage == "params_dirty"
 
     def test_guard_refuses_dirty_simulation(self):
         _ensure_state("C:/test.cst")
         mark_params_dirty("C:/test.cst")
         err = guard_before_simulation("C:/test.cst")
-        self.assertIsNotNone(err)
-        self.assertEqual(err["status"], "error")
-        self.assertEqual(err["error_type"], "params_not_rebuilt")
-        self.assertEqual(err["trap"], "T2_params_not_rebuilt")
+        assert err is not None
+        assert err["status"] == "error"
+        assert err["error_type"] == "params_not_rebuilt"
+        assert err["trap"] == "T2_params_not_rebuilt"
 
     def test_guard_allows_clean_simulation(self):
         _ensure_state("C:/test.cst")
         err = guard_before_simulation("C:/test.cst")
-        self.assertIsNone(err)
+        assert err is None
 
     def test_guard_allows_unknown_project(self):
         err = guard_before_simulation("C:/unknown.cst")
-        self.assertIsNone(err)
+        assert err is None
 
     def test_clear_dirty_resets_stage(self):
         _ensure_state("C:/test.cst")
         mark_params_dirty("C:/test.cst")
         clear_dirty("C:/test.cst")
         st = _get_state("C:/test.cst")
-        self.assertEqual(st.stage, "clean")
+        assert st.stage == "clean"
 
 
-class GatewayT3FarfieldSaveTests(unittest.TestCase):
-    def setUp(self):
-        _registry.clear()
-
+class GatewayT3FarfieldSaveTests:
     def test_mark_farfield_exported(self):
         _ensure_state("C:/test.cst")
         mark_farfield_exported("C:/test.cst")
         st = _get_state("C:/test.cst")
-        self.assertEqual(st.stage, "farfield_exported")
+        assert st.stage == "farfield_exported"
 
     def test_guard_forces_save_false_after_export(self):
         _ensure_state("C:/test.cst")
         mark_farfield_exported("C:/test.cst")
         effective, msg = guard_before_close_save("C:/test.cst", True)
-        self.assertFalse(effective)
-        self.assertIn("T3", msg)
+        assert not effective
+        assert "T3" in msg
 
     def test_guard_allows_save_false(self):
         _ensure_state("C:/test.cst")
         mark_farfield_exported("C:/test.cst")
         effective, msg = guard_before_close_save("C:/test.cst", False)
-        self.assertFalse(effective)
-        self.assertEqual(msg, "")
+        assert not effective
+        assert msg == ""
 
     def test_guard_allows_save_on_clean_project(self):
         _ensure_state("C:/test.cst")
         effective, msg = guard_before_close_save("C:/test.cst", True)
-        self.assertTrue(effective)
-        self.assertEqual(msg, "")
+        assert effective
+        assert msg == ""
 
 
-class GatewayT1RunIdTests(unittest.TestCase):
+class GatewayT1RunIdTests:
     def test_run_id_nonzero_passthrough(self):
         rid, msg = resolve_run_id(5, [1, 2, 3, 5])
-        self.assertEqual(rid, 5)
-        self.assertEqual(msg, "")
+        assert rid == 5
+        assert msg == ""
 
     def test_run_id_zero_resolves_to_latest(self):
         rid, msg = resolve_run_id(0, [1, 2, 3, 5])
-        self.assertEqual(rid, 5)
-        self.assertIn("T1", msg)
+        assert rid == 5
+        assert "T1" in msg
 
     def test_run_id_zero_single_run(self):
         rid, msg = resolve_run_id(0, [1])
-        self.assertEqual(rid, 1)
-        self.assertIn("T1", msg)
+        assert rid == 1
+        assert "T1" in msg
 
     def test_run_id_zero_no_positive(self):
         rid, msg = resolve_run_id(0, [0])
-        self.assertEqual(rid, 0)
-        self.assertIn("T1", msg)
+        assert rid == 0
+        assert "T1" in msg
 
     def test_run_id_zero_empty(self):
         rid, msg = resolve_run_id(0, [])
-        self.assertEqual(rid, 0)
-        self.assertIn("T1", msg)
+        assert rid == 0
+        assert "T1" in msg
 
 
-class GatewayT4ComplexDBTests(unittest.TestCase):
+class GatewayT4ComplexDBTests:
     def test_compute_db_basic(self):
         ydata = [{"real": 0.3, "imag": 0.0}, {"real": 0.1, "imag": 0.0}]
         db = compute_db(ydata)
-        self.assertEqual(len(db), 2)
-        self.assertAlmostEqual(db[0], 20 * math.log10(0.3))
-        self.assertAlmostEqual(db[1], 20 * math.log10(0.1))
+        assert len(db) == 2
+        assert abs(db[0] - 20 * math.log10(0.3)) < 1e-9
+        assert abs(db[1] - 20 * math.log10(0.1)) < 1e-9
 
     def test_compute_db_with_imag(self):
         ydata = [{"real": 3.0, "imag": 4.0}]
         db = compute_db(ydata)
-        self.assertAlmostEqual(db[0], 20 * math.log10(5.0))
+        assert abs(db[0] - 20 * math.log10(5.0)) < 1e-9
 
     def test_compute_db_zero_value(self):
         ydata = [{"real": 0.0, "imag": 0.0}]
         db = compute_db(ydata)
-        self.assertAlmostEqual(db[0], 20 * math.log10(1e-30))
+        assert abs(db[0] - 20 * math.log10(1e-30)) < 1e-9
 
 
-class GatewayT5T12SessionIsolationTests(unittest.TestCase):
-    def setUp(self):
-        _registry.clear()
-
+class GatewayT5T12SessionIsolationTests:
     def test_guard_allows_matching_session(self):
         _ensure_state("C:/test.cst")
         on_session_open("C:/test.cst", "modeler")
         err = guard_cross_session("C:/test.cst", "modeler")
-        self.assertIsNone(err)
+        assert err is None
 
     def test_guard_rejects_cross_session(self):
         _ensure_state("C:/test.cst")
         on_session_open("C:/test.cst", "modeler")
         err = guard_cross_session("C:/test.cst", "results")
-        self.assertIsNotNone(err)
-        self.assertEqual(err["status"], "error")
-        self.assertEqual(err["error_type"], "cross_session_forbidden")
+        assert err is not None
+        assert err["status"] == "error"
+        assert err["error_type"] == "cross_session_forbidden"
 
     def test_guard_allows_unknown_session(self):
         err = guard_cross_session("C:/unknown.cst", "results")
-        self.assertIsNone(err)
+        assert err is None
 
 
-class GatewayT6DeprecatedAPITests(unittest.TestCase):
+class GatewayT6DeprecatedAPITests:
     def test_modeler_rejected(self):
         err = guard_execute_vba_entrypoint("modeler")
-        self.assertIsNotNone(err)
-        self.assertEqual(err["trap"], "T6_deprecated_modeler_api")
+        assert err is not None
+        assert err["trap"] == "T6_deprecated_modeler_api"
 
     def test_model3d_allowed(self):
         err = guard_execute_vba_entrypoint("model3d")
-        self.assertIsNone(err)
+        assert err is None
 
     def test_schematic_allowed(self):
         err = guard_execute_vba_entrypoint("schematic")
-        self.assertIsNone(err)
+        assert err is None
 
 
-class GatewayT8FarfieldQuantityTests(unittest.TestCase):
+class GatewayT8FarfieldQuantityTests:
     def test_realized_gain_passes(self):
-        self.assertIsNone(guard_farfield_quantity("Realized Gain"))
+        assert guard_farfield_quantity("Realized Gain") is None
 
     def test_gain_passes(self):
-        self.assertIsNone(guard_farfield_quantity("Gain"))
+        assert guard_farfield_quantity("Gain") is None
 
     def test_directivity_passes(self):
-        self.assertIsNone(guard_farfield_quantity("Directivity"))
+        assert guard_farfield_quantity("Directivity") is None
 
     def test_abs_e_rejected(self):
         err = guard_farfield_quantity("Abs(E)")
-        self.assertIsNotNone(err)
-        self.assertEqual(err["trap"], "T8_abs_e_not_gain")
+        assert err is not None
+        assert err["trap"] == "T8_abs_e_not_gain"
 
     def test_efield_rejected(self):
         err = guard_farfield_quantity("Efield")
-        self.assertIsNotNone(err)
-        self.assertEqual(err["trap"], "T8_abs_e_not_gain")
+        assert err is not None
+        assert err["trap"] == "T8_abs_e_not_gain"
 
     def test_empty_passes_as_realized_gain(self):
-        self.assertIsNone(guard_farfield_quantity(""))
+        assert guard_farfield_quantity("") is None
 
     def test_unknown_quantity_rejected(self):
         err = guard_farfield_quantity("SomethingElse")
-        self.assertIsNotNone(err)
-        self.assertEqual(err["error_type"], "unsupported_quantity")
+        assert err is not None
+        assert err["error_type"] == "unsupported_quantity"
 
 
-class GatewayT11FarfieldRunIdTests(unittest.TestCase):
+class GatewayT11FarfieldRunIdTests:
     def test_none_run_id_rejected(self):
         err = guard_farfield_run_id(None)
-        self.assertIsNotNone(err)
-        self.assertEqual(err["trap"], "T11_farfield_overwrite")
+        assert err is not None
+        assert err["trap"] == "T11_farfield_overwrite"
 
     def test_zero_run_id_allowed(self):
         err = guard_farfield_run_id(0)
-        self.assertIsNone(err)
+        assert err is None
 
     def test_positive_run_id_allowed(self):
         err = guard_farfield_run_id(5)
-        self.assertIsNone(err)
+        assert err is None
 
 
-class GatewayT13ChangeParamAnnotationTests(unittest.TestCase):
+class GatewayT13ChangeParamAnnotationTests:
     def test_success_gets_warning(self):
         result = annotate_change_param_result({"status": "success", "changed": {"g": 23.0}})
-        self.assertIn("warning", result)
-        self.assertEqual(result["trap_note"], "T13_restore_double_not_model_rebuild")
+        assert "warning" in result
+        assert result["trap_note"] == "T13_restore_double_not_model_rebuild"
 
     def test_error_unchanged(self):
         result = annotate_change_param_result({"status": "error", "message": "oops"})
-        self.assertNotIn("warning", result)
+        assert "warning" not in result
 
 
-class GatewayT14FilterTypeTests(unittest.TestCase):
+class GatewayT14FilterTypeTests:
     def test_0d1d_passes(self):
-        self.assertIsNone(guard_result_filter("0D/1D"))
+        assert guard_result_filter("0D/1D") is None
 
     def test_colormap_passes(self):
-        self.assertIsNone(guard_result_filter("colormap"))
+        assert guard_result_filter("colormap") is None
 
     def test_all_passes(self):
-        self.assertIsNone(guard_result_filter("all"))
+        assert guard_result_filter("all") is None
 
     def test_invalid_rejected(self):
         err = guard_result_filter("wrong_filter")
-        self.assertIsNotNone(err)
-        self.assertEqual(err["trap"], "T14_tree_items_filter")
+        assert err is not None
+        assert err["trap"] == "T14_tree_items_filter"
 
     def test_empty_defaults(self):
-        self.assertIsNone(guard_result_filter(""))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert guard_result_filter("") is None
