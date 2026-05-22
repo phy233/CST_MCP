@@ -65,8 +65,24 @@ def _normalize(path: str) -> str:
     return str(Path(path).expanduser().resolve()).replace("\\", "/")
 
 
+def _dirty_marker_path(project_path: str) -> Path:
+    normalized = _normalize(project_path)
+    cst_path = Path(normalized)
+    companion_dir = cst_path.parent / cst_path.stem
+    return companion_dir / ".cst_params_dirty"
+
+
 def _get_state(project_path: str) -> ProjectState | None:
-    return _registry.get(_normalize(project_path))
+    state = _registry.get(_normalize(project_path))
+    if state is not None:
+        return state
+    marker = _dirty_marker_path(project_path)
+    if marker.exists():
+        np = _normalize(project_path)
+        state = ProjectState(path=np, stage="params_dirty")
+        _registry[np] = state
+        return state
+    return None
 
 
 def _ensure_state(project_path: str) -> ProjectState:
@@ -78,6 +94,7 @@ def _ensure_state(project_path: str) -> ProjectState:
 
 def _remove_state(project_path: str) -> None:
     _registry.pop(_normalize(project_path), None)
+    _clear_dirty_marker(project_path)
 
 
 def _has_session_type(project_path: str, stype: str) -> bool:
@@ -114,6 +131,13 @@ def on_session_open(project_path: str, session_type: str) -> None:
             UserWarning,
         )
     _registry[np] = ProjectState(path=np, session_type=session_type)
+    _clear_dirty_marker(project_path)
+
+
+def _clear_dirty_marker(project_path: str) -> None:
+    marker = _dirty_marker_path(project_path)
+    if marker.exists():
+        marker.unlink()
 
 
 def on_session_close(project_path: str) -> None:
@@ -145,6 +169,9 @@ def mark_params_dirty(project_path: str) -> None:
     """Call after change_parameter(). Sets stage to params_dirty."""
     st = _ensure_state(project_path)
     st.stage = "params_dirty"
+    marker = _dirty_marker_path(project_path)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("params_dirty", encoding="utf-8")
 
 
 def guard_before_simulation(project_path: str) -> dict[str, Any] | None:
