@@ -133,3 +133,49 @@ from . import audit  # noqa: E402, F811
 from . import workspace  # noqa: E402, F811
 from . import optimization  # noqa: E402, F811
 from . import doe  # noqa: E402, F811
+
+
+def _template_to_schema(template: dict) -> dict:
+    """Convert args_template dict to json_schema format."""
+    properties = {}
+    required = []
+    for key, val in template.items():
+        if isinstance(val, bool):
+            prop = {"type": "boolean", "examples": [val]}
+        elif isinstance(val, int):
+            prop = {"type": "integer", "examples": [val]}
+        elif isinstance(val, float):
+            prop = {"type": "number", "examples": [val]}
+        elif isinstance(val, list):
+            item_type = "number" if val and all(isinstance(x, (int, float)) for x in val) else "string"
+            prop = {"type": "array", "items": {"type": item_type}, "examples": [val]}
+        elif isinstance(val, dict):
+            prop = {"type": "object", "examples": [val]}
+        elif isinstance(val, str):
+            prop = {"type": "string", "examples": [val]}
+        else:
+            prop = {"type": "string", "examples": [str(val)]}
+        properties[key] = prop
+        required.append(key)
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+    }
+
+
+def _migrate_all_defs(dry_run: bool = True) -> dict:
+    """Convert all args_template entries to json_schema. Returns migration report."""
+    migrated = 0
+    schema_only = 0
+    for name, defn in _ALL_DEFS.items():
+        if "json_schema" in defn:
+            schema_only += 1
+            continue
+        if "args_template" in defn:
+            if not dry_run:
+                defn["json_schema"] = _template_to_schema(defn["args_template"])
+                defn.pop("args_template", None)
+                defn.pop("direct_flags", None)
+            migrated += 1
+    return {"migrated": migrated, "schema_only": schema_only, "dry_run": dry_run}
