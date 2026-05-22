@@ -8,19 +8,34 @@ description: 当用户要求使用 CLI/runtime 执行 CST 参数优化循环、S
 ## 优化流程速查
 
 ```text
-创建 run → inspect-project → run-probe-phase(参数≥4强制)
-  → 迭代循环[run-optimization-step → agent看s11_metric → 达标break/未达标继续]
-  → generate-report → 阶段记录 → 进程清理
+Phase 0: 准备
+  task 确认(工程/目标/参数/约束) → inspect-project(含category)
+  [agent: 选几何参数 → 用户确认 → 翻译为objective spec]
+
+Phase 1: 探针(参数≥4强制)
+  run-probe-phase --objective <spec>
+  [agent: 看top_params/edge_hit → 选参数/调范围/定算法]
+
+Phase 2: 优化循环
+  loop:
+    run-optimization-step --objective <spec>
+    [agent: objective达标? → break / ask_study_failed? → 换优化器]
+
+Phase 3: 收尾
+  generate-report → 灵敏度验证 → 经验→docs/
+  [agent: 收敛质量判断 + 结论沉淀]
 ```
 
 **关键决策点：**
-| 节点 | 判断 | 分支 |
-|------|------|------|
-| 参数数量 | ≥ 4 | 先 `run-probe-phase`（全自动探针） |
-| 参数数量 | < 4 | 直接进入迭代循环 |
-| `run-probe-phase` 输出 `top_params` | 按重要性排序 | agent 决定哪些参数进入优化 |
-| `run-optimization-step` 输出 `s11_metric` | 达标 | break → `generate-report` |
-| `run-optimization-step` 输出 `s11_metric` | 未达 | 继续循环 |
+| 阶段 | 节点 | agent 行动 |
+|------|------|-----------|
+| 0 | inspect-project | 筛选 `category=geometry` 的参数作为候选 |
+| 0 | task确认 | 向用户确认5项：工程类型、objective函数、目标阈值、参数列表、几何约束 |
+| 1 | run-probe-phase 返回 | `main_effects_normalized > 0.1` 保留，`edge_hit=true` 扩范围 |
+| 1 | 算法选择 | 参数少+线性=TPE，多+交互复杂=CMA-ES，默认 `suggested_algorithm` |
+| 2 | 每轮返回 | `objective_value` vs 目标阈值 → 达标break |
+| 2 | ask_study_failed | 未达标且 study 认为收敛 → 换优化器(最多一次) |
+| 3 | 收尾 | 灵敏度验证 + 经验入库 |
 
 ## 定位
 
@@ -42,9 +57,26 @@ description: 当用户要求使用 CLI/runtime 执行 CST 参数优化循环、S
 | 参数 | `list-parameters`、`change-parameter` |
 | 仿真 | `start-simulation-async`、`wait-simulation` |
 | 结果导出 | **`export-run-results`**（统一导出 S11+2D+远场） |
-| 结果展示 | **`generate-report`**（生成综合报告） |
+| 结果显示 | **`generate-report`**（生成综合报告） |
 | **探针阶段** | **`run-probe-phase`**（一键探针：设计→仿真→分析→注入 study） |
 | **优化迭代** | **`run-optimization-step`**（一步迭代：ask→改参→仿真→tell，agent 判断早停） |
+| Objective 函数 | 内置在管道中 — `s11_min_db`, `s11_at_freq`, `gain_max`, `bandwidth`, `expression` |
+
+## Objective 函数系统
+
+优化目标不再硬编码为 S11 min dB。通过在管道工具中传入 `--objective <spec>` 指定目标函数：
+
+| 类型 | 格式 | 示例场景 |
+|------|------|----------|
+| S11 全局最小值 | `{"type": "s11_min_db"}` | 默认，最小化反射 |
+| 指定频率 S11 | `{"type": "s11_at_freq", "freq": 2.4}` | 2.4GHz 阻抗匹配 |
+| 最大增益 | `{"type": "gain_max", "port": 1}` | 优化天线增益 |
+| 带宽 | `{"type": "bandwidth", "below_db": -10}` | S11<-10dB 带宽最大化 |
+| 自定义表达式 | `{"type": "expression", "expr": "min(s11_db)"}` | 灵活组合 |
+
+objective 默认方向：s11 类为最小化，gain/bandwidth 类为最大化。可通过 `direction` 覆盖。
+
+两个管道（`run-probe-phase`、`run-optimization-step`）均接受 `objective` 参数。省略时默认 `{"type": "s11_min_db"}`，与旧行为完全一致。
 
 ## 触发条件
 
@@ -71,31 +103,22 @@ exports/
 
 ## 优化迭代模式
 
-### 推荐模式：两阶段管道（探针 + 优化）
-
-适合仅调参数、不改变几何结构。参数变更在同一个 `.cst` 中累积多个 CST run_id。
-
-**两阶段策略：`run-probe-phase`（粗网格探针）→ `run-optimization-step`（全网格精确优化）**
-
-探针阶段由 `run-probe-phase` 全自动完成：设计 Plackett-Burman 折因实验 → 逐点仿真 → 分析主效应+交互效应 → 注入 Optuna study。agent 只需查看 `top_params` 输出决定优化哪些参数。
-
-优化迭代由 `run-optimization-step` 完成单步机械半环，agent 只需检查 `s11_metric` 做早停判断：
+所有优化迭代走统一模式：
 
 ```text
-┌─ agent 循环 ──────────────────────────────────────────────────┐
-│ run-optimization-step  ← 一步: ask→改参→仿真→tell           │
-│   ↓                                                           │
-│ agent 看 s11_metric.min_db → 达标?                           │
-│   → 是: break → generate-report                              │
-│   → 否: 继续循环                                              │
-└───────────────────────────────────────────────────────────────┘
+┌─ agent 循环 ──────────────────────────────────────────────┐
+│ run-optimization-step --objective <spec>                   │
+│   → objective_value, study_best, steps_since_improvement   │
+│   → 达标? → break / ask_study_failed? → switch sampler    │
+│   → 未达标 → 继续循环                                       │
+└───────────────────────────────────────────────────────────┘
 ```
 
 > `run-probe-phase` 和 `run-optimization-step` 是**自包含管道**，各自管理完整的 session 生命周期。详见 `describe-pipeline`。
 >
 > 如需在标准流程中插入自定义步骤（如改参后验证实体），可回退到原子工具（`prepare-experiment` + `run-experiment` + `ask-study` + `tell-study` 等）。
 
-### 纯管道模式（无需 Optuna 时）
+### 降级模式（无需 Optuna 时）
 
 适合仅需简单改参仿真对比、不建 study 的场景：
 
@@ -103,7 +126,7 @@ exports/
 ┌─ 每轮迭代 ──────────────────────────────────────────────────────┐
 │ prepare-experiment  ← 修改参数（支持 names+values 批量改参）      │
 │   → run-experiment  ← 仿真 + 自动导出 S11 + 远场                     │
-│   → agent 看 s11_metric → 早停判断                               │
+│   → agent 看 objective_value → 早停判断                           │
 │   → 达标 break / 未达标继续下一轮                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -123,7 +146,7 @@ exports/
 └────────────────────────────────────────────────────┘
 ```
 
-### 模式 B：每次新建项目
+### 每次新建项目
 
 适合改变几何实体或需要完全独立数据。每轮独立 `run_00N` 目录。
 
@@ -132,7 +155,7 @@ prepare-run(run_00N) → prepare-experiment
   → run-experiment
 ```
 
-### 结果展示
+### 结果显示
 
 ```powershell
 # 先用 args-template 生成参数，再调用
@@ -151,11 +174,11 @@ uv run python -m cst_runtime generate-report --args-file <模板.json>
 
 > **早停判断** 是本 Skill 区别于照单执行的关键红线。其他通用红线（session 分离、S11 复数处理、远场增益证据约束等）见 `cst-runtime-cli` SKILL.md。
 
-- 每轮执行流程必须包含早停判断：`仿真 → 读结果 → 解析指标 → 判断是否达目标 → 达则 break，不达则继续`
+- 每轮执行流程必须包含早停判断：`仿真 → 读结果 → 计算 objective → 判断是否达目标 → 达则 break，不达则继续`
 - "执行"和"评估"不得拆分为两个独立阶段；目标指标必须在每轮循环体内部实时解析和判断
 - 若未实现早停导致超过目标后继续执行额外轮次，任务输出必须明确标记为 `overrun`
 - 参数发现：使用 `inspect-project`（而非 `list-parameters`）一次性获取全部参数名、值、中文描述。避免逐一 `describe-tool` 查每个参数。
-- **探针强制**：待优化参数 ≥ 4 个时，**必须先执行探针阶段**（`design-probes`），筛选关键参数后再进入正式优化循环。跳过探针直接进入正式优化的，任务输出必须标记为 `probes_skipped`，由此产生的浪费轮次计入 agent 成本。
+- **探针强制**：待优化参数 ≥ 4 个时，**必须先执行探针阶段**（`run-probe-phase`），筛选关键参数后再进入正式优化循环。跳过探针直接进入正式优化的，任务输出必须标记为 `probes_skipped`，由此产生的浪费轮次计入 agent 成本。
 
 ### 禁止自编优化脚本
 
@@ -197,110 +220,94 @@ prepare-run → 创建新 run_00N 目录
 
 ## 优化闭环流程
 
-### 1. 创建 run
+### Phase 0：准备
 
-```text
-prepare-run → get-run-context
-```
+**目的：** 确保 agent 和用户对优化目标一致理解。
 
-后续所有路径使用返回的 `working_project`、`exports_dir`、`logs_dir`。
+1. `prepare-run` → `get-run-context`
+2. `inspect-project` → 返回全参数（含 `category`）
+3. agent 筛选 `category=geometry` 的参数作为候选，列出给用户
+4. 向用户确认 5 项：
+   - 工程类型
+   - 优化目标函数（S11 min / 指定频率 S11 / 增益 / 带宽 / 自定义表达式）
+   - 目标阈值
+   - 候选参数列表（含初始范围）
+   - 几何约束（如 L ≥ g）
+5. agent 将用户确认的优化目标翻译为 `objective` 参数格式
 
-> `run-probe-phase` 会自动创建 `working_probe.cst` 和 `exports/probe/`，不污染 `working.cst` 和 `exports/`。
+**引导规则：**
+> 优化目标必须向用户确认后才能进入探针阶段。参数选择以 `category=geometry` 为主。
+> 用户描述的目标由 agent 翻译为 objective spec。无明确目标时默认最小化 objective。
 
-### 2. 了解工程
-
-```text
-inspect-project ← 自包含管道，自动开/关 session
-```
-
-返回全部参数及其值、全部几何实体。**这是了解工程参数的唯一步骤**，无需再用 `list-parameters`。
-
-### 3. 探针阶段：`run-probe-phase`（参数≥4强制）
-
-待优化参数 ≥ 4 个时，**必须先执行探针阶段**。使用 `run-probe-phase` 一键完成：
+### Phase 1：探针（参数≥4 强制）
 
 ```powershell
 uv run python -m cst_runtime run-probe-phase \
   --project-path <run>\projects\working.cst \
-  --parameters '{"R":{"min":0.1,"max":0.5},"g":{"min":20,"max":30},"L":{"min":100,"max":150}}' \
+  --parameters '{"R":{"min":0.1,"max":0.5},"g":{"min":20,"max":30}}' \
   --study-storage <run>\studies\optimization.db \
-  --study-name horn_matching
+  --study-name horn_matching \
+  --objective '{"type":"s11_min_db"}'
 ```
 
-`run-probe-phase` 内部自动完成：
-1. 复制 `working.cst` → `working_probe.cst`（基线隔离，主工程不动）
-2. 设计 Plackett-Burman 折因实验矩阵
-3. 逐点仿真（`prepare-experiment` + `run-experiment`）
-4. 导出文件移入 `exports/probe/`（与后续优化隔离）
-5. 分析主效应和交互效应
+`run-probe-phase` 自动完成：
+1. 复制 `working.cst` → `working_probe.cst`（基线隔离）
+2. 设计 Plackett-Burman 折因实验
+3. 逐点仿真，按 `objective` 函数计算值
+4. 导出移入 `exports/probe/`
+5. 分析主效应 + 交互效应
 6. 注入 Optuna study
 
-**输出：** `main_effects`、`interactions`、`top_params`（参数按重要性排序）
+**返回：** `main_effects`、`interactions`、`top_params`、`edge_hit`、`suggested_algorithm`
 
-agent 查看 `top_params` 后决定哪些参数进入正式优化。
+**agent 决策：**
 
-如需粗网格加速探针，在调用 `run-probe-phase` 前单独对 `working.cst` 做网格调整后拷贝为 `working_probe.cst`。
+| 决策 | 信号 | 规则 |
+|------|------|------|
+| 选参数 | `main_effects_normalized` | > 0.1 保留，< 0.05 固定为中心值 |
+| 调范围 | `edge_hit` | true → 扩范围或提示用户 |
+| 选算法 | `suggested_algorithm` | TPE（默认）/ CMA-ES（多参数+强交互） |
 
-### 4. 迭代循环（每轮执行 `run-optimization-step`）
-
-> 以下为一轮的完整步骤。重复多轮直到早停条件满足。
-
-#### 4a. 执行优化单步
+### Phase 2：优化循环
 
 ```powershell
 uv run python -m cst_runtime run-optimization-step \
   --project-path <run>\projects\working.cst \
   --study-storage <run>\studies\optimization.db \
-  --study-name horn_matching
+  --study-name horn_matching \
+  --objective '{"type":"s11_min_db"}'
 ```
 
-`run-optimization-step` 内部自动完成：
-1. `ask-study` — Optuna TPE 采样下一组参数
-2. `prepare-experiment` — 批量改参 + 保存
-3. `run-experiment` — 仿真 + 导出 S11/远场
-4. 解析 S11 复数数据 → 计算 objective（min dB）
-5. `tell-study` — 回报结果
+`run-optimization-step` 自动完成：
+1. 切换优化器（如指定 `--sampler`）
+2. `ask-study` — Optuna 采样
+3. `prepare-experiment` — 改参 + 保存
+4. `run-experiment` — 仿真 + 导出
+5. 按 `objective` 函数计算值
+6. `tell-study` — 回报结果
 
-**输出：** `s11_metric.min_db`、`s11_metric.best_freq`、`study_best`
+**返回：** `objective_value`、`study_best`、`steps_since_improvement`
 
-#### 4b. 早停判断
+**agent 早停判断：**
 
-agent 检查 `s11_metric.min_db`：
-- 达标 → **break**
-- 未达标 → 回到 4a 继续下一轮
-
-若超过目标后继续执行额外轮次，任务输出必须标记 `overrun`。
-
-#### 4c. 进程清理（可选）
-
-```text
-cst-session-quit
+```
+每轮返回后:
+  1. objective_value < target? → break ✓
+  2. ask_study_failed 且未达标且未换过优化器? → --sampler cma-es 切换
+  3. 否则继续循环
 ```
 
-每轮末尾视需要清理残留 orphan DE 进程。
+**切换优化器：** 加 `--sampler cma-es` 或 `--sampler random`。pipe 内部重建 study + 迁移历史 trial。
 
-### 5. 生成报告
+### Phase 3：收尾
 
-```text
-generate-report --data_dir <run_dir>
-```
+1. `generate-report`
+2. 收敛质量评估：`study_best` 在边界？相比 probe `mean_value` 有改善？
+3. 灵敏度验证：最优 ±1%、±5% 跑 check-point，用同一 `objective` 函数评估
+4. 经验写入 `docs/opt-exp-*.md`
 
-输出 `exports/report.html`，自动读取所有 `s11_run*.json`、`farfield_*.txt`。
-
-### 6. 阶段记录
-
-```text
-record-stage --stage "iteration" --status "completed"
-update-status --status "validated"
-```
-
-### 7. 进程清理
-
-```text
-cst-session-quit
-```
-
-强杀白名单固定，Access is denied 残留只能记录。
+**引导规则：**
+> 灵敏度验证使用与优化阶段相同的 `objective` 函数。经验入库是验收项，缺少 docs/ 记录的任务标记为 `incomplete_docs`。
 
 ## 泛用经验总结
 
@@ -367,11 +374,12 @@ cst-session-quit
 ## 最终验收清单
 
 - [ ] 优化循环每轮均实现早停判断
-- [ ] `exports/` 下有 `s11_run{N}.json`
+- [ ] `exports/` 下有导出文件（s11_run{N}.json 等）
 - [ ] `status.json` 状态正确
 - [ ] 工程已关闭且无 `.lok` 锁文件
 - [ ] 清理 CST 进程结果已记录
 - [ ] `logs/tool_calls.jsonl` 和 `stages/` 可追溯
 - [ ] 只使用了 Skill + CLI，没有调用旧脚本
+- [ ] 使用了 objective 函数（非默认需确认）
 - [ ] 参数数 ≥ 4 的优化已执行探针阶段（`run-probe-phase` 或 `design-probes` + `analyze-probes` + `study-add-trials`）
 - [ ] 探针结果（主效应、交互效应、`top_params`）已记录到 `stages/`
