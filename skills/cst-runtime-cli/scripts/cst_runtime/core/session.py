@@ -131,6 +131,13 @@ def close_project(
     kill_processes: bool = True,
 ) -> dict[str, Any]:
     normalized_project = _abs_project_path(project_path)
+
+    # T3: refuse save after farfield export
+    effective_save = save
+    t3_warning = ""
+    if save:
+        effective_save, t3_warning = gateway.guard_before_close_save(normalized_project, save)
+
     project, a_status = project_identity.attach_expected_project(normalized_project)
     de_pid: int | None = a_status.get("design_environment_pid")
     _OPENED_PROJECTS.pop(normalized_project, None)
@@ -138,14 +145,25 @@ def close_project(
     close_result: dict[str, Any] = a_status if project is None else {"status": "success"}
     if project is not None:
         try:
-            if save:
+            if effective_save:
                 project.save()
             project.close()
             close_result = {
                 "status": "success",
                 "project_path": normalized_project,
-                "saved": save,
+                "saved": effective_save,
             }
+            if t3_warning:
+                close_result["t3_warning"] = t3_warning
+                close_result["requested_save"] = True
+                close_result["trap"] = "T3_farfield_export_save_forced_false"
+        except Exception as exc:
+            close_result = error_response(
+                "close_project_failed",
+                str(exc),
+                project_path=normalized_project,
+                runtime_module="cst_runtime.core.session",
+            )
         except Exception as exc:
             close_result = error_response(
                 "close_project_failed",

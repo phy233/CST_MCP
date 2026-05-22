@@ -12,15 +12,13 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def clear_gateway_registry():
-    """Clear gateway state and stale dirty marker files between tests."""
-    from cst_runtime.core.gateway import _registry, _dirty_marker_path
+    from cst_runtime.core.gateway import _registry, _dirty_marker_path, _farfield_marker_path
     for st in list(_registry.values()):
-        marker = _dirty_marker_path(st.path)
-        if marker.exists():
-            try:
-                marker.unlink()
-            except Exception:
-                pass
+        for mk_path_func in (_dirty_marker_path, _farfield_marker_path):
+            mk = mk_path_func(st.path)
+            if mk.exists():
+                try: mk.unlink()
+                except Exception: pass
     _registry.clear()
     yield
     _registry.clear()

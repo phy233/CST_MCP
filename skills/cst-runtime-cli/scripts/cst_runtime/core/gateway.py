@@ -122,7 +122,13 @@ def on_session_open(project_path: str, session_type: str) -> None:
             UserWarning,
         )
     _registry[np] = ProjectState(path=np, session_type=session_type)
-    _clear_dirty_marker(project_path)
+    _clear_dirty_marker(project_path)  # model rebuilds from disk, dirty state resolved
+
+
+def _clear_farfield_marker(project_path: str) -> None:
+    marker = _farfield_marker_path(project_path)
+    if marker.exists():
+        marker.unlink()
 
 
 def on_session_close(project_path: str) -> None:
@@ -196,18 +202,43 @@ def clear_dirty(project_path: str) -> None:
 # ---------------------------------------------------------------------------
 # T3 — farfield-exported guard
 # ---------------------------------------------------------------------------
+def _farfield_marker_path(project_path: str) -> Path:
+    normalized = _normalize(project_path)
+    cst_path = Path(normalized)
+    return cst_path.parent / cst_path.stem / ".cst_farfield_exported"
+
+
 def mark_farfield_exported(project_path: str) -> None:
+    """Call after farfield export. Prevents save."""
     st = _ensure_state(project_path)
     st.stage = "farfield_exported"
+    marker = _farfield_marker_path(project_path)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("farfield_exported", encoding="utf-8")
 
 
 def guard_before_close_save(project_path: str, requested_save: bool) -> tuple[bool, str]:
+    """T3: if farfield was exported, force save=False."""
+    if not requested_save:
+        return False, ""
+
     st = _get_state(project_path)
-    if st is not None and st.stage == "farfield_exported" and requested_save:
+    if st is not None:
+        if st.stage == "farfield_exported":
+            return False, (
+                "[T3] save forced to False: farfield was exported on this session. "
+                "Saving after farfield export would corrupt the project file."
+            )
+        return requested_save, ""
+
+    # cross-subprocess fallback: check disk marker
+    marker = _farfield_marker_path(project_path)
+    if marker.exists():
         return False, (
-            "[T3] save forced to False: farfield was exported on this session. "
+            "[T3] save forced to False: farfield was exported (marker detected). "
             "Saving after farfield export would corrupt the project file."
         )
+
     return requested_save, ""
 
 
