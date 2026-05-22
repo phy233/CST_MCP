@@ -66,6 +66,30 @@ def _scan_registry() -> list[dict[str, Any]]:
     return found
 
 
+def _scan_cst_named_dirs() -> list[dict[str, Any]]:
+    """Scan Program Files directories for 'CST Studio Suite *' folders."""
+    found: list[dict[str, Any]] = []
+    search_roots = [
+        r"C:\Program Files",
+        r"C:\Program Files (x86)",
+    ]
+    for root in search_roots:
+        root_p = Path(root)
+        if not root_p.is_dir():
+            continue
+        try:
+            for child in root_p.iterdir():
+                if child.is_dir() and "CST Studio Suite" in child.name:
+                    py_lib = child / "AMD64" / "python_cst_libraries"
+                    if py_lib.is_dir():
+                        info = _probe_path(str(py_lib))
+                        info["source"] = f"named_dir:{child.name}"
+                        found.append(info)
+        except PermissionError:
+            continue
+    return found
+
+
 def scan_cst_installations() -> dict[str, Any]:
     found: list[dict[str, Any]] = []
 
@@ -74,6 +98,8 @@ def scan_cst_installations() -> dict[str, Any]:
         info["source"] = "common_path"
         if info["exists"]:
             found.append(info)
+
+    found.extend(_scan_cst_named_dirs())
 
     found.extend(_scan_registry())
 

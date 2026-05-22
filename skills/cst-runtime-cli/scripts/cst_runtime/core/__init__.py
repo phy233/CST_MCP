@@ -27,6 +27,27 @@ except Exception:
     pass
 
 if not _cst_found:
+    _probe_roots = [
+        Path(r"C:\Program Files"),
+        Path(r"C:\Program Files (x86)"),
+    ]
+    for _root in _probe_roots:
+        if not _root.is_dir():
+            continue
+        try:
+            for _child in _root.iterdir():
+                if _child.is_dir() and "CST Studio Suite" in _child.name:
+                    _pypath = _child / "AMD64" / "python_cst_libraries"
+                    if _pypath.is_dir() and str(_pypath) not in sys.path:
+                        sys.path.insert(0, str(_pypath))
+                        _cst_found = True
+                        break
+        except PermissionError:
+            continue
+        if _cst_found:
+            break
+
+if not _cst_found:
     for _p in _CST_SEARCH_PATHS:
         if Path(_p).is_dir() and str(_p) not in sys.path:
             sys.path.insert(0, _p)
