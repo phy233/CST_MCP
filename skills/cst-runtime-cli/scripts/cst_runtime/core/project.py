@@ -43,6 +43,25 @@ def save_project(project_path: str) -> dict[str, Any]:
         )
 
 
+_PARAM_CATEGORY_RULES = [
+    ("mesh", ["mesh", "step", "cell", "refinement", "accuracy"]),
+    ("solver", ["solver", "tolerance", "maxpasses", "maxiter", "minfrequency", "maxfrequency"]),
+    ("material", ["material", "epsilon", "mue", "conductivity", "dielectric", "substrate", "permittivity", "permeability", "loss", "tangent"]),
+    ("frequency", ["frequency", "freq", "bandwidth", "centerfreq"]),
+    ("geometry", ["length", "width", "height", "radius", "thickness", "spacing", "gap", "offset", "depth",
+                   "angle", "rotation", "scale", "position", "x", "y", "z", "r", "l", "w", "h", "d", "g",
+                   "diameter", "inner", "outer", "pitch", "taper", "flare", "ridge"]),
+]
+
+
+def _infer_category(name: str) -> str:
+    nl = name.lower()
+    for cat, keywords in _PARAM_CATEGORY_RULES:
+        if any(kw in nl for kw in keywords):
+            return cat
+    return "geometry"
+
+
 def list_parameters(project_path: str) -> dict[str, Any]:
     normalized_project = _abs_project_path(project_path)
     project, status = attach_expected_project(normalized_project)
@@ -75,6 +94,7 @@ def list_parameters(project_path: str) -> dict[str, Any]:
             params[name] = {
                 "value": round(value, 6) if isinstance(value, float) else value,
                 "description": desc,
+                "category": _infer_category(name),
             }
         return {
             "status": "success",

@@ -67,3 +67,29 @@ class TestObjectiveFunction(unittest.TestCase):
         run = self._make_run_output(s11_metric={"min_db": -25.3})
         result = compute_objective({}, run)
         self.assertAlmostEqual(result["value"], -25.3)
+
+
+class TestInferCategory(unittest.TestCase):
+
+    def test_infer_category_geometry(self):
+        from cst_runtime.core.project import _infer_category
+        self.assertEqual(_infer_category("R"), "geometry")
+        self.assertEqual(_infer_category("length"), "geometry")
+        self.assertEqual(_infer_category("width"), "geometry")
+        self.assertEqual(_infer_category("height"), "geometry")
+
+    def test_infer_category_mesh(self):
+        from cst_runtime.core.project import _infer_category
+        self.assertEqual(_infer_category("mesh_accuracy"), "mesh")
+
+    def test_infer_category_solver(self):
+        from cst_runtime.core.project import _infer_category
+        self.assertEqual(_infer_category("solver_tolerance"), "solver")
+
+    def test_infer_category_material(self):
+        from cst_runtime.core.project import _infer_category
+        self.assertEqual(_infer_category("substrate_epsilon"), "material")
+
+    def test_infer_category_frequency(self):
+        from cst_runtime.core.project import _infer_category
+        self.assertEqual(_infer_category("center_frequency"), "frequency")
