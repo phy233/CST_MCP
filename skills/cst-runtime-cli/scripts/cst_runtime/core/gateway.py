@@ -3,28 +3,16 @@
 All COM-bound operations must route through here. Maintains a lightweight
 state registry per open project to enforce CST-specific safety rules.
 
-Traps guarded (see AGENTS.md + SKILL.md):
-  T1  run_id=0 alias        → auto-resolve to real latest run_id
-  T2  params-dirty sim      → refuse simulation after param change w/o reopen
-  T3  farfield then save    → force save=False after farfield export
-  T4  S11 complex ydata     → auto-attach .dB field
-  T5  modeler/results mix   → refuse cross-type session
-  T6  deprecated modeler    → reject modeler.execute_vba_code, force model3d
-  T8  Abs(E) as gain        → reject Abs(E)/Efield in farfield quantity
-  T9  pipeline open conflict→ warn on duplicate open
-  T10 project_path not file → validate
-  T11 farfield overwrite    → require run_id on export
-  T12 results before close  → refuse results open while modeler active
-  T13 param-readback lie    → annotate change-parameter return
-  T14 filter type wrong     → reject invalid get_tree_items filter
-  T15 save-before-close     → auto project.save() then close
+Every guard that returns an error includes:
+  cst_raw     — snapshot of relevant COM state at time of failure
+  next_action — actionable steps for agent to resolve the error
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .errors import error_response
 
@@ -41,7 +29,7 @@ _VALID_GAIN_QUANTITIES = frozenset({"Realized Gain", "Gain", "Directivity"})
 # CstTrapError
 # ---------------------------------------------------------------------------
 class CstTrapError(Exception):
-    """CST-specific runtime trap detected — must stop the operation."""
+    """CST-specific runtime trap detected."""
     def __init__(self, trap_name: str, message: str, suggestion: str = ""):
         super().__init__(message)
         self.trap_name = trap_name
@@ -56,6 +44,11 @@ class ProjectState:
     path: str
     session_type: str = "unknown"   # "modeler" | "results"
     stage: str = "clean"            # "clean" | "params_dirty" | "farfield_exported" | "closed"
+    params_changed: list[str] = None  # list of param names changed this session
+
+    def __post_init__(self):
+        if self.params_changed is None:
+            self.params_changed = []
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +61,7 @@ def _normalize(path: str) -> str:
 def _dirty_marker_path(project_path: str) -> Path:
     normalized = _normalize(project_path)
     cst_path = Path(normalized)
-    companion_dir = cst_path.parent / cst_path.stem
-    return companion_dir / ".cst_params_dirty"
+    return cst_path.parent / cst_path.stem / ".cst_params_dirty"
 
 
 def _get_state(project_path: str) -> ProjectState | None:
@@ -97,16 +89,16 @@ def _remove_state(project_path: str) -> None:
     _clear_dirty_marker(project_path)
 
 
-def _has_session_type(project_path: str, stype: str) -> bool:
-    st = _get_state(project_path)
-    return st is not None and st.session_type == stype
+def _clear_dirty_marker(project_path: str) -> None:
+    marker = _dirty_marker_path(project_path)
+    if marker.exists():
+        marker.unlink()
 
 
 # ---------------------------------------------------------------------------
 # T10 — project_path validation
 # ---------------------------------------------------------------------------
 def validate_project_path(project_path: str) -> str:
-    """Return normalized path; raise if directory instead of .cst file."""
     if not project_path:
         raise ValueError("project_path is required and must point to a .cst file")
     p = Path(project_path).expanduser().resolve()
@@ -119,7 +111,6 @@ def validate_project_path(project_path: str) -> str:
 # T5 / T9 / T12 — session type tracking
 # ---------------------------------------------------------------------------
 def on_session_open(project_path: str, session_type: str) -> None:
-    """Register an open session. Emit warning (T9) if already open."""
     np = _normalize(project_path)
     existing = _registry.get(np)
     if existing is not None and existing.stage != "closed":
@@ -134,30 +125,27 @@ def on_session_open(project_path: str, session_type: str) -> None:
     _clear_dirty_marker(project_path)
 
 
-def _clear_dirty_marker(project_path: str) -> None:
-    marker = _dirty_marker_path(project_path)
-    if marker.exists():
-        marker.unlink()
-
-
 def on_session_close(project_path: str) -> None:
     _remove_state(project_path)
 
 
 def guard_cross_session(project_path: str, expected_type: str) -> dict[str, Any] | None:
-    """T5/T12: refuse if project has wrong session type open. Returns error dict or None."""
     st = _get_state(project_path)
     if st is None:
         return None
     if st.session_type != "unknown" and st.session_type != expected_type:
         return error_response(
             "cross_session_forbidden",
-            f"Project has active {st.session_type} session; cannot open {expected_type}. "
-            f"Close the {st.session_type} session first.",
+            f"Cannot open {expected_type} session: project already has active {st.session_type} session.",
             trap="T5_modeler_results_isolation",
             project_path=project_path,
-            existing_session=st.session_type,
-            requested_session=expected_type,
+            cst_raw={
+                "existing_session": st.session_type,
+                "requested_session": expected_type,
+                "registry_stage": st.stage,
+                _explain: "modeler and results sessions are independent in CST; mixing produces stale data",
+            },
+            next_action=f"cst-session-close --project-path {project_path} to release the {st.session_type} session first",
         )
     return None
 
@@ -165,51 +153,55 @@ def guard_cross_session(project_path: str, expected_type: str) -> dict[str, Any]
 # ---------------------------------------------------------------------------
 # T2 — params-dirty guard
 # ---------------------------------------------------------------------------
-def mark_params_dirty(project_path: str) -> None:
-    """Call after change_parameter(). Sets stage to params_dirty."""
+def mark_params_dirty(project_path: str, param_name: str = "", param_value: Any = None) -> None:
     st = _ensure_state(project_path)
     st.stage = "params_dirty"
+    if param_name and param_name not in st.params_changed:
+        st.params_changed.append(param_name)
     marker = _dirty_marker_path(project_path)
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("params_dirty", encoding="utf-8")
 
 
 def guard_before_simulation(project_path: str) -> dict[str, Any] | None:
-    """T2: refuse simulation if params changed but session not reopened.
-    Returns error dict or None."""
     st = _get_state(project_path)
     if st is not None and st.stage == "params_dirty":
+        dirty_marker = str(_dirty_marker_path(project_path))
         return error_response(
             "params_not_rebuilt",
-            "Parameters changed but model NOT rebuilt from disk. "
-            "Simulation would use cached old geometry. "
-            "Close and reopen the project (or use prepare-experiment pipeline) before simulation.",
+            f"Parameters changed ({', '.join(st.params_changed) if st.params_changed else 'unknown'}) "
+            "but model NOT rebuilt from disk. Simulation would use cached old geometry.",
             trap="T2_params_not_rebuilt",
             project_path=project_path,
-            suggestion="Use prepare-experiment pipeline: close_project → open_project → start_simulation",
+            cst_raw={
+                "stage": st.stage,
+                "params_changed": st.params_changed,
+                "dirty_marker": dirty_marker,
+                "dirty_marker_exists": Path(dirty_marker).exists(),
+                _explain: "CST saves parameter table changes immediately but geometry rebuild only happens on project open",
+            },
+            next_action=f"cst-session-close --project-path {project_path} --save true, "
+                        f"then cst-session-open --project-path {project_path} to force model rebuild from disk",
         )
     return None
 
 
 def clear_dirty(project_path: str) -> None:
-    """Mark project clean after successful reopen (model reads from disk)."""
     st = _ensure_state(project_path)
     if st.stage == "params_dirty":
         st.stage = "clean"
+        st.params_changed.clear()
 
 
 # ---------------------------------------------------------------------------
 # T3 — farfield-exported guard
 # ---------------------------------------------------------------------------
 def mark_farfield_exported(project_path: str) -> None:
-    """Call after farfield export. Prevents save."""
     st = _ensure_state(project_path)
     st.stage = "farfield_exported"
 
 
 def guard_before_close_save(project_path: str, requested_save: bool) -> tuple[bool, str]:
-    """T3: if farfield was exported, force save=False.
-    Returns (effective_save, warning_message)."""
     st = _get_state(project_path)
     if st is not None and st.stage == "farfield_exported" and requested_save:
         return False, (
@@ -222,63 +214,43 @@ def guard_before_close_save(project_path: str, requested_save: bool) -> tuple[bo
 # ---------------------------------------------------------------------------
 # T1 — run_id=0 alias
 # ---------------------------------------------------------------------------
-def resolve_run_id(run_id: int, available_ids: list[int]) -> tuple[int, str]:
+def resolve_run_id(run_id: int, available_ids: list[int]) -> tuple[int, str, dict[str, Any]]:
     """T1: translate run_id=0 to actual latest run_id.
-    Returns (effective_run_id, warning_message)."""
+    Returns (effective_run_id, warning_message, cst_raw_info)."""
     if run_id != 0:
-        return run_id, ""
+        return run_id, "", {}
     positive = sorted(r for r in available_ids if r > 0)
     if not positive:
-        return 0, "[T1] No positive run_ids available, falling back to run_id=0"
+        return 0, "[T1] No positive run_ids available, falling back to run_id=0", {
+            "all_run_ids": available_ids,
+            "positive_count": 0,
+            _explain: "run_id 0 in CST is an alias for the most recent simulation result",
+        }
     latest = positive[-1]
     return latest, (
-        f"[T1] run_id=0 translated to {latest} "
-        "(run_id=0 is an alias for the latest result in CST)"
-    )
+        f"[T1] Requested run_id=0, resolved to {latest} "
+        f"(run_id=0 is always alias for latest result in CST)"
+    ), {
+        "all_run_ids": available_ids,
+        "resolved_to": latest,
+        "positive_count": len(positive),
+        _explain: "run_id 0 in CST is an alias for the most recent simulation result; "
+                  "export_run_results skips run_id 0 to avoid duplicate data",
+    }
 
 
 # ---------------------------------------------------------------------------
 # T4 — S11 complex ydata
 # ---------------------------------------------------------------------------
 def compute_db(ydata: list[dict[str, float]]) -> list[float]:
-    """T4: 20*log10(hypot(real, imag)) for each complex sample."""
     from math import hypot, log10
     return [20.0 * log10(max(hypot(d.get("real", 0), d.get("imag", 0)), 1e-30)) for d in ydata]
-
-
-def annotate_s11_result(result: dict[str, Any], export_path: str | None = None) -> dict[str, Any]:
-    """T4: add .dB series to S11 export."""
-    if export_path and "ydata" not in result:
-        try:
-            import json
-            raw = json.loads(Path(export_path).read_text(encoding="utf-8"))
-            y = raw.get("ydata", [])
-            if y and isinstance(y[0], dict) and "real" in y[0]:
-                result["s11_db"] = compute_db(y)
-        except Exception:
-            pass
-    return result
-
-
-# ---------------------------------------------------------------------------
-# T6 — deprecated modeler API
-# ---------------------------------------------------------------------------
-def guard_execute_vba_entrypoint(entrypoint: str) -> dict[str, Any] | None:
-    """T6: reject modeler.execute_vba_code (use model3d in CST 2026)."""
-    if entrypoint == "modeler":
-        return error_response(
-            "deprecated_api",
-            "modeler.execute_vba_code is deprecated in CST 2026. Use model3d instead.",
-            trap="T6_deprecated_modeler_api",
-        )
-    return None
 
 
 # ---------------------------------------------------------------------------
 # T8 — Abs(E) as gain evidence
 # ---------------------------------------------------------------------------
 def guard_farfield_quantity(quantity: str) -> dict[str, Any] | None:
-    """T8: reject Abs(E)/Efield as gain quantity."""
     q = (quantity or "").strip()
     qn = q.lower().replace("_", " ").replace("-", " ").replace(".", " ")
     qn = " ".join(qn.split())
@@ -290,29 +262,43 @@ def guard_farfield_quantity(quantity: str) -> dict[str, Any] | None:
     if qn in {"efield", "e field", "electric field", "field", "abs e", "abse", "abs(e)", "abs (e)"}:
         return error_response(
             "not_gain_evidence",
-            "Abs(E)/Efield is not a gain metric and cannot be used as dBi gain evidence. "
-            "Use Realized Gain, Gain, or Directivity instead.",
+            f"Abs(E)/Efield ({q!r}) is not a gain metric and cannot be reported as dBi.",
             trap="T8_abs_e_not_gain",
-            rejected_quantity=q,
+            cst_raw={
+                "rejected_quantity": q,
+                "valid_quantities": sorted(_VALID_GAIN_QUANTITIES),
+                _explain: "Abs(E) has units V/m, not dBi; only Realized Gain, Gain, Directivity are gain metrics",
+            },
+            next_action="Use farfield_plot_mode='Realized Gain', 'Gain', or 'Directivity'",
         )
 
     return error_response(
         "unsupported_quantity",
-        f"Unsupported farfield quantity '{q}'. Use Realized Gain, Gain, or Directivity.",
+        f"Unknown farfield quantity {q!r}. Use one of: {sorted(_VALID_GAIN_QUANTITIES)}.",
+        trap="T8_unknown_quantity",
+        cst_raw={"rejected_quantity": q, "valid_quantities": sorted(_VALID_GAIN_QUANTITIES)},
+        next_action=f"Use one of: {', '.join(sorted(_VALID_GAIN_QUANTITIES))}",
     )
 
 
 # ---------------------------------------------------------------------------
 # T11 — farfield overwrite
 # ---------------------------------------------------------------------------
-def guard_farfield_run_id(run_id: int | None) -> dict[str, Any] | None:
-    """T11: farfield export requires explicit run_id to avoid overwrite."""
+def guard_farfield_run_id(run_id: int | None, project_path: str = "") -> dict[str, Any] | None:
     if run_id is None:
         return error_response(
             "farfield_run_id_required",
-            "Farfield data is overwritten per simulation run. "
-            "Provide explicit run_id to preserve historical farfield data.",
+            "Farfield data is overwritten per simulation run in CST. "
+            "Provide explicit run_id to preserve historical farfield data across runs.",
             trap="T11_farfield_overwrite",
+            cst_raw={
+                "run_id_provided": None,
+                "project_path": project_path or "(not provided)",
+                _explain: "CST farfield results in a .cst file are overwritten each simulation; "
+                          "only the latest run's farfield data survives unless exported per run",
+            },
+            next_action="Pass run_id=<N> where N is the run number from list-run-ids, "
+                        "or use export-run-results which handles this automatically",
         )
     return None
 
@@ -320,10 +306,9 @@ def guard_farfield_run_id(run_id: int | None) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # T13 — change-parameter readback misleading
 # ---------------------------------------------------------------------------
-def annotate_change_param_result(result: dict[str, Any]) -> dict[str, Any]:
-    """T13: warn that parameter table update does NOT mean model rebuilt."""
+def annotate_change_param_result(result: dict[str, Any], project_path: str = "", param_name: str = "") -> dict[str, Any]:
     if result.get("status") == "success":
-        result = {
+        return {
             **result,
             "warning": (
                 "Parameter table updated. Model geometry has NOT been regenerated from disk. "
@@ -331,6 +316,15 @@ def annotate_change_param_result(result: dict[str, Any]) -> dict[str, Any]:
                 "Close and reopen the project before simulation for changes to take effect."
             ),
             "trap_note": "T13_restore_double_not_model_rebuild",
+            "cst_raw": {
+                "model_rebuilt": False,
+                "param_table_updated": True,
+                "dirty_marker": str(_dirty_marker_path(project_path)),
+                _explain: "StoreDoubleParameter updates the parameter table in memory; "
+                          "geometry rebuild happens when solver starts (reads from disk on open)",
+            },
+            "next_action": f"Use prepare-experiment pipeline to close+save+reopen, "
+                           f"then run-experiment to simulate with new values",
         }
     return result
 
@@ -339,16 +333,23 @@ def annotate_change_param_result(result: dict[str, Any]) -> dict[str, Any]:
 # T14 — get_tree_items filter constraint
 # ---------------------------------------------------------------------------
 def guard_result_filter(filter_type: str) -> dict[str, Any] | None:
-    """T14: cst.results.get_tree_items only supports '0D/1D' and 'colormap'."""
     ft = (filter_type or "0D/1D").strip()
     if ft.lower() == "all":
         return None
     if ft not in _VALID_FILTER_TYPES:
         return error_response(
             "unsupported_filter",
-            f"get_tree_items filter '{ft}' not supported. "
-            f"Use one of: {sorted(_VALID_FILTER_TYPES)}",
+            f"get_tree_items filter {ft!r} not supported by cst.results module. "
+            f"Valid filters: {sorted(_VALID_FILTER_TYPES)}.",
             trap="T14_tree_items_filter",
+            cst_raw={
+                "rejected_filter": ft,
+                "valid_filters": sorted(_VALID_FILTER_TYPES),
+                _explain: "cst.results.get_tree_items COM API only accepts '0D/1D' and 'colormap'; "
+                          "use 'all' to bypass filtering and get complete tree",
+            },
+            next_action=f"Use filter_type='0D/1D' for S-parameters and 1D results, "
+                        f"or 'colormap' for 2D/3D field results",
         )
     return None
 
@@ -357,9 +358,14 @@ def guard_result_filter(filter_type: str) -> dict[str, Any] | None:
 # T15 — save-before-close order
 # ---------------------------------------------------------------------------
 def guard_close_save_order(project: Any, save: bool) -> None:
-    """T15: if save=True, call project.save() BEFORE project.close()."""
     if save and project is not None:
         try:
             project.save()
         except Exception:
-            pass  # save failure will be caught by the caller's close logic
+            pass
+
+
+# ---------------------------------------------------------------------------
+# convenience
+# ---------------------------------------------------------------------------
+_explain = "_explain"

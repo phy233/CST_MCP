@@ -27,7 +27,6 @@ from cst_runtime.core.gateway import (
     guard_before_close_save,
     resolve_run_id,
     compute_db,
-    guard_execute_vba_entrypoint,
     guard_farfield_quantity,
     guard_farfield_run_id,
     annotate_change_param_result,
@@ -142,27 +141,29 @@ class GatewayT3FarfieldSaveTests:
 
 class GatewayT1RunIdTests:
     def test_run_id_nonzero_passthrough(self):
-        rid, msg = resolve_run_id(5, [1, 2, 3, 5])
+        rid, msg, info = resolve_run_id(5, [1, 2, 3, 5])
         assert rid == 5
         assert msg == ""
+        assert info == {}
 
     def test_run_id_zero_resolves_to_latest(self):
-        rid, msg = resolve_run_id(0, [1, 2, 3, 5])
+        rid, msg, info = resolve_run_id(0, [1, 2, 3, 5])
         assert rid == 5
         assert "T1" in msg
+        assert info["resolved_to"] == 5
 
     def test_run_id_zero_single_run(self):
-        rid, msg = resolve_run_id(0, [1])
+        rid, msg, info = resolve_run_id(0, [1])
         assert rid == 1
         assert "T1" in msg
 
     def test_run_id_zero_no_positive(self):
-        rid, msg = resolve_run_id(0, [0])
+        rid, msg, info = resolve_run_id(0, [0])
         assert rid == 0
         assert "T1" in msg
 
     def test_run_id_zero_empty(self):
-        rid, msg = resolve_run_id(0, [])
+        rid, msg, info = resolve_run_id(0, [])
         assert rid == 0
         assert "T1" in msg
 
@@ -203,21 +204,6 @@ class GatewayT5T12SessionIsolationTests:
 
     def test_guard_allows_unknown_session(self):
         err = guard_cross_session("C:/unknown.cst", "results")
-        assert err is None
-
-
-class GatewayT6DeprecatedAPITests:
-    def test_modeler_rejected(self):
-        err = guard_execute_vba_entrypoint("modeler")
-        assert err is not None
-        assert err["trap"] == "T6_deprecated_modeler_api"
-
-    def test_model3d_allowed(self):
-        err = guard_execute_vba_entrypoint("model3d")
-        assert err is None
-
-    def test_schematic_allowed(self):
-        err = guard_execute_vba_entrypoint("schematic")
         assert err is None
 
 

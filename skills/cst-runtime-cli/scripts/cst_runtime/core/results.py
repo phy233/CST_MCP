@@ -232,7 +232,7 @@ def get_1d_result(
                     available = result_module.get_all_run_ids()
             except Exception:
                 available = []
-            effective_run_id, t1_warning = gateway.resolve_run_id(0, list(available))
+            effective_run_id, t1_warning, t1_info = gateway.resolve_run_id(0, list(available))
 
         result_item = result_module.get_result_item(
             treepath,
@@ -287,6 +287,7 @@ def get_1d_result(
         if t1_warning:
             result["requested_run_id"] = 0
             result["t1_translation"] = t1_warning
+            result["cst_raw"] = {"t1": t1_info}
         return result
     except Exception as exc:
         return error_response(

@@ -166,14 +166,14 @@ def change_parameter(project_path: str, name: str = "", value: float | int | str
             "ChangeParameter",
             f'StoreDoubleParameter "{parameter_name}", {parameter_value}',
         )
-        gateway.mark_params_dirty(normalized_project)
+        gateway.mark_params_dirty(normalized_project, param_name=str(parameter_name), param_value=parameter_value)
         result = {
             "status": "success",
             "project_path": normalized_project,
             "changed": {str(parameter_name): parameter_value},
             "runtime_module": "cst_runtime.modeler",
         }
-        return gateway.annotate_change_param_result(result)
+        return gateway.annotate_change_param_result(result, project_path=normalized_project, param_name=str(parameter_name))
     except Exception as exc:
         return error_response(
             "change_parameter_failed",
