@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from . import gateway
 from . import process as process_cleanup
 from . import identity as project_identity
 from .errors import error_response
@@ -71,6 +72,7 @@ def open_project(project_path: str) -> dict[str, Any]:
     project, _ = project_identity.attach_expected_project(normalized_project)
     if project is not None:
         _OPENED_PROJECTS[normalized_project] = project
+        gateway.on_session_open(normalized_project, "modeler")
         result = {
             "status": "success",
             "project_path": normalized_project,
@@ -85,6 +87,7 @@ def open_project(project_path: str) -> dict[str, Any]:
         de = _connect_new_design_environment()
         project = de.open_project(normalized_project)
         _OPENED_PROJECTS[normalized_project] = project
+        gateway.on_session_open(normalized_project, "modeler")
         return {
             "status": "success",
             "project_path": normalized_project,
@@ -131,6 +134,7 @@ def close_project(
     project, a_status = project_identity.attach_expected_project(normalized_project)
     de_pid: int | None = a_status.get("design_environment_pid")
     _OPENED_PROJECTS.pop(normalized_project, None)
+    gateway.on_session_close(normalized_project)
     close_result: dict[str, Any] = a_status if project is None else {"status": "success"}
     if project is not None:
         try:

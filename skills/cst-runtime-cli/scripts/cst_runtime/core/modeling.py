@@ -31,6 +31,52 @@ def _single_vba(project_path: str, history_name: str, vba: str) -> dict[str, Any
     return _add_vba_history(project_path, history_name, [vba])
 
 
+_BUILTIN_MATERIALS = frozenset({
+    "PEC", "Vacuum", "Copper", "Gold", "Aluminum", "Brass", "Bronze",
+    "Silver", "Steel", "Nickel", "Iron", "Tin", "Zinc", "Lead",
+})
+
+
+def _define_material(project_path: str, material: str) -> dict[str, Any]:
+    if material in _BUILTIN_MATERIALS:
+        return {"status": "success", "message": f"built-in material '{material}'"}
+    return {"status": "success", "message": f"material '{material}' (will resolve at build time)"}
+
+
+def define_material_from_mtd(project_path: str, material_name: str) -> dict[str, Any]:
+    normalized_project = _abs_project_path(project_path)
+    project, status = attach_expected_project(normalized_project)
+    if project is None:
+        return status
+    skill_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+    mtd_path = skill_root / "references" / "Materials" / f"{material_name}.mtd"
+    if not mtd_path.exists():
+        return error_response(
+            "material_mtd_not_found",
+            f"Material MTD file not found: {mtd_path}",
+            project_path=normalized_project,
+        )
+    try:
+        mtd_content = mtd_path.read_text(encoding="utf-8").strip()
+        lines = mtd_content.split("\n")
+        vba_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                continue
+            vba_lines.append(stripped)
+        sCommand = "\n".join(vba_lines)
+        project.modeler.add_to_history(f"Define Material: {material_name}", sCommand)
+        return {"status": "success", "project_path": normalized_project, "material_name": material_name}
+    except Exception as exc:
+        return error_response(
+            "define_material_from_mtd_failed",
+            str(exc),
+            project_path=normalized_project,
+            material_name=material_name,
+        )
+
+
 def define_brick(
     project_path: str,
     name: str,
