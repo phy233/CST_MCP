@@ -307,28 +307,28 @@ def change_solver_type(project_path: str, solver_type: str) -> dict[str, Any]:
     return _single_vba(project_path, f"change solver type to {solver_type}", vba)
 
 
-def define_background(project_path: str) -> dict[str, Any]:
+def define_background(project_path: str, background_type: str = "Normal") -> dict[str, Any]:
     vba = [
         "With Background",
         '.ResetBackground',
-        '.Type "Normal"',
+        f'.Type "{background_type}"',
         "End With",
     ]
     return _add_vba_history(project_path, "define background", vba)
 
 
-def define_boundary(project_path: str) -> dict[str, Any]:
+def define_boundary(project_path: str, face_type: str = "expanded open", symmetry_type: str = "none") -> dict[str, Any]:
     vba = [
         "With Boundary",
-        '.Xmin "expanded open"',
-        '.Xmax "expanded open"',
-        '.Ymin "expanded open"',
-        '.Ymax "expanded open"',
-        '.Zmin "expanded open"',
-        '.Zmax "expanded open"',
-        '.Xsymmetry "none"',
-        '.Ysymmetry "none"',
-        '.Zsymmetry "none"',
+        f'.Xmin "{face_type}"',
+        f'.Xmax "{face_type}"',
+        f'.Ymin "{face_type}"',
+        f'.Ymax "{face_type}"',
+        f'.Zmin "{face_type}"',
+        f'.Zmax "{face_type}"',
+        f'.Xsymmetry "{symmetry_type}"',
+        f'.Ysymmetry "{symmetry_type}"',
+        f'.Zsymmetry "{symmetry_type}"',
         "End With",
     ]
     return _add_vba_history(project_path, "define boundary", vba)

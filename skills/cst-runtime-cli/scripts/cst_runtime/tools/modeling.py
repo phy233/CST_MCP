@@ -1565,21 +1565,23 @@ TOOL_DEFS = {
 "set-background-with-space": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set background space distances.",
+    "description": "Set background space distances on all six sides.",
     "handler": "tool_set_background_with_space",
     "json_schema": {
         "type": "object",
         "properties": {
             "project_path": {
                 "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            }
+                "examples": ["C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"]
+            },
+            "x_min_space": {"type": "number", "default": 30,  "description": "X- direction space distance."},
+            "x_max_space": {"type": "number", "default": 30,  "description": "X+ direction space distance."},
+            "y_min_space": {"type": "number", "default": 30,  "description": "Y- direction space distance."},
+            "y_max_space": {"type": "number", "default": 30,  "description": "Y+ direction space distance."},
+            "z_min_space": {"type": "number", "default": 50,  "description": "Z- direction space distance."},
+            "z_max_space": {"type": "number", "default": 100, "description": "Z+ direction space distance."}
         },
-        "required": [
-            "project_path"
-        ]
+        "required": ["project_path"]
     },
 },
 
@@ -1984,21 +1986,51 @@ TOOL_DEFS = {
             },
             "plane_normal_z": {
                 "type": "string",
-                "examples": [
-                    "0"
-                ]
+                "default": "0",
+                "examples": ["0"]
+            },
+            "angle_x": {
+                "type": "string",
+                "default": "0",
+                "description": "Rotation angle around X axis (for rotate)."
+            },
+            "angle_y": {
+                "type": "string",
+                "default": "0",
+                "description": "Rotation angle around Y axis (for rotate)."
+            },
+            "angle_z": {
+                "type": "string",
+                "default": "0",
+                "description": "Rotation angle around Z axis (for rotate)."
+            },
+            "multiple_objects": {
+                "type": "boolean",
+                "default": True,
+                "description": "Apply to multiple objects."
+            },
+            "group_objects": {
+                "type": "boolean",
+                "default": False,
+                "description": "Group resulting objects."
+            },
+            "repetitions": {
+                "type": "integer",
+                "default": 1,
+                "description": "Number of repetitions."
+            },
+            "destination": {
+                "type": "string",
+                "default": "",
+                "description": "Destination component for result."
             }
         },
         "required": [
             "project_path",
             "shape_name",
             "transform_type",
-            "center_x",
-            "center_y",
-            "center_z",
-            "plane_normal_x",
-            "plane_normal_y",
-            "plane_normal_z"
+            "center_x", "center_y", "center_z",
+            "plane_normal_x", "plane_normal_y", "plane_normal_z"
         ]
     },
 },

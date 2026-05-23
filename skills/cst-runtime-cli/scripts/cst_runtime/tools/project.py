@@ -69,42 +69,52 @@ TOOL_DEFS = {
 "define-background": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Set the background type to Normal.",
+    "description": "Set the background type (Normal or PEC).",
     "handler": "tool_define_background",
     "json_schema": {
         "type": "object",
         "properties": {
             "project_path": {
                 "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
+                "examples": ["C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"]
+            },
+            "background_type": {
+                "type": "string",
+                "default": "Normal",
+                "description": "Background material type.",
+                "examples": ["Normal", "PEC"]
             }
         },
-        "required": [
-            "project_path"
-        ]
+        "required": ["project_path"]
     },
 },
 
 "define-boundary": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Set expanded open boundary conditions.",
+    "description": "Set boundary conditions for all faces and symmetries.",
     "handler": "tool_define_boundary",
     "json_schema": {
         "type": "object",
         "properties": {
             "project_path": {
                 "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
+                "examples": ["C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"]
+            },
+            "face_type": {
+                "type": "string",
+                "default": "expanded open",
+                "description": "Boundary type for Xmin-Xmax, Ymin-Ymax, Zmin-Zmax.",
+                "examples": ["expanded open", "electric", "magnetic", "open", "conducting wall"]
+            },
+            "symmetry_type": {
+                "type": "string",
+                "default": "none",
+                "description": "Symmetry type for X/Y/Zsymmetry.",
+                "examples": ["none", "electric", "magnetic"]
             }
         },
-        "required": [
-            "project_path"
-        ]
+        "required": ["project_path"]
     },
 },
 
@@ -158,25 +168,25 @@ TOOL_DEFS = {
                 ]
             },
             "steps_per_wave_near": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     5
                 ]
             },
             "steps_per_wave_far": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     5
                 ]
             },
             "steps_per_box_near": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     5
                 ]
             },
             "steps_per_box_far": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     1
                 ]
@@ -219,7 +229,7 @@ TOOL_DEFS = {
                 ]
             },
             "step": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     1
                 ]
@@ -304,37 +314,37 @@ TOOL_DEFS = {
                 ]
             },
             "x_min": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -10
                 ]
             },
             "x_max": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     10
                 ]
             },
             "y_min": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -10
                 ]
             },
             "y_max": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     10
                 ]
             },
             "z_min": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     0
                 ]
             },
             "z_max": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     5
                 ]
@@ -370,35 +380,23 @@ TOOL_DEFS = {
         "properties": {
             "project_path": {
                 "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
+                "examples": ["C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"]
             },
-            "stimulation_port": {
-                "type": "string",
-                "examples": [
-                    "All"
-                ]
-            },
-            "steady_state_limit": {
-                "type": "integer",
-                "examples": [
-                    -40
-                ]
-            },
-            "norming_impedance": {
-                "type": "integer",
-                "examples": [
-                    50
-                ]
-            }
+            "stimulation_port":         {"type": "string",  "default": "All", "examples": ["All"]},
+            "stimulation_mode":         {"type": "string",  "default": "All", "examples": ["All"]},
+            "steady_state_limit":       {"type": "number",  "default": -40,   "examples": [-40]},
+            "norming_impedance":        {"type": "number",  "default": 50,    "examples": [50]},
+            "mesh_adaption":            {"type": "boolean", "default": False},
+            "auto_norm_impedance":      {"type": "boolean", "default": True},
+            "calculate_modes_only":     {"type": "boolean", "default": False},
+            "s_para_symmetry":          {"type": "boolean", "default": False},
+            "store_td_results":         {"type": "boolean", "default": False},
+            "run_discretizer_only":     {"type": "boolean", "default": False},
+            "full_deembedding":         {"type": "boolean", "default": False},
+            "superimpose_plw":          {"type": "boolean", "default": False},
+            "use_sensitivity":          {"type": "boolean", "default": False}
         },
-        "required": [
-            "project_path",
-            "stimulation_port",
-            "steady_state_limit",
-            "norming_impedance"
-        ]
+        "required": ["project_path", "stimulation_port", "steady_state_limit", "norming_impedance"]
     },
 },
 
@@ -658,7 +656,7 @@ TOOL_DEFS = {
                 ]
             },
             "num_steps": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     5
                 ]
@@ -692,7 +690,7 @@ TOOL_DEFS = {
                 ]
             },
             "max_threads": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     1024
                 ]
@@ -784,7 +782,7 @@ TOOL_DEFS = {
                 ]
             },
             "timeout_seconds": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     30
                 ]
@@ -819,13 +817,13 @@ TOOL_DEFS = {
                 ]
             },
             "timeout_seconds": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     3600
                 ]
             },
             "poll_interval_seconds": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     10
                 ]

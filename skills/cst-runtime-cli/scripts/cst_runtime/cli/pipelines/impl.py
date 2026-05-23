@@ -10,6 +10,7 @@ from typing import Any
 from ...core.errors import error_response
 from ...core.objective import compute_objective
 from ...core.utils import safe_log_db as _safe_log_db
+from ...core.project import _infer_category
 
 
 def _parse_s11_json(file_path: str) -> dict[str, Any] | None:
@@ -58,57 +59,309 @@ def _max_exported_run_id(project_path: str) -> int:
     return max_rid
 
 
-# ── inspect-project ──
+# ── inspect-project (file-based, no COM/DE) ──
+
+def _read_parameters_from_file(project_path: str) -> tuple[dict[str, Any], int]:
+    """Read parameters from Model/Parameters.json on disk."""
+    import json
+    import re
+    from pathlib import Path
+    from ...core.utils import abs_project_path
+
+    def _is_plain_number(expr: str) -> bool:
+        stripped = expr.strip()
+        if not stripped:
+            return False
+        return bool(re.fullmatch(r'-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?', stripped))
+
+    normalized = abs_project_path(project_path)
+    pdir = Path(normalized).with_suffix("")
+    params_json = pdir / "Model" / "Parameters.json"
+    params: dict[str, Any] = {}
+    if not params_json.is_file():
+        return params, 0
+
+    try:
+        pdata = json.loads(params_json.read_text(encoding="utf-8"))
+        for entry in pdata.get("parameters", []):
+            name = entry.get("name", "")
+            if not name:
+                continue
+            expr = entry.get("expr", "")
+            raw_val = entry.get("value", "")
+            desc = entry.get("descr", "")
+            try:
+                value = float(raw_val) if raw_val else None
+            except (ValueError, TypeError):
+                value = None
+            is_derived = not _is_plain_number(expr) if expr else False
+            params[name] = {
+                "value": value,
+                "description": desc,
+                "category": _infer_category(name),
+                "expression": expr,
+                "is_derived": is_derived,
+            }
+        derived_count = sum(1 for p in params.values() if p["is_derived"])
+        return params, derived_count
+    except Exception:
+        return params, 0
+
+
+def _read_entities_from_pir(project_path: str) -> tuple[list[dict[str, str]], int, dict[str, Any]]:
+    """Read entities via cst_project_info_reader (offline). Returns (entities, count, extra_info)."""
+    extra: dict[str, Any] = {}
+    try:
+        from _cst_interface import cst_project_info_reader as pir
+        from ...core.utils import abs_project_path
+        uri = pir.get_document_uri_for_file(abs_project_path(project_path))
+        explorer = pir.CSTProjectPropertiesExplorer(uri)
+        data = explorer.get_project_data()
+        entities: list[dict[str, str]] = []
+        block_names = data.block_names or []
+        for bname in block_names:
+            parts = str(bname).split(":", 1)
+            component = parts[0] if len(parts) > 1 else ""
+            name = parts[1] if len(parts) > 1 else parts[0]
+            entities.append({"component": component, "name": name})
+        extra = {
+            "solver_name": data.active_solver_name or "",
+            "min_frequency": data.min_frequency,
+            "max_frequency": data.max_frequency,
+            "frequency_unit": str(data.frequency_unit) if data.is_frequency_unit_set else "",
+            "cst_version": data.full_version_string or "",
+        }
+        return entities, len(entities), extra
+    except Exception as exc:
+        return [], 0, {"pir_error": str(exc)}
+
+
+def _read_solver_from_ads(project_path: str) -> dict[str, Any]:
+    """Read solver type and port count from Model/3D/Model.ads on disk."""
+    from pathlib import Path
+    from ...core.utils import abs_project_path
+
+    normalized = abs_project_path(project_path)
+    ads_path = Path(normalized).with_suffix("") / "Model" / "3D" / "Model.ads"
+    if not ads_path.is_file():
+        return {}
+    try:
+        text = ads_path.read_text(encoding="utf-8")
+        info: dict[str, Any] = {}
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("[") and "]" in stripped:
+                key = stripped[1:stripped.index("]")]
+                val = stripped[stripped.index("]") + 1:].strip()
+                if key == "SOLVERTYPE":
+                    info["solver_type"] = val
+                elif key == "NUMBEROFPORTS":
+                    try:
+                        info["number_of_ports"] = int(val)
+                    except (ValueError, TypeError):
+                        pass
+        return info
+    except Exception:
+        return {}
+
+
+def _read_frequency_and_version_from_docstore(project_path: str) -> dict[str, Any]:
+    """Read frequency range and CST version from simulationproperties.docstore."""
+    from pathlib import Path
+    from ...core.utils import abs_project_path
+
+    normalized = abs_project_path(project_path)
+    doc_path = Path(normalized).with_suffix("") / "Model" / "simulationproperties.docstore"
+    if not doc_path.is_file():
+        return {}
+    try:
+        import sqlite3
+        import cbor2
+
+        db = sqlite3.connect(str(doc_path))
+        blob = db.execute(
+            "SELECT data FROM filestore_unchunked_data WHERE id=3"
+        ).fetchone()
+        db.close()
+        if blob is None:
+            return {}
+        decoded = cbor2.loads(blob[0])
+
+        # Navigate: !d → {!d} → root_project → {!d} → 3d_info → {!d} → value → {!d} → frequency → {!d}
+        info: dict[str, Any] = {}
+        payload = decoded.get("!d", {}).get("!d", {})
+        try:
+            freq = payload["root_project"]["!d"]["3d_info"]["!d"]["value"]["!d"]["frequency"]["!d"]
+            fmin = freq.get("minimum", {}).get("!d")
+            fmax = freq.get("maximum", {}).get("!d")
+            if fmin is not None and fmax is not None:
+                info["frequency_range_ghz"] = {"min": float(fmin), "max": float(fmax)}
+        except (KeyError, TypeError):
+            pass
+
+        # CST version from common path
+        try:
+            ver = payload["root_project"]["!d"]["common"]["!d"]["cst_version"]["!d"]
+            version_str = ver.get("full_version_string", {}).get("!d", "")
+            if version_str:
+                info["cst_version"] = version_str
+        except (KeyError, TypeError):
+            pass
+
+        return info
+    except Exception:
+        return {}
+
+
+def _read_entities_from_fct(project_path: str) -> tuple[list[dict[str, str]], int]:
+    """Read solid entity names from Model/3D/Model.fct on disk."""
+    import re
+    from pathlib import Path
+    from ...core.utils import abs_project_path
+
+    normalized = abs_project_path(project_path)
+    fct_path = Path(normalized).with_suffix("") / "Model" / "3D" / "Model.fct"
+    if not fct_path.is_file():
+        return [], 0
+    try:
+        raw = fct_path.read_bytes()
+        entities: list[dict[str, str]] = []
+        seen: set[str] = set()
+        # Names are concatenated with "solid$" delimiter
+        for part in raw.split(b"solid$"):
+            if not part:
+                continue
+            # Remove trailing null bytes / binary noise
+            clean = part.rstrip(b"\x00").decode("ascii", errors="replace")
+            if ":" not in clean:
+                continue
+            idx = clean.index(":")
+            component = clean[:idx]
+            name = clean[idx + 1:]
+            if not name or not component:
+                continue
+            key = f"{component}:{name}"
+            if key not in seen:
+                seen.add(key)
+                entities.append({"component": component, "name": name})
+        return entities, len(entities)
+    except Exception:
+        return [], 0
+
+
+def _read_farfield_monitors_from_dsn(project_path: str) -> tuple[list[str], int]:
+    """Read farfield monitors from Model/3D/Model.dsn on disk."""
+    import re
+    from pathlib import Path
+    from ...core.utils import abs_project_path
+
+    normalized = abs_project_path(project_path)
+    dsn_path = Path(normalized).with_suffix("") / "Model" / "3D" / "Model.dsn"
+    if not dsn_path.is_file():
+        return [], 0
+    try:
+        text = dsn_path.read_text(encoding="utf-8")
+        monitors: list[str] = []
+        in_monitor = False
+        montype = None
+        monname = ""
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("*** newmonitor"):
+                in_monitor = True
+                montype = None
+                monname = ""
+            elif stripped.startswith("*** endmonitor") and in_monitor:
+                in_monitor = False
+                if montype == 18 and monname:
+                    monitors.append(monname)
+            elif in_monitor:
+                m = re.match(r'montype:\s*(\d+)', stripped)
+                if m:
+                    montype = int(m.group(1))
+                m = re.match(r'monname:\s*"(.+)"', stripped)
+                if m:
+                    monname = m.group(1)
+        return monitors, len(monitors)
+    except Exception:
+        return [], 0
+
 
 def pipeline_inspect_project(project_path: str) -> dict[str, Any]:
-    from ...core.session import open_project as sm_open, close_project as sm_close
-    from ...core.project import list_parameters, list_entities
-    from ...core.farfield import discover_farfield_monitors
+    from ...core.utils import abs_project_path
 
-    open_result = sm_open(project_path)
-    if open_result.get("status") != "success":
+    normalized = abs_project_path(project_path)
+    from pathlib import Path
+    if not Path(normalized).is_file():
         return error_response(
-            "pipeline_open_failed",
-            open_result.get("message", "failed to open project"),
-            step="inspect-project:open",
-            open_result=open_result,
+            "project_file_missing",
+            f"project_path does not exist: {normalized}",
+            step="inspect-project:validate",
         )
 
-    params = list_parameters(project_path)
-    if params.get("status") != "success":
-        sm_close(project_path, save=False)
-        return error_response(
-            "pipeline_list_params_failed",
-            params.get("message", "failed to list parameters"),
-            step="inspect-project:list-params",
-        )
+    # Read parameters from file
+    params, derived_count = _read_parameters_from_file(normalized)
+    parameters_count = len(params)
 
-    entities = list_entities(project_path)
-    if entities.get("status") != "success":
-        sm_close(project_path, save=False)
-        return error_response(
-            "pipeline_list_entities_failed",
-            entities.get("message", "failed to list entities"),
-            step="inspect-project:list-entities",
-        )
+    # Read entities via cst_project_info_reader (primary), fallback to file
+    entities, entities_count, pir_extra = _read_entities_from_pir(normalized)
+    pir_failed = bool(pir_extra.get("pir_error"))
+    if pir_failed or not entities:
+        file_entities, file_count = _read_entities_from_fct(normalized)
+        if file_entities:
+            entities = file_entities
+            entities_count = file_count
 
-    farfield_info = discover_farfield_monitors(project_path)
+    # Read solver info — PIR primary, fallback to Model.ads
+    solver_info: dict[str, Any] = {}
+    if pir_extra.get("solver_name"):
+        solver_info["solver_name"] = pir_extra["solver_name"]
+    else:
+        ads_info = _read_solver_from_ads(normalized)
+        if ads_info.get("solver_type"):
+            solver_info["solver_type"] = ads_info["solver_type"]
+        if ads_info.get("number_of_ports") is not None:
+            solver_info["number_of_ports"] = ads_info["number_of_ports"]
 
-    close_result = sm_close(project_path, save=False)
-    ff_count = farfield_info.get("count", 0) if farfield_info.get("status") == "success" else 0
-    ff_names = farfield_info.get("farfield_names", []) if ff_count > 0 else []
-    return {
+    # Read frequency/version — PIR primary, fallback to docstore
+    if pir_extra.get("min_frequency") is not None:
+        solver_info["frequency_range_ghz"] = {
+            "min": pir_extra["min_frequency"],
+            "max": pir_extra["max_frequency"],
+        }
+    if pir_extra.get("cst_version"):
+        solver_info["cst_version"] = pir_extra["cst_version"]
+    if "frequency_range_ghz" not in solver_info or "cst_version" not in solver_info:
+        doc_info = _read_frequency_and_version_from_docstore(normalized)
+        if "frequency_range_ghz" not in solver_info and "frequency_range_ghz" in doc_info:
+            solver_info["frequency_range_ghz"] = doc_info["frequency_range_ghz"]
+        if "cst_version" not in solver_info and "cst_version" in doc_info:
+            solver_info["cst_version"] = doc_info["cst_version"]
+
+    # Read farfield monitors from Model.dsn
+    ff_names, ff_count = _read_farfield_monitors_from_dsn(normalized)
+
+    result: dict[str, Any] = {
         "status": "success",
         "pipeline": "inspect-project",
-        "project_path": open_result.get("project_path", project_path),
-        "parameters": params.get("parameters", {}),
-        "parameters_count": params.get("count", 0),
-        "entities": entities.get("entities", []),
-        "entities_count": entities.get("count", 0),
+        "project_path": normalized,
+        "method": "file_based",
+        "parameters": params,
+        "parameters_count": parameters_count,
+        "entities": entities,
+        "entities_count": entities_count,
         "farfield_monitors": ff_names,
         "farfield_monitors_count": ff_count,
-        "close_status": close_result.get("status", "unknown"),
     }
+    if parameters_count > 0:
+        result["derived_parameters_count"] = derived_count
+    if solver_info:
+        result["solver_info"] = solver_info
+    if pir_failed:
+        result["pir_note"] = (f"cst_project_info_reader unavailable: {pir_extra['pir_error']}"
+                              " — some data from file fallback")
+
+    return result
 
 
 # ── prepare-experiment ──

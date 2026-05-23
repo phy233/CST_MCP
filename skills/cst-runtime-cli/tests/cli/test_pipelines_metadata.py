@@ -133,7 +133,7 @@ class TestPipelineErrorPaths:
         from cst_runtime.cli.pipelines.impl import pipeline_inspect_project
         result = pipeline_inspect_project("/nonexistent/path.cst")
         assert result["status"] == "error"
-        assert "pipeline_open_failed" in result.get("error_type", "")
+        assert result["error_type"] == "project_file_missing"
 
     def test_prepare_experiment_missing_param_name(self) -> None:
         sys.path.insert(0, str(SKILL_ROOT / "scripts"))
