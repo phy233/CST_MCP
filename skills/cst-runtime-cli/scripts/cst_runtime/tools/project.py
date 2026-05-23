@@ -895,6 +895,108 @@ TOOL_DEFS = {
         "required": ["project_path"]
     },
 },
+
+"capture-3d-view": {
+    "category": "project_ops",
+    "risk": "read",
+    "description": "Capture 3D view of CST model as PNG + JSON metadata. Supports preset views (Front/Top/Isometric) or custom azimuth/elevation/zoom.",
+    "handler": "tool_capture_3d_view",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {
+                "type": "string",
+                "description": "CST project file path (must point to specific .cst file)",
+                "examples": ["C:/path/to/tasks/task_xxx/runs/run_001/projects/working.cst"]
+            },
+            "output_dir": {
+                "type": "string",
+                "description": "Output directory for screenshots (default: <project_dir>/exports/screenshots/)",
+                "examples": ["C:/path/to/exports/screenshots/"]
+            },
+            "filename_prefix": {
+                "type": "string",
+                "description": "Filename prefix for output files",
+                "default": "view",
+                "examples": ["model_snapshot", "antenna_v1"]
+            },
+            "view_type": {
+                "type": "string",
+                "description": "View type: custom (custom angles) or preset (named view)",
+                "enum": ["custom", "preset"],
+                "default": "preset"
+            },
+            "preset_name": {
+                "type": "string",
+                "description": "Preset view name (used when view_type=preset)",
+                "enum": ["Front", "Back", "Top", "Bottom", "Left", "Right", "Isometric"],
+                "default": "Isometric"
+            },
+            "azimuth": {
+                "type": "number",
+                "description": "Azimuth angle in degrees (0=+X, 90=+Y, CCW positive; used when view_type=custom)",
+                "default": 45.0,
+                "examples": [0, 45, 90, 180]
+            },
+            "elevation": {
+                "type": "number",
+                "description": "Elevation angle in degrees (0=horizontal, 90=+Z top view; used when view_type=custom)",
+                "default": 30.0,
+                "examples": [0, 30, 45, 90]
+            },
+            "zoom": {
+                "type": "number",
+                "description": "Zoom scale (1.0=default, 0.5=2x closer, 2.0=2x farther)",
+                "default": 1.0,
+                "examples": [0.5, 1.0, 1.5, 2.0]
+            },
+            "return_image_data": {
+                "type": "boolean",
+                "description": "If true, include base64-encoded PNG data in response for agent analysis",
+                "default": False
+            }
+        },
+        "required": ["project_path"]
+    },
+},
+
+"inspect-model-view": {
+    "category": "project_ops",
+    "risk": "read",
+    "description": "Capture 3D view and return base64-encoded image data for agent visual analysis. Use this to let the agent 'see' the model.",
+    "handler": "tool_inspect_model_view",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {
+                "type": "string",
+                "description": "CST project file path",
+                "examples": ["C:/path/to/tasks/task_xxx/runs/run_001/projects/working.cst"]
+            },
+            "output_dir": {
+                "type": "string",
+                "description": "Output directory (optional)",
+                "examples": ["C:/path/to/exports/"]
+            },
+            "filename_prefix": {
+                "type": "string",
+                "default": "inspect",
+                "examples": ["model_check"]
+            },
+            "view_type": {
+                "type": "string",
+                "enum": ["custom", "preset"],
+                "default": "preset"
+            },
+            "preset_name": {
+                "type": "string",
+                "enum": ["Front", "Back", "Top", "Bottom", "Left", "Right", "Isometric"],
+                "default": "Isometric"
+            }
+        },
+        "required": ["project_path"]
+    },
+},
 }
 
 
@@ -1128,6 +1230,22 @@ def tool_capture_3d_view(args: dict) -> dict:
         azimuth=args.get("azimuth", 45.0),
         elevation=args.get("elevation", 30.0),
         zoom=args.get("zoom", 1.0),
+        return_image_data=args.get("return_image_data", False),
+    )
+
+
+def tool_inspect_model_view(args: dict) -> dict:
+    """Handler for inspect-model-view tool - capture and return image for agent analysis."""
+    from ..core.modeling import capture_3d_view
+    
+    # Always return image data for this tool
+    return capture_3d_view(
+        project_path=args.get("project_path", ""),
+        output_dir=args.get("output_dir", ""),
+        filename_prefix=args.get("filename_prefix", "view"),
+        view_type=args.get("view_type", "preset"),
+        preset_name=args.get("preset_name", "Isometric"),
+        return_image_data=True,  # Always include base64 image data
     )
 
 

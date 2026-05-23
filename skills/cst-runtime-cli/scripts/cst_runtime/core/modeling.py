@@ -1042,6 +1042,7 @@ def capture_3d_view(
     azimuth: float = 45.0,
     elevation: float = 30.0,
     zoom: float = 1.0,
+    return_image_data: bool = False,
 ) -> dict[str, Any]:
     """Capture 3D view of CST model as PNG + JSON metadata.
     
@@ -1054,11 +1055,13 @@ def capture_3d_view(
         azimuth: Azimuth angle in degrees (0=+X, 90=+Y, CCW positive)
         elevation: Elevation angle in degrees (0=horizontal, 90=+Z top view)
         zoom: Zoom scale (1.0=default, 0.5=2x closer, 2.0=2x farther)
+        return_image_data: If True, include base64-encoded image data in response
     
     Returns:
-        dict with status, image_path, metadata_path, view_params
+        dict with status, image_path, metadata_path, view_params, and optionally image_data_base64
     """
     import json
+    import base64
     from datetime import datetime
     from .session import open_project, close_project, get_attached_project
     
@@ -1078,6 +1081,9 @@ def capture_3d_view(
     
     if view_type not in {"custom", "preset"}:
         return error_response("invalid_view_type", f"view_type must be 'custom' or 'preset'")
+    
+    # Resolve project path first
+    p = p.resolve()
     
     # Setup output directory
     if output_dir:
@@ -1126,7 +1132,7 @@ def capture_3d_view(
         
         close_project(str(p), save=False, kill_processes=True)
         
-        return {
+        result = {
             "status": "success",
             "image_path": str(png_path.resolve()),
             "metadata_path": str(json_path.resolve()),
@@ -1140,6 +1146,14 @@ def capture_3d_view(
             "tool": "capture-3d-view",
             "adapter": "cst_runtime_cli"
         }
+        
+        # Optionally include base64-encoded image data for agent analysis
+        if return_image_data:
+            with open(png_path, "rb") as f:
+                image_bytes = f.read()
+            result["image_data_base64"] = base64.b64encode(image_bytes).decode("ascii")
+        
+        return result
         
     except Exception as e:
         return error_response("export_failed", f"Failed to capture 3D view: {e}")
