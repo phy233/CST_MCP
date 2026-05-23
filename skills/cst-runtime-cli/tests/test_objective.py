@@ -28,6 +28,27 @@ class TestObjectiveFunction:
         result = compute_objective({"type": "s11_at_freq", "freq": 2.39}, run)
         assert abs(result["value"] - (-25.0)) < 1e-9
 
+    def test_s11_at_freq_from_file(self, tmp_path):
+        """s11_metric 无 all_freq 时从导出文件读全频数据，不应返回全局 min_db。"""
+        import json, math
+        freq_data = [2.38, 2.39, 2.40, 2.41]
+        s11_path = tmp_path / "s11.json"
+        s11_path.write_text(json.dumps({
+            "xdata": freq_data,
+            "ydata": [{"real": 0.1, "imag": 0}, {"real": 0.0562, "imag": 0},
+                      {"real": 0.0316, "imag": 0}, {"real": 0.0398, "imag": 0}],
+        }), encoding="utf-8")
+        # s11_metric 只有 min_db，没有 all_freq/all_db — 真实 pipeline 输出
+        run = self._make_run_output(
+            s11_metric={"min_db": -30.0, "best_freq": 2.40},
+            s11_path=str(s11_path),
+        )
+        result = compute_objective({"type": "s11_at_freq", "freq": 2.39}, run)
+        # -25 = 20*log10(0.0562)，不是全局最小值 -30 @ 2.40
+        assert abs(result["value"] - (-25.0)) < 0.5, (
+            f"expected ~-25dB @ 2.39GHz, got {result['value']}dB"
+        )
+
     def test_gain_max_no_farfield(self):
         run = self._make_run_output(s11_metric={"min_db": -20})
         result = compute_objective({"type": "gain_max"}, run)

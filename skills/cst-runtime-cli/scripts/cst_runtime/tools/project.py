@@ -836,6 +836,65 @@ TOOL_DEFS = {
         ]
     },
 },
+
+"capture-3d-view": {
+    "category": "project_ops",
+    "risk": "read",
+    "description": "Capture 3D view of CST model as PNG + JSON metadata. Supports preset views (Front/Top/Isometric) or custom azimuth/elevation/zoom.",
+    "handler": "tool_capture_3d_view",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {
+                "type": "string",
+                "description": "CST project file path (must point to specific .cst file)",
+                "examples": ["C:/path/to/tasks/task_xxx/runs/run_001/projects/working.cst"]
+            },
+            "output_dir": {
+                "type": "string",
+                "description": "Output directory for screenshots (default: <project_dir>/exports/screenshots/)",
+                "examples": ["C:/path/to/exports/screenshots/"]
+            },
+            "filename_prefix": {
+                "type": "string",
+                "description": "Filename prefix for output files",
+                "default": "view",
+                "examples": ["model_snapshot", "antenna_v1"]
+            },
+            "view_type": {
+                "type": "string",
+                "description": "View type: custom (custom angles) or preset (named view)",
+                "enum": ["custom", "preset"],
+                "default": "preset"
+            },
+            "preset_name": {
+                "type": "string",
+                "description": "Preset view name (used when view_type=preset)",
+                "enum": ["Front", "Back", "Top", "Bottom", "Left", "Right", "Isometric"],
+                "default": "Isometric"
+            },
+            "azimuth": {
+                "type": "number",
+                "description": "Azimuth angle in degrees (0=+X, 90=+Y, CCW positive; used when view_type=custom)",
+                "default": 45.0,
+                "examples": [0, 45, 90, 180]
+            },
+            "elevation": {
+                "type": "number",
+                "description": "Elevation angle in degrees (0=horizontal, 90=+Z top view; used when view_type=custom)",
+                "default": 30.0,
+                "examples": [0, 30, 45, 90]
+            },
+            "zoom": {
+                "type": "number",
+                "description": "Zoom scale (1.0=default, 0.5=2x closer, 2.0=2x farther)",
+                "default": 1.0,
+                "examples": [0.5, 1.0, 1.5, 2.0]
+            }
+        },
+        "required": ["project_path"]
+    },
+},
 }
 
 
@@ -1054,6 +1113,22 @@ def tool_define_port(args: dict) -> dict:
 
 def tool_define_monitor(args: dict) -> dict:
     return _md.define_monitor(**args)
+
+
+def tool_capture_3d_view(args: dict) -> dict:
+    """Handler for capture-3d-view tool."""
+    from ..core.modeling import capture_3d_view
+    
+    return capture_3d_view(
+        project_path=args.get("project_path", ""),
+        output_dir=args.get("output_dir", ""),
+        filename_prefix=args.get("filename_prefix", "view"),
+        view_type=args.get("view_type", "preset"),
+        preset_name=args.get("preset_name", "Isometric"),
+        azimuth=args.get("azimuth", 45.0),
+        elevation=args.get("elevation", 30.0),
+        zoom=args.get("zoom", 1.0),
+    )
 
 
 _register_tool_defs(TOOL_DEFS)

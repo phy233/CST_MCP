@@ -63,7 +63,23 @@ def _s11_at_freq(run_output: dict, freq: float) -> dict[str, Any]:
     all_freq = parsed.get("all_freq", [])
     all_db = parsed.get("all_db", [])
     if not all_freq or not all_db:
-        return {"value": parsed["min_db"], "details": parsed}
+        # s11_from_export returned partial data (s11_metric from pipeline).
+        # Try reading the raw S11 file to get full frequency sweep.
+        s11_path = run_output.get("s11_export_path", "")
+        if s11_path and Path(s11_path).is_file():
+            try:
+                payload = json.loads(Path(s11_path).read_text(encoding="utf-8-sig"))
+                all_freq = payload.get("xdata", [])
+                ydata = payload.get("ydata", [])
+                all_db = [
+                    20.0 * math.log10(max(math.hypot(
+                        float(d["real"]), float(d["imag"])), 1e-15))
+                    for d in ydata
+                ] if ydata and isinstance(ydata[0], dict) else []
+            except Exception:
+                pass
+        if not all_freq or not all_db:
+            return {"value": 0.0, "error": "no_frequency_data"}
     idx = min(range(len(all_freq)), key=lambda i: abs(float(all_freq[i]) - freq))
     return {"value": all_db[idx], "details": {"at_freq": all_freq[idx], "source": "s11"}}
 
