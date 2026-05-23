@@ -2,139 +2,197 @@
 
 # CST Runtime CLI
 
-CST Studio Suite 的 AI 自动化交互工具链。通过统一 CLI 入口提供建模、仿真、参数优化、结果读取和远场导出能力，让 AI agent 能够可靠地操作 CST 完成电磁仿真任务。
+CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 113 个原子命令覆盖建模、仿真、结果读取、参数优化、远场导出全链路，统一的 JSON 契约接口，内建运行时守卫层拦截已知 CST 陷阱。
 
-仓库包含两个 skill：
-
-- **`cst-runtime-cli`** — 基础设施 skill，提供 CLI 工具实现（session 管理、建模、仿真、结果读取、远场导出等），是直接与 CST 交互的底层层。
-- **`cst-runtime-optimization`** — 优化 skill，专注参数优化闭环，依赖 `cst-runtime-cli` 执行 CLI 调用，自身仅包含 SKILL.md 定义的流程逻辑。
+项目同时以 AI 工具 skill 形式发布，但工具链本身是通用设计——可独立使用、作为 skill 集成、或作为 Python 包二次开发。
 
 ---
 
-## 前置条件
+## 核心能力
 
-| 依赖 | 说明 |
-|---|---|
-| CST Studio Suite 2026 | **必须手动安装**，安装时勾选 "Python libraries" 组件 |
-| Python 3.12+ | health-check 可自动安装 |
-| uv | health-check 可自动安装 |
+| 分类 | 工具数 | 代表工具 |
+|------|-------|---------|
+| **几何建模** | 42 | `define-brick`, `define-cylinder`, `boolean-subtract`, `change-material`, `transform-shape` |
+| **工程操作** | 25 | `change-parameter`, `define-port`, `define-mesh`, `inspect-project`, `capture-3d-view` |
+| **结果读取** | 11 | `get-1d-result`, `get-2d-result`, `export-run-results`, `list-run-ids`, `generate-report` |
+| **优化** | 11 | `create-study`, `ask-study`, `tell-study`, `run-probe-phase`, `run-optimization-step` |
+| **会话管理** | 7 | `cst-session-open`, `cst-session-close`, `cst-session-quit`, `create-blank-project`, `save-project` |
+| **远场** | 4 | `export-farfield-grid`, `export-farfield-cut`, `inspect-farfield-monitors`, `inspect-model-view` |
+| **工作区** | 4 | `init-workspace`, `init-task`, `health-check`, `install-cst-libraries` |
+| **项目身份** | 4 | `verify-project-identity`, `infer-run-dir`, `wait-project-unlocked`, `list-open-projects` |
+| **审计** | 3 | `record-stage`, `update-status`, `stage-evidence` |
+| **DOE** | 2 | `design-probes`, `analyze-probes` |
+| **运行** | 2 | `prepare-run`, `get-run-context` |
 
-> 完整的环境初始化指引（包括 bootstrap、Python 手动安装、常见问题排查）见 [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md)。
+113 个工具各含 JSON Schema 定义，入参校验、输出格式统一。
 
-## 安装 Skill
+---
 
-仓库包含两个 skill，需分别安装：
+## 架构
 
-### 方式 A：Release 下载（仅 skill 结构，推荐）
+### 统一契约
 
-从 [Releases](https://github.com/anomalyco/cst-runtime-cli/releases) 下载最新版压缩包，解压到对应工具的 skills 目录：
+所有命令的输入输出格式一致：
 
-| AI 工具 | Skills 目录 |
-|---------|-------------|
-| OpenCode | `%USERPROFILE%\.config\opencode\skills\` |
-| Claude Code | `%USERPROFILE%\.claude\skills\` |
-| Cursor | `%USERPROFILE%\.cursor\skills\` |
-| Trae / Codex | `%USERPROFILE%\.trae\skills\` |
-| 通用 | 在工具配置中将 skills 目录指向解压路径 |
+- **入参**：JSON Schema 校验，支持 `--args-file <json>`、`--args-json`、stdin、直接标志四种传参方式
+- **返回值**：`{status: "success"|"error", message?, ...}` 字典结构，零异常控制流
+- **审计落盘**：每次调用自动写入 `stages/` + `logs/production_chain.md`
 
-解压后结构：
-```
-skills\
-├── cst-runtime-cli\
-│   ├── SKILL.md
-│   ├── scripts/
-│   ├── references/
-│   └── tests/
-└── cst-runtime-optimization\
-    └── SKILL.md
-```
+### 双层命令
 
-Windows 下也可用符号链接指向解压目录：
+- **原子工具**（113 个）：单步操作，可独立调用。
+- **管道**：编排示例，将原子工具组合为多步流程（如 `inspect-project`、`prepare-experiment`、`run-experiment`）。
+
+管道仅为使用参考，用户可完全按自己的策略编排工作流。
+
+### 守卫层（Gateway）
+
+内建 10+ 个运行时安全护栏，拦截已知 CST 陷阱：
+
+| 陷阱 | 表现 | 保护 |
+|------|------|------|
+| T2 | 改参后未重建模型直接仿真 | 拦截并提示 `next_action` |
+| T3 | 远场导出后 save 损坏工程 | 强制 `save=False` |
+| T4 | S11 复数据当 dB 用 | `20*log10(hypot(real,imag))` 转换 |
+| T5 | modeler/results session 混用 | 拒绝跨 session 操作 |
+| T8 | Abs(E) 当增益证据 | 拒绝非增益量 |
+| T13 | `StoreDoubleParameter` 只改参数表不重建模型 | 操作成功但附加警告 |
+
+每个 trap 触发时附带 `cst_raw` 上下文和 `next_action` 指导，帮助 agent 自动恢复。
+
+> ⚠️ 守卫层基于已知模式设计，不能穷举所有 CST 异常。复杂工作流仍需在关键节点人工复核。
+
+### 双 Session 模型
+
+- **Modeler session**（COM 读写，`cst.interface`）：建模、仿真、参数变更
+- **Results session**（只读，`cst.results`）：结果读取、S11/远场导出
+
+严格隔离，禁止混用。仿真后关闭 modeler session，另开 results session 读取数据。
+
+### 本地报告引擎
+
+全内联 HTML/SVG/WebGL 报告，零 JS/CDN 外部依赖。支持 S11 多迹叠加折线图、3D 远场方向图（预计算顶点）、2D 热力图、迭代时间线、收敛分析。
+
+---
+
+## 扩展开发
+
+当前 113 个工具不是能力上限。只要 CST VBA 或 COM API 可执行的操作，即可通过开发包扩展为 CLI 命令。
+
+### 代码生成器路径（新 VBA 对象）
+
 ```powershell
-New-Item -ItemType Junction -Path "$env:USERPROFILE\.config\opencode\skills\cst-runtime-cli" -Target "解压路径\skills\cst-runtime-cli"
+# 1. 在 devkit/tools/vba_defs/ 写 TOML 定义
+# 2. 运行生成器
+uv run python devkit/tools/generate_tools.py
+# 3. 产出 gen_<object>.py，在真实 CST 上验证
+# 4. 注册到 CLI
 ```
 
-### 方式 B：Clone 完整仓库
+TOML 定义参考：`devkit/tools/vba_defs/`（10 个参考实现）。
 
-```powershell
-git clone https://github.com/anomalyco/cst-runtime-cli.git
-```
+### 手工增强路径（现有工具修改）
 
-创建符号链接到对应工具的 skills 目录：
+改函数签名 + 同步 JSON Schema。新参数带默认值，向后兼容。
 
-```powershell
-# 基础设施 skill（OpenCode 示例，其他工具替换路径前缀）
-New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-runtime-cli" -Target ".\skills\cst-runtime-cli"
+### 开发参考
 
-# 优化 skill
-New-Item -ItemType Junction -Path "%USERPROFILE%\.config\opencode\skills\cst-runtime-optimization" -Target ".\skills\cst-runtime-optimization"
-```
+`devkit/references/` 包含完整的 VBA 官方 API 参考（1890 行）、CST Python API 参考（1377 行）、开发流程指南和测试体系说明。
 
-> 方式 B 适合需要同时修改 skill 源码的场景。
-
-重启 AI 工具或开始新会话后，skill 即生效。
+---
 
 ## 快速开始
 
-### 第一步：环境初始化
+前置条件：CST Studio Suite 2026、Python 3.13+、uv。完整环境初始化见 `skills/cst-runtime-cli/references/setup_guide.md`。
 
-直接告诉 agent：
+```powershell
+# 部署到工作区（一次性）
+python bootstrap.py --skill-path <skill-root>\scripts
+uv run python -m cst_runtime health-check --auto-fix
 
-> 帮我初始化 CST 运行环境，创建 workspace，完成后告诉我。
+# 查看所有可用工具
+uv run python -m cst_runtime list-tools
 
-agent 会自动完成：`health-check --auto-fix true` → `uv sync` → `doctor` 确认。
+# 了解工程
+uv run python -m cst_runtime inspect-project --project-path <project.cst>
 
-**auto-fix 完成后，所有后续命令必须使用 `uv run` 模式**，不可再走系统 Python，否则可能出现库冲突等不可预期结果。
-
-首次使用细节见 [`skills/cst-runtime-cli/references/setup_guide.md`](skills/cst-runtime-cli/references/setup_guide.md)。
-
-### 第二步：告诉 agent 你的需求
-
+# 自行编排工作流
+uv run python -m cst_runtime change-parameter --project-path <p.cst> --name g --value 25.0
+uv run python -m cst_runtime prepare-experiment --args-file <args.json>
+uv run python -m cst_runtime run-experiment --args-file <args.json>
+uv run python -m cst_runtime export-run-results --args-file <args.json>
 ```
-源工程: C:\path\to\your_project.cst
-优化目标: 例如 9-11 GHz S11 ≤ -40 dB
-可调参数: 例如 g (20-30, 步进0.5)
+
+---
+
+## 参考工程
+
+`skills/cst-runtime-cli/tests/refs/ref_0/ref_0.cst` — 四脊喇叭天线，8-12 GHz，含完整建模历史（VBA 737 行）。用于在真实 CST 上验证工具和管道。不含仿真结果缓存，可仿真生成或从工作区获取缓存。
+
+---
+
+## 安装与集成
+
+### 方式 A：AI 工具 skill
+
+解压到对应工具的 skills 目录：
+
+| AI 工具 | 路径 |
+|---------|------|
+| OpenCode / Cursor / Claude Code | `%USERPROFILE%\.config\opencode\skills\`（或其他工具对应路径） |
+
+解压后结构需包含 `skills/cst-runtime-cli/` 和 `skills/cst-runtime-optimization/`。
+
+### 方式 B：直接 CLI 使用
+
+```powershell
+git clone https://github.com/anomalyco/cst-runtime-cli.git
+cd cst-runtime-cli
+python skills/cst-runtime-cli/scripts/bootstrap.py --skill-path skills/cst-runtime-cli/scripts
+uv run python -m cst_runtime list-tools
 ```
 
-如果不确定参数名称，agent 会先读取工程参数列表让你确认。
+### 方式 C：Python 包
 
-### 常见场景
-
-| 场景 | 需求示例 |
-|---|---|
-| 优化 S11 | 源工程在 `C:\antennas\my_horn.cst`，优化 9-11 GHz S11 ≤ -40 dB |
-| 跑一次仿真 | 帮我跑一下 `C:\antennas\my_horn.cst` 的仿真，看 S11 曲线 |
-| 导出远场 | 帮我导出 10 GHz 的远场方向图，Realized Gain |
-| 对比 S11 | 两个 run 的 S11 结果，帮我做个对比页面 |
+```python
+from cst_runtime.core.session import open_project, close_project
+from cst_runtime.core.results import get_1d_result
+```
 
 ---
 
 ## 项目结构
 
 ```
-cst-runtime-cli/                          # 完整仓库
-├── README.md                             # 本文件
-├── README.en.md                          # 英文版
-├── LICENSE
+cst-runtime-cli/
+├── devkit/                              # 扩展开发工具包
+│   ├── references/                      # VBA/CST API 官方参考、开发流程指南、测试体系文档
+│   └── tools/
+│       ├── generate_tools.py            # 代码生成器：TOML → Python
+│       ├── vba_defs/                    # TOML 定义（10 个参考实现）
+│       └── generated/                   # 生成器输出（不入 git）
 │
 ├── skills/
-│   ├── cst-runtime-cli/                  # ← 基础设施 skill（即 release 内容）
-│   │   ├── SKILL.md                      # Agent 执行手册
+│   ├── cst-runtime-cli/                 # 基础设施 skill
+│   │   ├── SKILL.md                     # Agent 执行手册
 │   │   ├── scripts/
-│   │   │   ├── cst_runtime_cli.py        # CLI 入口（bootstrap 用）
-│   │   │   ├── pyproject.toml            # cst-runtime 包定义
-│   │   │   └── cst_runtime/              # 所有工具实现
-│   │   ├── references/
-│   │   │   ├── setup_guide.md            # 首次初始化完整手册
-│   │   │   ├── task_card_template.md
-│   │   │   ├── pipeline_mode_guide.md
-│   │   │   └── materials_name_list.txt
+│   │   │   ├── bootstrap.py             # 部署引导
+│   │   │   ├── pyproject.toml           # 包定义
+│   │   │   └── cst_runtime/             # 全部源码
+│   │   │       ├── cli/                 # 分发层（dispatch + pipeline 编排）
+│   │   │       ├── core/                # 核心模块（session/建模/仿真/结果/远场/守卫/审计/工作区等 20 模块）
+│   │   │       ├── tools/               # 工具层（10 模块，113 命令）
+│   │   │       ├── render/              # 自包含 HTML/SVG/WebGL 报告
+│   │   │       └── analysis/            # 远场解析与平坦度分析
+│   │   ├── references/                  # 用户文档
 │   │   └── tests/
+│   │       ├── refs/ref_0/              # 参考工程（四脊喇叭天线，8-12 GHz）
+│   │       └── ...                      # 合约测试、架构不变式、管道合约
 │   │
-│   └── cst-runtime-optimization/         # ← 优化 skill
-│       └── SKILL.md                      # 优化闭环流程定义
+│   └── cst-runtime-optimization/        # 优化 skill（仅 SKILL.md，不含代码）
+│       └── SKILL.md
 │
-└── tests/                                # 集成测试
+└── docs/                                # 设计文档
 ```
 
 ## License
