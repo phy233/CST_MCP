@@ -1146,36 +1146,26 @@ def capture_3d_view(
 
 
 def _set_preset_view(prj, preset_name: str) -> None:
-    """Set camera to preset view using CST COM API."""
-    # CST has predefined view names for StoreCurrentView
-    # We store the current view with the preset name, then restore it
-    # This works because CST GUI allows user to manually set views
-    # For true preset views, we need to use rotation
-    preset_rotations = {
-        "Front": 0,
-        "Right": 90,
-        "Back": 180,
-        "Left": 270,
-        "Top": 0,  # Top view requires different approach
-        "Bottom": 0,  # Bottom view requires different approach
-        "Isometric": 45,  # Standard isometric
-    }
-    
-    rotation = preset_rotations.get(preset_name, 45)
-    try:
-        prj.modeler.Plot.Rotate(rotation)
-    except Exception:
-        pass  # Rotation may not work in all contexts
+    """Set camera to preset view using CST COM API RestoreView()."""
+    # CST has predefined view names that can be restored
+    # Verified working: Front, Back, Left, Right, Top, Bottom, Perspective
+    # Note: "Isometric" is NOT a valid CST view name - use "Perspective" instead
+    cst_view_name = preset_name
+    if preset_name == "Isometric":
+        cst_view_name = "Perspective"  # Closest equivalent in CST
+    prj.modeler.Plot.RestoreView(cst_view_name)
 
 
 def _set_custom_view(prj, azimuth: float, elevation: float, zoom: float) -> None:
-    """Set camera to custom azimuth/elevation/zoom."""
-    # CST Plot.Rotate only takes one parameter (azimuth)
-    # Elevation control requires more complex manipulation
-    try:
-        prj.modeler.Plot.Rotate(azimuth)
-    except Exception:
-        pass
+    """Set camera to custom azimuth/elevation/zoom.
+    
+    Note: CST COM API does not directly support custom view angles.
+    This is a placeholder for future implementation.
+    Current behavior: uses current view without modification.
+    """
+    # TODO: Implement custom view control when CST API is available
+    # Plot.Rotate() requires specific direction constants, not angles
+    pass
 
 
 def _export_image(prj, png_path: str) -> None:
