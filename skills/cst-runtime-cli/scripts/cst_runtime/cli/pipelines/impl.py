@@ -109,31 +109,19 @@ def _read_parameters_from_file(project_path: str) -> tuple[dict[str, Any], int]:
 
 
 def _read_entities_from_pir(project_path: str) -> tuple[list[dict[str, str]], int, dict[str, Any]]:
-    """Read entities via cst_project_info_reader (offline). Returns (entities, count, extra_info)."""
-    extra: dict[str, Any] = {}
-    try:
-        from _cst_interface import cst_project_info_reader as pir
-        from ...core.utils import abs_project_path
-        uri = pir.get_document_uri_for_file(abs_project_path(project_path))
-        explorer = pir.CSTProjectPropertiesExplorer(uri)
-        data = explorer.get_project_data()
-        entities: list[dict[str, str]] = []
-        block_names = data.block_names or []
-        for bname in block_names:
-            parts = str(bname).split(":", 1)
-            component = parts[0] if len(parts) > 1 else ""
-            name = parts[1] if len(parts) > 1 else parts[0]
-            entities.append({"component": component, "name": name})
-        extra = {
-            "solver_name": data.active_solver_name or "",
-            "min_frequency": data.min_frequency,
-            "max_frequency": data.max_frequency,
-            "frequency_unit": str(data.frequency_unit) if data.is_frequency_unit_set else "",
-            "cst_version": data.full_version_string or "",
-        }
-        return entities, len(entities), extra
-    except Exception as exc:
-        return [], 0, {"pir_error": str(exc)}
+    """Read entities via core.project_info (offline). Returns (entities, count, extra_info)."""
+    from ...core.project_info import read_project_info
+    result = read_project_info(project_path)
+    if result.get("status") == "error":
+        return [], 0, {"pir_error": result.get("message", "unknown error")}
+    extra: dict[str, Any] = {
+        "solver_name": result.get("solver_name", ""),
+        "min_frequency": result.get("min_frequency"),
+        "max_frequency": result.get("max_frequency"),
+        "frequency_unit": result.get("frequency_unit", ""),
+        "cst_version": result.get("cst_version", ""),
+    }
+    return result.get("entities", []), result.get("entities_count", 0), extra
 
 
 def _read_solver_from_ads(project_path: str) -> dict[str, Any]:
