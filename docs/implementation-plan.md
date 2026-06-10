@@ -14,7 +14,7 @@
 5. [Batch 1: P0 功能补全（阻塞核心流程）](#五batch-1-p0-功能补全)
 6. [Batch 2: P1 功能补全（核心流程辅助）](#六batch-2-p1-功能补全)
 7. [Batch 3: P2 功能补全（高级功能）](#七batch-3-p2-功能补全)
-8. [MCP Server 实施方案](#八mcp-server-实施方案)
+8. [MCP Server 实施方案](#八mcp-server-实施方案)（含 8.8 非阻塞仿真设计）
 9. [CST 2022 兼容适配方案](#九cst-2022-兼容适配方案)
 10. [文件变更清单](#十文件变更清单)
 11. [测试计划](#十一测试计划)
@@ -554,6 +554,83 @@ __all__ = [
 - `tools/` 调用 `core/`，不调用 `lib/`
 - `lib/` 和 `tools/` 是 `core/` 的两种不同前端
 - MCP Server 直接调用 `lib/`（而非 `tools/`），获得更干净的函数签名
+
+### 4.7 实验数据库的归属：MCP Server vs 上级项目
+
+**结论：数据库在上级项目实现，不在 MCP server 或 cst_runtime 中。**
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  MCP Server (mcp_server/)                                    │
+│  只做: 协议转换、参数校验、MCP 层审计                         │
+│  记录: "工具 X 被调用，参数 Y，返回 Z"                        │
+│  不记录: "这次调参的优化目标是什么、结果好不好"               │
+│  审计文件: run_logs/tool_calls.jsonl                          │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+┌───────────────────────▼──────────────────────────────────────┐
+│  上级项目 (microwave metasurface) — db/ 模块                 │
+│  记录: 实验语义（目标、结论、收敛曲线）                       │
+│  表结构:                                                      │
+│    experiments(id, task, goal, status, created_at)            │
+│    param_sets(exp_id, param_name, param_value, step)          │
+│    measurements(exp_id, step, s11_min_db, best_freq, ...)     │
+│    decisions(exp_id, step, action, reason)                    │
+│  调用方式: 上级项目代码调用 lib/ 获取数据，自己写入 db/       │
+└───────────────────────┬──────────────────────────────────────┘
+                        │ 调用
+┌───────────────────────▼──────────────────────────────────────┐
+│  cst_runtime/lib/                                            │
+│  只做: CST 操作，返回原始数据                                 │
+│  返回: {"status":"success", "parameters":{...}, "ydata":[...]}│
+│  不关心: 数据好不好、要不要继续优化                           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**职责划分：**
+
+| 信息 | 谁记录 | 存在哪 | 原因 |
+|------|--------|--------|------|
+| 工具调用记录（谁调了什么） | MCP Server 审计 | `run_logs/tool_calls.jsonl` | 协议层职责 |
+| 参数值（g=24.5） | 上级项目 db/ | `experiments.db` | 业务语义 |
+| 测量结果（S11=-18.3dB） | 上级项目 db/ | `experiments.db` | 需要与目标关联 |
+| 优化决策（"增大 g"） | 上级项目 db/ | `experiments.db` | 领域知识 |
+| 收敛曲线 | 上级项目 db/ | `experiments.db` | 实验分析 |
+
+**上级项目调用示例：**
+
+```python
+# 上级项目代码（非 cst_runtime）
+from cst_runtime.lib.parameters import set_param
+from cst_runtime.lib.solver import start, wait
+from cst_runtime.lib.results import get_sparam
+from db.experiment import ExperimentDB
+
+db = ExperimentDB()
+exp_id = db.create_experiment(task="s11_optimization", goal="S11 < -20dB at 10GHz")
+
+for step in range(20):
+    # 1. 设置参数
+    g = optimizer.ask()
+    set_param("C:\\model.cst", "g", g)
+
+    # 2. 仿真
+    start("C:\\model.cst")
+    wait("C:\\model.cst")
+
+    # 3. 读取结果
+    result = get_sparam("C:\\model.cst", "1D Results\\S-Parameters\\S1,1")
+    s11_min = min(result["ydata"], key=lambda d: 20*log10(abs(complex(d["real"], d["imag"]))))
+
+    # 4. 记录到数据库（上级项目自己的逻辑）
+    db.log_measurement(exp_id, step, param_g=g, s11_db=s11_min["db"], freq_ghz=s11_min["freq"])
+
+    # 5. 优化决策
+    optimizer.tell(g, s11_min["db"])
+    db.log_decision(exp_id, step, action=f"tried g={g}", result=f"S11={s11_min['db']:.1f}dB")
+
+db.set_status(exp_id, "completed")
+```
 
 ---
 
@@ -1349,6 +1426,161 @@ uv run mcp install mcp_server/server.py --name "CST Runtime"
 **MCP Resources** = 让 LLM 读取的数据源（类似 GET 请求）。例如 `cst://workspace/status` 返回工作区状态。当前工具的 `health-check` 和 `usage-guide` 已覆盖此功能，**不需要单独实现**。
 
 **MCP Prompts** = 预设的提示词模板。例如 "帮我做超表面单元扫参" 展开为完整的操作步骤指导。可后续添加，**当前阶段不需要**。
+
+### 8.8 长时间仿真：非阻塞工具设计（方案 A）
+
+CST 仿真耗时 1 分钟到数小时不等，MCP 工具调用默认超时 60-120 秒。阻塞式工具必然超时。
+
+**方案：拆分为非阻塞工具，Agent 自己编排轮询循环。**
+
+#### 8.8.1 问题
+
+```
+CST 仿真耗时:
+  简单结构:   1-5 分钟
+  复杂结构:   30 分钟 - 2 小时
+  大型阵列:   数小时
+
+MCP 工具调用超时:
+  默认:       60-120 秒
+  Agent 会话: 几分钟到几十分钟
+
+结论: 单个阻塞式 MCP tool 调用必然超时
+```
+
+#### 8.8.2 现有代码基础
+
+`core/simulation.py` 已有非阻塞模式：
+
+| 函数 | 行为 | 返回 |
+|------|------|------|
+| `start_simulation(mode="async")` | 启动求解器，**立即返回** | `{status: "success"}` |
+| `is_simulation_running()` | 查询状态，**立即返回** | `{running: true/false}` |
+| `start_simulation(mode="blocking")` | 阻塞直到完成 | ⚠️ 不适合 MCP |
+
+`cli/pipelines/impl.py` 中的 `run-experiment` 流水线已使用异步模式：
+
+```
+start_simulation_async → wait_simulation(poll loop) → close modeler → export results
+```
+
+#### 8.8.3 MCP 工具拆分方案
+
+**不暴露阻塞工具，只暴露非阻塞工具：**
+
+| MCP Tool | 对应 lib 函数 | 行为 | 耗时 |
+|----------|-------------|------|------|
+| `start-simulation` | `solver.start_async()` | 启动仿真，立即返回 | < 1s |
+| `sim-status` | `solver.is_running()` | 查询是否在运行 | < 0.1s |
+| `get-1d-result` | `results.get_sparam()` | 读取 S 参数（离线） | < 1s |
+| `optuna-ask` | `optimization.ask()` | 获取下一组参数 | < 0.1s |
+| `optuna-tell` | `optimization.tell()` | 回报结果 | < 0.1s |
+| `optuna-best` | `optimization.best()` | 获取最优参数 | < 0.1s |
+
+**不暴露的函数（Agent 自己实现逻辑）：**
+
+| 函数 | 原因 |
+|------|------|
+| `solver.wait()` | 阻塞式轮询，Agent 自己用 `sim-status` 轮询 |
+
+#### 8.8.4 Agent 编排的优化循环
+
+```
+Agent 通过 MCP 调用的完整序列:
+
+  1. optuna-ask        → {g: 24.5, patch_w: 8.2}        [0.1s]
+  2. set-parameter     → g = 24.5                         [0.1s]
+  3. set-parameter     → patch_w = 8.2                    [0.1s]
+  4. start-simulation  → {status: "success"}              [0.5s]
+  ┌── Agent 自己等待 30 秒（或做其他推理） ──────────────┐
+  │ 5. sim-status      → {running: true}                 [0.1s]  │
+  │    Agent: 继续等待...                                    │
+  │ 6. sim-status      → {running: true}                 [0.1s]  │
+  │    Agent: 继续等待...                                    │
+  │ 7. sim-status      → {running: false}                [0.1s]  │
+  └─────────────────────────────────────────────────────────────┘
+  8. get-1d-result     → {ydata: [...], s11_min: -18.3}  [0.5s]
+  9. optuna-tell       → trial #5, value = -18.3         [0.1s]
+  10. optuna-best      → {best: -22.1, params: {g: 23.0}} [0.1s]
+  ┄┄ Agent 分析: "S11=-18.3dB，未达目标 -20dB，继续" ┄┄
+  11. 回到步骤 1，重复
+```
+
+每步都是毫秒级返回，**永不超时**。
+
+#### 8.8.5 Agent 等待策略
+
+Agent 在轮询间隔可以做以下事情：
+
+```python
+# Agent 内部推理逻辑（不是 MCP tool，是 LLM 的思维过程）
+
+# 策略 1: 简单等待
+start_simulation("C:\\model.cst")
+time.sleep(30)  # Agent 可以通知用户"仿真中，请等待"
+status = sim_status("C:\\model.cst")
+
+# 策略 2: 带超时的轮询
+for i in range(60):  # 最多等 60 次 × 30 秒 = 30 分钟
+    time.sleep(30)
+    if not sim_status("C:\\model.cst")["running"]:
+        break
+    # Agent 可以在此期间:
+    # - 向用户报告进度
+    # - 分析之前的仿真日志
+    # - 准备下一步的参数策略
+
+# 策略 3: 并行优化（多结构同时仿真）
+# 如果有多个 CST 工程，Agent 可以:
+start_simulation("C:\\model_v1.cst")
+start_simulation("C:\\model_v2.cst")
+# 然后交替检查两个工程的状态
+```
+
+#### 8.8.6 为什么不引入端口监听/Webhook
+
+| 方案 | 优点 | 缺点 | 推荐 |
+|------|------|------|------|
+| **A. 非阻塞工具 + Agent 轮询** | 简单、现有代码支持、Agent 可做其他事 | Agent 需要自己编排循环 | ✅ 首选 |
+| B. MCP Progress Reporting | 一个工具搞定 | 阻塞 Agent、无法做其他事 | 可选 |
+| C. 端口监听/Webhook | 完全异步 | 需要额外服务、安全风险、部署复杂 | ❌ |
+
+端口监听**不需要**，因为：
+1. MCP stdio 传输不存在 HTTP 连接超时问题
+2. Agent 可以在轮询间隔做其他推理
+3. 增加了安全风险和部署复杂度
+4. 现有 `start_simulation_async` + `is_simulation_running` 已经解决了核心问题
+
+#### 8.8.7 lib/solver.py 中的工具注册
+
+```python
+# lib/solver.py
+def start_async(path: str) -> dict:
+    """启动仿真，立即返回。"""
+    result = _start_simulation(path, mode="async")
+    return {"status": "success", "message": "simulation started"}
+
+def is_running(path: str) -> bool:
+    """查询仿真是否在运行。"""
+    result = _is_simulation_running(path)
+    return result.get("running", False)
+
+def wait(path: str, timeout: int = 3600, interval: int = 10) -> dict:
+    """轮询等待完成。仅供内部使用，不暴露为 MCP tool。"""
+    ...
+```
+
+```python
+# adapter.py — 注册时排除 wait
+TOOL_SPECS = [
+    (solver, "start_async", "start-simulation", "Start solver, return immediately", "session"),
+    (solver, "is_running",  "sim-status",       "Check if solver is running",       "read"),
+    (solver, "stop",        "stop-simulation",   "Stop the solver",                  "session"),
+    (solver, "delete_results", "delete-results", "Delete all results",               "write"),
+    (solver, "get_solver_type", "get-solver-type", "Get solver type",                "read"),
+    # wait 不注册为 MCP tool
+]
+```
 
 ---
 
