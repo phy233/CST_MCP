@@ -27,10 +27,13 @@ from . import (
     optimization,
     array,
     unit_cells,
+    sweep,
+    cross_process,
 )
 
 __all__ = [
     "session", "parameters", "geometry", "materials", "mesh",
     "boundary", "port", "solver", "monitors", "results",
-    "farfield", "optimization", "array", "unit_cells",
+    "farfield", "optimization", "array", "unit_cells", "sweep",
+    "cross_process",
 ]
