@@ -33,9 +33,9 @@
 | ✅ 完全对齐 | `arrayModeling.m` | `build_coding_array()` | `lib/array.py` |
 | ✅ 完全对齐 | `fastArrayModeling.m` | `fast_array()` | `lib/array.py` |
 | ⚠️ 需要用户实现 | `unit_Cyuanhuan.m` 等 | `UnitCellBase` (抽象基类) | `lib/unit_cells.py` |
+| ✅ 完全对齐 | `crossProcess.m` | `ParameterSweep`, `CrossProcessSweep` | `lib/sweep.py`, `lib/cross_process.py` |
 | ❌ 未实现 | `setFrequencySolver.m` | - | 需要添加 |
 | ❌ 未实现 | `setBackground.m` | - | 需要添加 |
-| ❌ 未实现 | `crossProcess.m` | - | 需要添加 |
 | ❌ 未实现 | `rebuildLUT_Offline.m` | - | 需要添加 |
 | ❌ 未实现 | `diffractionPhaseQuant.m` | - | 需要添加 |
 
@@ -116,6 +116,33 @@
 |--------|--------|------|
 | `unit_Cyuanhuan.m`, `unit_gongzixing.m` 等 | `UnitCellBase` (抽象基类) | Python 需要用户继承实现 |
 
+### 11. 参数扫描 (`lib/sweep.py`, `lib/cross_process.py`)
+
+| MATLAB | Python | 差异 |
+|--------|--------|------|
+| `crossProcess.m` | `ParameterSweep`, `CrossProcessSweep` | Python 更灵活，支持多参数 |
+| `crossProcess.m` 中的 LUT 构建 | `SweepResult.lut` (DataFrame) | Python 使用 pandas DataFrame |
+| `crossProcess.m` 中的 S 参数保存 | `save_sparam_data()` | Python 支持 CSV 格式 |
+| `crossProcess.m` 中的进度显示 | `callback` 参数 | Python 使用回调函数 |
+
+**Python 参数扫描功能特点:**
+
+1. **通用参数扫描** (`lib/sweep.py`):
+   - `ParameterSweep` 类支持任意数量参数
+   - `quick_sweep()` 提供简化接口
+   - `load_lut()` 加载已保存的 LUT
+   - `interpolate_lut()` LUT 插值
+
+2. **十字形单元专用扫描** (`lib/cross_process.py`):
+   - `CrossProcessSweep` 类针对十字形单元优化
+   - 自动提取 Y 极化和 X 极化 S 参数
+   - `quick_cross_sweep()` 提供简化接口
+
+3. **结果格式**:
+   - LUT 使用 pandas DataFrame
+   - 支持 CSV 和 NPZ 格式保存
+   - 包含参数值、幅度、相位等信息
+
 ## 未实现功能
 
 ### P2 优先级（高级功能）
@@ -126,17 +153,14 @@
 2. **`setBackground.m`** - 背景材料设置
    - 需要在 `lib/boundary.py` 或新建 `lib/background.py` 中添加
 
-3. **`crossProcess.m`** - 参数扫频 + LUT
+3. **`rebuildLUT_Offline.m`** - LUT 离线重建
    - 需要在 `lib/optimization.py` 中添加
 
-4. **`rebuildLUT_Offline.m`** - LUT 离线重建
-   - 需要在 `lib/optimization.py` 中添加
-
-5. **`diffractionPhaseQuant.m`** - 相位量化
+4. **`diffractionPhaseQuant.m`** - 相位量化
    - 需要在 `lib/results.py` 或新建 `lib/analysis.py` 中添加
 
 ## 建议
 
-1. **已完成**: 核心功能（会话、参数、几何、材料、求解器、结果、边界、端口、阵列）已完全对齐
-2. **待完善**: 高级功能（频域求解器、背景设置、参数扫频）需要补充
+1. **已完成**: 核心功能（会话、参数、几何、材料、求解器、结果、边界、端口、阵列、参数扫描）已完全对齐
+2. **待完善**: 高级功能（频域求解器、背景设置）需要补充
 3. **用户自定义**: 单元格类需要用户继承 `UnitCellBase` 实现
