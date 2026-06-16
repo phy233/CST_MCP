@@ -9,7 +9,9 @@ from typing import Any
 _CST_SEARCH_PATHS: list[str] = [
     r"C:\Program Files\CST Studio Suite 2026\AMD64\python_cst_libraries",
     r"C:\Program Files\CST Studio Suite 2025\AMD64\python_cst_libraries",
+    r"C:\Program Files\CST Studio Suite 2022\AMD64\python_cst_libraries",
     r"C:\Program Files (x86)\CST Studio Suite 2026\AMD64\python_cst_libraries",
+    r"C:\Program Files (x86)\CST Studio Suite 2022\AMD64\python_cst_libraries",
 ]
 
 _cst_found = False
