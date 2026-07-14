@@ -33,3 +33,5 @@ packages = ["mcp_server"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = [".", "skills/cst-runtime-cli/scripts"]
+
+[tool.uv]

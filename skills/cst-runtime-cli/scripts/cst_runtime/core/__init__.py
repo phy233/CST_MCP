@@ -18,7 +18,10 @@ _cst_found = False
 try:
     _pp = Path.cwd().resolve() / "pyproject.toml"
     if _pp.exists():
-        import tomllib
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
         _src = tomllib.loads(_pp.read_text(encoding="utf-8")).get("tool", {}).get("uv", {}).get("sources", {}).get("cst-studio-suite-link", {})
         if isinstance(_src, dict) and _src.get("path"):
             _p = Path(_src["path"]).resolve()

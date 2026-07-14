@@ -60,6 +60,17 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
 
 
 def open_project(project_path: str) -> dict[str, Any]:
+    """打开一个已经存在的 CST 工程。
+    
+    该方法会检查文件是否存在，然后调用 CST 的 COM 接口将其打开。
+    如果该工程已经被当前环境锁定（正在运行中），它会直接 Attach 到现有进程，而不会重复打开。
+
+    Args:
+        project_path: CST 工程文件的绝对或相对路径（如 "model.cst"）。
+
+    Returns:
+        返回一个包含执行状态的字典。成功时 status 为 "success"。
+    """
     normalized_project = _abs_project_path(project_path)
     if not Path(normalized_project).is_file():
         return error_response(
@@ -130,6 +141,21 @@ def close_project(
     poll_interval_seconds: float = 0.5,
     kill_processes: bool = True,
 ) -> dict[str, Any]:
+    """安全关闭当前正在运行的 CST 工程。
+    
+    这是工业级脚本中最核心的安全函数。它不仅会关闭工程，还会通过进程表检查确保
+    CST 释放了 .lock 锁定文件。如果出现僵尸进程，它会强制终结它们，防止后续仿真卡死。
+
+    Args:
+        project_path: 工程路径。
+        save: 关闭前是否保存工程。
+        wait_unlock: 是否阻塞等待直到 CST 的文件锁 (.lock) 彻底释放。
+        timeout_seconds: 等待文件锁释放的最长超时时间。
+        kill_processes: 关闭后是否强制杀死遗留的 "DESIGN ENVIRONMENT" 进程。
+
+    Returns:
+        包含清理结果的字典，包括是否成功保存、进程是否已被终结等信息。
+    """
     normalized_project = _abs_project_path(project_path)
 
     # T3: refuse save after farfield export
@@ -216,6 +242,19 @@ def quit_cst(
     dry_run: bool = False,
     settle_seconds: float = 0.5,
 ) -> dict[str, Any]:
+    """彻底退出整个 CST 应用程序实例并清理所有相关的后台子进程。
+    
+    在长时间运行批量仿真（Batch Sweep）后，CST 偶尔会残留无界面的求解器后台进程。
+    此方法会扫描全系统进程表，找出属于当前工程的残余进程并一次性销毁。
+
+    Args:
+        project_path: 可选的工程路径，用于精准定位它的子进程。
+        dry_run: 若为 True，则只扫描不实际杀死进程（用于调试）。
+        settle_seconds: 杀死进程后的冷却时间。
+
+    Returns:
+        清理报告字典。
+    """
     before = inspect(project_path)
     cleanup = process_cleanup.cleanup_cst_processes(
         project_path=project_path,
