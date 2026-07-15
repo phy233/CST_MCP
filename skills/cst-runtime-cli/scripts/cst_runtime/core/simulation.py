@@ -11,6 +11,7 @@ from . import gateway
 from .errors import error_response
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
+from .modeling import _add_vba_history, _single_vba
 
 
 def start_simulation(project_path: str) -> dict[str, Any]:
@@ -190,8 +191,9 @@ def set_solver_acceleration(
         "End With",
     ]
     try:
-        sCommand = "\n".join(vba)
-        project.modeler.add_to_history("Set Solver Acceleration", sCommand)
+        res = _add_vba_history(normalized_project, "Set Solver Acceleration", vba, project=project)
+        if res.get("status") == "error":
+            return res
         return {"status": "success", "project_path": normalized_project, "runtime_module": "cst_runtime.simulation"}
     except Exception as exc:
         return error_response("set_solver_acceleration_failed", str(exc), project_path=normalized_project, runtime_module="cst_runtime.simulation")
@@ -215,7 +217,9 @@ def _single_vba_pops(project_path: str, history_name: str, vba_line: str) -> dic
     if project is None:
         return status
     try:
-        project.modeler.add_to_history(history_name, vba_line)
+        res = _single_vba(normalized_project, history_name, vba_line, project=project)
+        if res.get("status") == "error":
+            return res
         return {"status": "success", "project_path": normalized_project, "runtime_module": "cst_runtime.simulation"}
     except Exception as exc:
         return error_response(f"{history_name}_failed", str(exc), project_path=normalized_project, runtime_module="cst_runtime.simulation")

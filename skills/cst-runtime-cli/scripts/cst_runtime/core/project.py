@@ -8,7 +8,7 @@ from .errors import error_response
 from . import gateway
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
-
+from .modeling import _single_vba
 
 def _connect_new_design_environment():
     import cst.interface
@@ -162,10 +162,14 @@ def change_parameter(project_path: str, name: str = "", value: float | int | str
     if project is None:
         return status
     try:
-        project.modeler.add_to_history(
+        res = _single_vba(
+            normalized_project,
             "ChangeParameter",
             f'StoreDoubleParameter "{parameter_name}", {parameter_value}',
+            project=project
         )
+        if res.get("status") == "error":
+            return res
         gateway.mark_params_dirty(normalized_project, param_name=str(parameter_name), param_value=parameter_value)
         result = {
             "status": "success",
@@ -196,7 +200,9 @@ def define_parameters(project_path: str, names: list[str], values: list[str]) ->
         dim_decl = f"Dim names(1 To {dim}) As String\nDim values(1 To {dim}) As String\n"
         entries = "\n".join(f'names({i+1}) = "{names[i]}"\nvalues({i+1}) = "{values[i]}"' for i in range(dim))
         vba = f"{dim_decl}{entries}\nStoreParameters names, values"
-        project.modeler.add_to_history("Define Parameters", vba)
+        res = _single_vba(normalized_project, "Define Parameters", vba, project=project)
+        if res.get("status") == "error":
+            return res
         return {"status": "success", "project_path": normalized_project, "count": dim, "runtime_module": "cst_runtime.core.project"}
     except Exception as exc:
         return error_response("define_parameters_failed", str(exc), project_path=normalized_project, runtime_module="cst_runtime.core.project")

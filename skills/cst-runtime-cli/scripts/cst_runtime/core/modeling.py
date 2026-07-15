@@ -9,11 +9,12 @@ from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 
 
-def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str]) -> dict[str, Any]:
+def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str], project: Any = None) -> dict[str, Any]:
     normalized_project = _abs_project_path(project_path)
-    project, status = attach_expected_project(normalized_project)
     if project is None:
-        return status
+        project, status = attach_expected_project(normalized_project)
+        if project is None:
+            return status
     try:
         sCommand = "\n".join(vba_lines)
         project.modeler.add_to_history(history_name, sCommand)
@@ -27,8 +28,8 @@ def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str])
         )
 
 
-def _single_vba(project_path: str, history_name: str, vba: str) -> dict[str, Any]:
-    return _add_vba_history(project_path, history_name, [vba])
+def _single_vba(project_path: str, history_name: str, vba: str, project: Any = None) -> dict[str, Any]:
+    return _add_vba_history(project_path, history_name, [vba], project=project)
 
 
 _BUILTIN_MATERIALS = frozenset({
@@ -65,8 +66,9 @@ def define_material_from_mtd(project_path: str, material_name: str) -> dict[str,
             if stripped.startswith("[") and stripped.endswith("]"):
                 continue
             vba_lines.append(stripped)
-        sCommand = "\n".join(vba_lines)
-        project.modeler.add_to_history(f"Define Material: {material_name}", sCommand)
+        res = _add_vba_history(normalized_project, f"Define Material: {material_name}", vba_lines, project=project)
+        if res.get("status") == "error":
+            return res
         return {"status": "success", "project_path": normalized_project, "material_name": material_name}
     except Exception as exc:
         return error_response(
@@ -911,23 +913,23 @@ def create_horn_segment(project_path: str, segment_id: int, bottom_radius: float
     return {"status": "success", "project_path": normalized_project, "message": f"Horn segment {segment_id} created"}
 
 
-def _profile_brick(project, component, name, material, xmin, xmax, ymin, ymax, z):
+def _profile_brick(project_path, project, component, name, material, xmin, xmax, ymin, ymax, z):
     vba = f'With Brick\n    .Name "{name}"\n    .Component "{component}"\n    .Material "{material}"\n    .Xrange "{xmin}", "{xmax}"\n    .Yrange "{ymin}", "{ymax}"\n    .Zrange "{z}", "{z}"\n    .Create\nEnd With'
-    project.modeler.add_to_history(f"Create:{name}", vba)
+    return _single_vba(project_path, f"Create:{name}", vba, project=project)
 
 
-def _pick_face(project, component, name):
-    project.modeler.add_to_history(f"Pick:{name}", f'Pick.PickFaceFromId "{component}:{name}", "1"')
+def _pick_face(project_path, project, component, name):
+    return _single_vba(project_path, f"Pick:{name}", f'Pick.PickFaceFromId "{component}:{name}", "1"', project=project)
 
 
-def _do_loft(project, name, component, material, tangency, minimize_twist):
+def _do_loft(project_path, project, name, component, material, tangency, minimize_twist):
     twist = "true" if minimize_twist else "false"
     vba = f'With Loft\n    .Reset\n    .Name "{name}"\n    .Component "{component}"\n    .Material "{material}"\n    .Tangency "{tangency}"\n    .Minimizetwist "{twist}"\n    .CreateNew\nEnd With'
-    project.modeler.add_to_history(f"Loft:{name}", vba)
+    return _single_vba(project_path, f"Loft:{name}", vba, project=project)
 
 
-def _delete_temp(project, component, name):
-    project.modeler.add_to_history(f"Delete:{name}", f'Solid.Delete "{component}:{name}"')
+def _delete_temp(project_path, project, component, name):
+    return _single_vba(project_path, f"Delete:{name}", f'Solid.Delete "{component}:{name}"', project=project)
 
 
 def create_loft_sweep(
@@ -941,13 +943,21 @@ def create_loft_sweep(
     if project is None:
         return status
     p1, p2 = f"_p1_{name}", f"_p2_{name}"
-    _profile_brick(project, component, p1, material, x_min1, x_max1, y_min1, y_max1, z1)
-    _profile_brick(project, component, p2, material, x_min2, x_max2, y_min2, y_max2, z2)
-    _pick_face(project, component, p2)
-    _pick_face(project, component, p1)
-    _do_loft(project, name, component, material, tangency, minimize_twist)
-    _delete_temp(project, component, p1)
-    _delete_temp(project, component, p2)
+    
+    steps = [
+        lambda: _profile_brick(normalized_project, project, component, p1, material, x_min1, x_max1, y_min1, y_max1, z1),
+        lambda: _profile_brick(normalized_project, project, component, p2, material, x_min2, x_max2, y_min2, y_max2, z2),
+        lambda: _pick_face(normalized_project, project, component, p2),
+        lambda: _pick_face(normalized_project, project, component, p1),
+        lambda: _do_loft(normalized_project, project, name, component, material, tangency, minimize_twist),
+        lambda: _delete_temp(normalized_project, project, component, p1),
+        lambda: _delete_temp(normalized_project, project, component, p2),
+    ]
+    for step in steps:
+        res = step()
+        if res.get("status") == "error":
+            return res
+            
     return {"status": "success", "project_path": normalized_project, "message": f"Loft sweep {name} created"}
 
 
@@ -967,19 +977,28 @@ def create_hollow_sweep(
     jy1, jy2 = y_min2 + wall_thickness, y_max2 - wall_thickness
     op1, op2, ip1, ip2 = f"_op1_{name}", f"_op2_{name}", f"_ip1_{name}", f"_ip2_{name}"
     ol, il = f"_ol_{name}", f"_il_{name}"
-    _profile_brick(project, component, op1, material, x_min1, x_max1, y_min1, y_max1, z1)
-    _profile_brick(project, component, op2, material, x_min2, x_max2, y_min2, y_max2, z2)
-    _profile_brick(project, component, ip1, material, ix1, ix2, iy1, iy2, z1)
-    _profile_brick(project, component, ip2, material, jx1, jx2, jy1, jy2, z2)
-    _pick_face(project, component, op2)
-    _pick_face(project, component, op1)
-    _do_loft(project, ol, component, material, tangency, minimize_twist)
-    _pick_face(project, component, ip2)
-    _pick_face(project, component, ip1)
-    _do_loft(project, il, component, material, tangency, minimize_twist)
-    project.modeler.add_to_history(f"Bool:{name}", f'Solid.Subtract "{component}:{ol}", "{component}:{il}"')
+    
+    steps = [
+        lambda: _profile_brick(normalized_project, project, component, op1, material, x_min1, x_max1, y_min1, y_max1, z1),
+        lambda: _profile_brick(normalized_project, project, component, op2, material, x_min2, x_max2, y_min2, y_max2, z2),
+        lambda: _profile_brick(normalized_project, project, component, ip1, material, ix1, ix2, iy1, iy2, z1),
+        lambda: _profile_brick(normalized_project, project, component, ip2, material, jx1, jx2, jy1, jy2, z2),
+        lambda: _pick_face(normalized_project, project, component, op2),
+        lambda: _pick_face(normalized_project, project, component, op1),
+        lambda: _do_loft(normalized_project, project, ol, component, material, tangency, minimize_twist),
+        lambda: _pick_face(normalized_project, project, component, ip2),
+        lambda: _pick_face(normalized_project, project, component, ip1),
+        lambda: _do_loft(normalized_project, project, il, component, material, tangency, minimize_twist),
+        lambda: _single_vba(normalized_project, f"Bool:{name}", f'Solid.Subtract "{component}:{ol}", "{component}:{il}"', project=project)
+    ]
     for t in [op1, op2, ip1, ip2]:
-        _delete_temp(project, component, t)
+        steps.append(lambda t=t: _delete_temp(normalized_project, project, component, t))
+        
+    for step in steps:
+        res = step()
+        if res.get("status") == "error":
+            return res
+            
     return {"status": "success", "project_path": normalized_project, "message": f"Hollow sweep {name} created"}
 
 

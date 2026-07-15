@@ -12,6 +12,7 @@ from . import gateway
 from .errors import error_response
 from .session import get_attached_project, open_project, close_project
 from .utils import abs_project_path, serialize_value
+from .modeling import _single_vba
 from ..analysis.farfield import (
     _extract_farfield_frequency_ghz,
     _build_farfield_angle_values,
@@ -131,9 +132,11 @@ def _gui_close_project(project: Any, fullpath: str, save: bool = False) -> dict[
         )
 
 
-def _gui_add_to_history(project: Any, command: str, history_name: str) -> dict[str, Any]:
+def _gui_add_to_history(project_path: str, command: str, history_name: str, project: Any = None) -> dict[str, Any]:
     try:
-        project.modeler.add_to_history(history_name, command)
+        res = _single_vba(project_path, history_name, command, project=project)
+        if res.get("status") == "error":
+            return res
         return {
             "status": "success",
             "message": f"command added to history: {history_name}",
@@ -590,7 +593,7 @@ def export_farfield_cut(
     project = open_result["project"]
     reuse = open_result.get("reused", False)
     try:
-        export_result = _gui_add_to_history(project, _build_farfield_cut_export_command(normalized_tree_path, str(temp_txt)), history_name=f"ExportFarfieldCut:{normalized_tree_path}")
+        export_result = _gui_add_to_history(normalized_project, _build_farfield_cut_export_command(normalized_tree_path, str(temp_txt)), history_name=f"ExportFarfieldCut:{normalized_tree_path}", project=project)
         flow_log.append({"step": "export_cut", "result": export_result})
         if export_result.get("status") != "success":
             return error_response("farfield_cut_export_failed", "Farfield Cut export failed", flow_log=flow_log)
