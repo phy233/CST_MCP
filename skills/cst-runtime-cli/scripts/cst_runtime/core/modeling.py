@@ -818,6 +818,7 @@ def transform_shape(
     destination: str = "",
 ) -> dict[str, Any]:
     ttype = {"mirror": "Mirror", "rotate": "Rotate"}.get(transform_type.lower(), transform_type)
+    # mirror和其他功能的VBA代码块不一样
     if transform_type.lower() == "mirror":
         vba = [
             "With Transform",

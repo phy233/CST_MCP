@@ -1,16 +1,16 @@
-"""CST geometry modeling operations.
+"""CST 几何建模操作。
 
-Usage:
+用法：
     from cst_runtime.lib.geometry import brick, cylinder, boolean_subtract
 
-    # Create a brick
+    # 创建一个长方体
     brick("C:\\path\\to\\model.cst",
           component="component1",
           name="patch",
           material="PEC",
           x_range=(-5, 5), y_range=(-5, 5), z_range=(0, 0.1))
 
-    # Create a cylinder
+    # 创建一个圆柱体
     cylinder("C:\\path\\to\\model.cst",
              component="component1",
              name="via",
@@ -20,7 +20,7 @@ Usage:
              radius=0.5,
              z_range=(0, 1))
 
-    # Boolean subtract
+    # 布尔减运算
     boolean_subtract("C:\\path\\to\\model.cst",
                      target="component1:outer",
                      tool="component1:inner")
@@ -53,19 +53,19 @@ def brick(
     y_range: tuple[float, float],
     z_range: tuple[float, float],
 ) -> None:
-    """Create a brick solid.
+    """创建一个长方体。
 
     Args:
-        project_path: Path to .cst file
-        component: Component name
-        name: Solid name
-        material: Material name
-        x_range: (min, max) x coordinates
-        y_range: (min, max) y coordinates
-        z_range: (min, max) z coordinates
+        project_path: .cst 文件的绝对路径
+        component: 文件夹（Component）名称
+        name: 长方体实体的名称
+        material: 材料名称
+        x_range: (最小值, 最大值) X 轴坐标范围
+        y_range: (最小值, 最大值) Y 轴坐标范围
+        z_range: (最小值, 最大值) Z 轴坐标范围
 
     Raises:
-        RuntimeError: If brick cannot be created
+        RuntimeError: 如果无法创建长方体时抛出
     """
     result = _define_brick(
         project_path, name, component, material,
@@ -86,21 +86,21 @@ def cylinder(
     z_range: tuple[float, float],
     inner_radius: float = 0.0,
 ) -> None:
-    """Create a cylinder solid.
+    """创建一个圆柱体（或圆管）。
 
     Args:
-        project_path: Path to .cst file
-        component: Component name
-        name: Solid name
-        material: Material name
-        axis: Axis direction ("x", "y", or "z")
-        center: (x, y) center coordinates
-        radius: Outer radius
-        z_range: (min, max) range along axis
-        inner_radius: Inner radius (default 0 for solid)
+        project_path: .cst 文件的绝对路径
+        component: 文件夹（Component）名称
+        name: 实体名称
+        material: 材料名称
+        axis: 轴向 ("x", "y", 或 "z")
+        center: (x, y) 截面圆心坐标
+        radius: 外圆半径
+        z_range: (最小值, 最大值) 沿着轴向的范围
+        inner_radius: 内圆半径（默认为0，即实心圆柱）
 
     Raises:
-        RuntimeError: If cylinder cannot be created
+        RuntimeError: 如果无法创建圆柱体时抛出
     """
     result = _define_cylinder(
         project_path, name, component, material,
@@ -122,21 +122,21 @@ def cone(
     top_radius: float,
     z_range: tuple[float, float],
 ) -> None:
-    """Create a cone solid.
+    """创建一个圆锥体。
 
     Args:
-        project_path: Path to .cst file
-        component: Component name
-        name: Solid name
-        material: Material name
-        axis: Axis direction ("x", "y", or "z")
-        center: (x, y) center coordinates
-        bottom_radius: Bottom radius
-        top_radius: Top radius
-        z_range: (min, max) range along axis
+        project_path: .cst 文件的绝对路径
+        component: 文件夹（Component）名称
+        name: 实体名称
+        material: 材料名称
+        axis: 轴向 ("x", "y", 或 "z")
+        center: (x, y) 截面圆心坐标
+        bottom_radius: 底部半径
+        top_radius: 顶部半径
+        z_range: (最小值, 最大值) 沿着轴向的范围
 
     Raises:
-        RuntimeError: If cone cannot be created
+        RuntimeError: 如果无法创建圆锥体时抛出
     """
     result = _define_cone(
         project_path, name, component, material,
@@ -154,17 +154,17 @@ def rectangle(
     x_range: tuple[float, float],
     y_range: tuple[float, float],
 ) -> None:
-    """Create a rectangle curve.
+    """创建一个矩形曲线（2D）。
 
     Args:
-        project_path: Path to .cst file
-        curve: Curve name
-        name: Rectangle name
-        x_range: (min, max) x coordinates
-        y_range: (min, max) y coordinates
+        project_path: .cst 文件的绝对路径
+        curve: 曲线文件夹名称
+        name: 矩形曲线名称
+        x_range: (最小值, 最大值) X 轴坐标范围
+        y_range: (最小值, 最大值) Y 轴坐标范围
 
     Raises:
-        RuntimeError: If rectangle cannot be created
+        RuntimeError: 如果无法创建矩形曲线时抛出
     """
     result = _define_rectangle(
         project_path, name, curve,
@@ -175,15 +175,15 @@ def rectangle(
 
 
 def boolean_add(project_path: str, shape1: str, shape2: str) -> None:
-    """Boolean add two solids.
+    """对两个实体进行布尔加运算（合并）。
 
     Args:
-        project_path: Path to .cst file
-        shape1: First shape (component:name)
-        shape2: Second shape (component:name)
+        project_path: .cst 文件的绝对路径
+        shape1: 第一个形状名称 (格式: component:name)
+        shape2: 第二个形状名称 (格式: component:name)
 
     Raises:
-        RuntimeError: If boolean operation fails
+        RuntimeError: 如果布尔运算失败时抛出
     """
     result = _boolean_add(project_path, shape1, shape2)
     if result.get("status") == "error":
@@ -191,15 +191,15 @@ def boolean_add(project_path: str, shape1: str, shape2: str) -> None:
 
 
 def boolean_subtract(project_path: str, target: str, tool: str) -> None:
-    """Boolean subtract.
+    """进行布尔减运算。
 
     Args:
-        project_path: Path to .cst file
-        target: Target shape (component:name)
-        tool: Tool shape to subtract (component:name)
+        project_path: .cst 文件的绝对路径
+        target: 目标被减形状 (格式: component:name)
+        tool: 用来减去的工具形状 (格式: component:name)
 
     Raises:
-        RuntimeError: If boolean operation fails
+        RuntimeError: 如果布尔运算失败时抛出
     """
     result = _boolean_subtract(project_path, target, tool)
     if result.get("status") == "error":
@@ -207,15 +207,15 @@ def boolean_subtract(project_path: str, target: str, tool: str) -> None:
 
 
 def boolean_intersect(project_path: str, shape1: str, shape2: str) -> None:
-    """Boolean intersect two solids.
+    """对两个实体进行布尔交运算。
 
     Args:
-        project_path: Path to .cst file
-        shape1: First shape (component:name)
-        shape2: Second shape (component:name)
+        project_path: .cst 文件的绝对路径
+        shape1: 第一个形状名称 (格式: component:name)
+        shape2: 第二个形状名称 (格式: component:name)
 
     Raises:
-        RuntimeError: If boolean operation fails
+        RuntimeError: 如果布尔运算失败时抛出
     """
     result = _boolean_intersect(project_path, shape1, shape2)
     if result.get("status") == "error":
@@ -223,15 +223,15 @@ def boolean_intersect(project_path: str, shape1: str, shape2: str) -> None:
 
 
 def delete_entity(project_path: str, name: str, component: str = "") -> None:
-    """Delete a solid entity.
+    """删除一个实体。
 
     Args:
-        project_path: Path to .cst file
-        name: Solid name
-        component: Component name (optional, can include in name as "component:name")
+        project_path: .cst 文件的绝对路径
+        name: 实体名称
+        component: (可选) 文件夹名称，如果你直接在name里写成了"component:name"可以留空
 
     Raises:
-        RuntimeError: If entity cannot be deleted
+        RuntimeError: 如果无法删除实体时抛出
     """
     if component:
         full_name = f"{component}:{name}"
@@ -243,14 +243,14 @@ def delete_entity(project_path: str, name: str, component: str = "") -> None:
 
 
 def delete_component(project_path: str, component: str) -> None:
-    """Delete an entire component folder and all solids within it.
+    """删除整个 Component 文件夹及其内部的所有实体。
 
     Args:
-        project_path: Path to .cst file
-        component: Component name to delete
+        project_path: .cst 文件的绝对路径
+        component: 文件夹名称
 
     Raises:
-        RuntimeError: If component cannot be deleted
+        RuntimeError: 如果无法删除文件夹时抛出
     """
     vba = f'Component.Delete "{component}"'
     result = _add_to_history(project_path, vba, f"Delete component: {component}")
@@ -266,18 +266,18 @@ def rotate(
     multiple_objects: bool = True,
     repetitions: int = 1,
 ) -> None:
-    """Rotate a solid.
+    """旋转实体。
 
     Args:
-        project_path: Path to .cst file
-        name: Solid name
-        center: (x, y, z) rotation center
-        angle: (x, y, z) rotation angles in degrees
-        multiple_objects: Whether to copy objects
-        repetitions: Number of copies
+        project_path: .cst 文件的绝对路径
+        name: 实体名称
+        center: (x, y, z) 旋转中心点
+        angle: (x, y, z) 绕各轴的旋转角度（度）
+        multiple_objects: 是否复制对象（保留原对象）
+        repetitions: 复制的数量
 
     Raises:
-        RuntimeError: If rotation fails
+        RuntimeError: 如果旋转失败时抛出
     """
     result = _transform_shape(
         project_path, name, "rotate",
@@ -297,18 +297,18 @@ def translate(
     repetitions: int = 1,
     destination: str = "",
 ) -> None:
-    """Translate (move) a solid.
+    """平移（移动）实体。
 
     Args:
-        project_path: Path to .cst file
-        name: Solid name
-        vector: (x, y, z) translation vector
-        multiple_objects: Whether to copy objects
-        repetitions: Number of copies
-        destination: Destination component
+        project_path: .cst 文件的绝对路径
+        name: 实体名称
+        vector: (x, y, z) 平移向量
+        multiple_objects: 是否复制对象（保留原对象）
+        repetitions: 复制的数量
+        destination: 复制目标的新文件夹名称
 
     Raises:
-        RuntimeError: If translation fails
+        RuntimeError: 如果平移失败时抛出
     """
     # NOTE: CST 2026 feature - transform_shape needs to be extended to support "translate"
     # Currently this is a placeholder that constructs VBA directly
@@ -334,16 +334,16 @@ def mirror(
     plane_normal: tuple[float, float, float] = (0, 1, 0),
     center: tuple[float, float, float] = (0, 0, 0),
 ) -> None:
-    """Mirror a solid.
+    """镜像实体。
 
     Args:
-        project_path: Path to .cst file
-        name: Solid name
-        plane_normal: (x, y, z) mirror plane normal
-        center: (x, y, z) mirror center
+        project_path: .cst 文件的绝对路径
+        name: 实体名称
+        plane_normal: (x, y, z) 镜像面的法向量
+        center: (x, y, z) 镜像中心点
 
     Raises:
-        RuntimeError: If mirroring fails
+        RuntimeError: 如果镜像失败时抛出
     """
     result = _transform_shape(
         project_path, name, "mirror",
@@ -362,17 +362,17 @@ def activate_wcs(
     normal: tuple[float, float, float] = (0, 0, 1),
     uvector: tuple[float, float, float] = (1, 0, 0),
 ) -> None:
-    """Activate a local working coordinate system (WCS).
+    """激活局部工作坐标系 (WCS)。
 
     Args:
-        project_path: Path to .cst file
-        name: WCS name
-        origin: (x, y, z) WCS origin
-        normal: (x, y, z) WCS normal direction
-        uvector: (x, y, z) WCS U-vector direction
+        project_path: .cst 文件的绝对路径
+        name: WCS 的名称
+        origin: (x, y, z) WCS 原点坐标
+        normal: (x, y, z) WCS 法线方向 (默认Z轴)
+        uvector: (x, y, z) WCS U轴方向 (默认X轴)
 
     Raises:
-        RuntimeError: If WCS cannot be activated
+        RuntimeError: 如果无法激活 WCS 时抛出
     """
     vba = f"""With WCS
     .ActivateWCS "local"
@@ -387,13 +387,13 @@ End With"""
 
 
 def deactivate_wcs(project_path: str) -> None:
-    """Switch back to global WCS.
+    """切回全局坐标系 (Global WCS)。
 
     Args:
-        project_path: Path to .cst file
+        project_path: .cst 文件的绝对路径
 
     Raises:
-        RuntimeError: If WCS cannot be deactivated
+        RuntimeError: 如果无法停用 WCS 时抛出
     """
     vba = 'WCS.ActivateWCS "global"'
     result = _add_to_history(project_path, vba, "Deactivate WCS")
@@ -411,20 +411,20 @@ def arc(
     segments: int = 0,
     component: str = "component1",
 ) -> None:
-    """Create an arc curve.
+    """创建一个圆弧曲线。
 
     Args:
-        project_path: Path to .cst file
-        name: Curve name
-        center: (x, y, z) arc center
-        radius: Arc radius
-        start_angle: Start angle in degrees
-        end_angle: End angle in degrees
-        segments: Number of segments (0 for auto)
-        component: Component name
+        project_path: .cst 文件的绝对路径
+        name: 曲线名称
+        center: (x, y, z) 圆弧中心点坐标
+        radius: 圆弧半径
+        start_angle: 起始角度（度）
+        end_angle: 结束角度（度）
+        segments: 分段数 (0表示自动)
+        component: 曲线所在的文件夹名称
 
     Raises:
-        RuntimeError: If arc cannot be created
+        RuntimeError: 如果无法创建圆弧时抛出
     """
     vba = f"""With Arc
     .Reset
@@ -450,18 +450,18 @@ def polygon(
     vertices: Sequence[tuple[float, float]],
     z_range: tuple[float, float],
 ) -> None:
-    """Create a polygon solid from vertices.
+    """根据顶点坐标创建一个多边形拉伸实体。
 
     Args:
-        project_path: Path to .cst file
-        name: Solid name
-        component: Component name
-        material: Material name
-        vertices: List of (x, y) vertex coordinates
-        z_range: (min, max) z coordinates
+        project_path: .cst 文件的绝对路径
+        name: 实体名称
+        component: 文件夹（Component）名称
+        material: 材料名称
+        vertices: [(x1, y1), (x2, y2), ...] 顶点坐标的列表
+        z_range: (最小值, 最大值) 拉伸的 Z 轴范围
 
     Raises:
-        RuntimeError: If polygon cannot be created
+        RuntimeError: 如果无法创建多边形时抛出
     """
     if len(vertices) < 3:
         raise ValueError("Polygon requires at least 3 vertices")

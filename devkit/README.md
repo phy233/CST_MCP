@@ -66,36 +66,36 @@ uv run pytest <repo>\\skills\\cst-runtime-cli\\tests -v
 
 ### 参考文档
 
-| 文档 | 内容 |
-|------|------|
-| `references/vba-official-reference.md` | VBA 官方对象参考——150+ 对象方法签名/参数类型/枚举值 |
+| 文档                                         | 内容                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| `references/vba-official-reference.md`     | VBA 官方对象参考——150+ 对象方法签名/参数类型/枚举值                     |
 | `references/cst-official-api-reference.md` | CST Python API 参考（cst.interface / cst.results / cst.units / C 扩展层） |
-| `references/tool-development-guide.md` | 工具开发集成指南——从查文档到 CLI 上线的完整 6 步流程 |
-| `references/Test_kit_README.md` | 测试体系全貌——单元测试 + 管道合约测试 + 生成工具验证 |
+| `references/tool-development-guide.md`     | 工具开发集成指南——从查文档到 CLI 上线的完整 6 步流程                    |
+| `references/Test_kit_README.md`            | 测试体系全貌——单元测试 + 管道合约测试 + 生成工具验证                    |
 
 ### 开发工具
 
-| 工具 | 内容 |
-|------|------|
+| 工具                        | 内容                                            |
+| --------------------------- | ----------------------------------------------- |
 | `tools/generate_tools.py` | VBA 代码生成器：读 TOML → 生成 Python 工具函数 |
-| `tools/vba_defs/` | TOML 定义模板 — 10 个参考实现 |
-| `tools/generated/` | 生成器输出（gen_*.py，不入 git，按需重新生成） |
+| `tools/vba_defs/`         | TOML 定义模板 — 10 个参考实现                  |
+| `tools/generated/`        | 生成器输出（gen_*.py，不入 git，按需重新生成）  |
 
 ---
 
 ## 4. 两条开发路径
 
-| 场景 | 路径 | 步骤 |
-|------|------|------|
-| **新对象/新方法** | 代码生成器 | 写 TOML → `generate_tools.py` → `gen_*.py` → CST 实测 |
-| **现有工具增强** | 手工修补 | 改 `core/*.py` 函数签名 → 同步 JSON Schema → 合约测试 |
+| 场景                    | 路径       | 步骤                                                        |
+| ----------------------- | ---------- | ----------------------------------------------------------- |
+| **新对象/新方法** | 代码生成器 | 写 TOML →`generate_tools.py` → `gen_*.py` → CST 实测 |
+| **现有工具增强**  | 手工修补   | 改`core/*.py` 函数签名 → 同步 JSON Schema → 合约测试    |
 
 ### 管道与原子工具的分工
 
-| 角色 | 说明 | 例子 |
-|------|------|------|
+| 角色     | 说明               | 例子                                                            |
+| -------- | ------------------ | --------------------------------------------------------------- |
 | 管道执行 | 编排好的原子调用链 | `inspect-project`、`prepare-experiment`、`run-experiment` |
-| 灵活编排 | 单个原子工具 | `set-farfield-monitor`、`change-material` |
+| 灵活编排 | 单个原子工具       | `set-farfield-monitor`、`change-material`                   |
 
 原则：管道尽可组合，不是黑箱。
 
@@ -122,25 +122,25 @@ uv run pytest <repo>\\skills\\cst-runtime-cli\\tests -v
 
 ### 常见 CST 陷阱
 
-| 问题 | 原因 | 处理 |
-|------|------|------|
-| run_id 0 是别名 | 永远指向当前结果 | 导出时跳过 |
-| 远场每轮覆盖 | 新仿真覆盖旧远场 | 每轮 export-run-results |
-| 远场导出后不可 save | CST 进入错误状态 | close(save=False) |
-| modeler/results session 分离 | 不同 session 不同状态 | 仿真后关 modeler，再开 results |
-| S11 不是 dB | ydata 是复数 | `20*log10(hypot(real,imag))` |
-| modeler 未被废弃 | `add_to_history` 仍是入口 | 用 `add_to_history` |
-| model3d 不是建模接口 | 只是历史记录开关 | 建模仍用 modeler |
+| 问题                         | 原因                        | 处理                           |
+| ---------------------------- | --------------------------- | ------------------------------ |
+| run_id 0 是别名              | 永远指向当前结果            | 导出时跳过                     |
+| 远场每轮覆盖                 | 新仿真覆盖旧远场            | 每轮 export-run-results        |
+| 远场导出后不可 save          | CST 进入错误状态            | close(save=False)              |
+| modeler/results session 分离 | 不同 session 不同状态       | 仿真后关 modeler，再开 results |
+| S11 不是 dB                  | ydata 是复数                | `20*log10(hypot(real,imag))` |
+| modeler 未被废弃             | `add_to_history` 仍是入口 | 用`add_to_history`           |
+| model3d 不是建模接口         | 只是历史记录开关            | 建模仍用 modeler               |
 
 ### VBA 拼装规则
 
-| 参数类型 | Python 传入 | VBA 输出 | 引号 |
-|---------|------------|---------|------|
-| str | `"brick1"` | `"brick1"` | 加 |
-| float | `10.0` | `10.0` | 不加 |
-| int | `5` | `5` | 不加 |
-| bool | `True` | `True` | 不加 |
-| enum | `FieldType.EFIELD` | `"Efield"` | 加（`.value`） |
+| 参数类型 | Python 传入          | VBA 输出     | 引号             |
+| -------- | -------------------- | ------------ | ---------------- |
+| str      | `"brick1"`         | `"brick1"` | 加               |
+| float    | `10.0`             | `10.0`     | 不加             |
+| int      | `5`                | `5`        | 不加             |
+| bool     | `True`             | `True`     | 不加             |
+| enum     | `FieldType.EFIELD` | `"Efield"` | 加（`.value`） |
 
 ### 时序约定
 
@@ -189,9 +189,9 @@ devkit/
 
 ## 8. 外部资源
 
-| 资源 | URL |
-|------|-----|
+| 资源              | URL                                                           |
+| ----------------- | ------------------------------------------------------------- |
 | CST 内建 VBA 文档 | `<CST_INSTALL>\Online Help\mergedProjects\VBA_3D\index.htm` |
-| CST 官方社区 | `3dswym.3dexperience.3ds.com/` |
-| EDAboard CST | `edaboard.com/forums/cst-microwave.242/` |
-| CST VBA 在线镜像 | `mweda.com/cst/cst2013/` |
+| CST 官方社区      | `3dswym.3dexperience.3ds.com/`                              |
+| EDAboard CST      | `edaboard.com/forums/cst-microwave.242/`                    |
+| CST VBA 在线镜像  | `mweda.com/cst/cst2013/`                                    |

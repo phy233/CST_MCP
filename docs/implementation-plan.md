@@ -94,32 +94,32 @@ def safe_connect_to_any():
 
 | # | 缺口 | MATLAB 文件 | 影响范围 |
 |---|------|------------|---------|
-| 1 | WCS 坐标系操作 | `Modeling/activateWCS.m`, `activateWCSGlobal_VBAOnly.m` | 阵列建模、单元放置 |
-| 2 | Translate 变换 | `Modeling/translationObj.m` | 复制-平移阵列 |
-| 3 | Floquet 端口 | `Simulation/setFloquetPort.m` | 周期边界仿真 |
-| 4 | 逐面边界设置 | `Simulation/setUnitBoundary.m` | 单元格仿真 |
-| 5 | 阵列建模框架 | `ArrayProcess/arrayModeling.m`, `fastArrayModeling.m` | 超表面整体建模 |
-| 6 | Arc 曲线 | `Modeling/defineArc.m`, `defineArcBlock.m` | C-ring 等曲线结构 |
-| 7 | 组件删除 | `Modeling/deleteComponent.m` | 组件管理 |
+| 1 | ~~WCS 坐标系操作~~ ✅已完成 | `Modeling/activateWCS.m`, `activateWCSGlobal_VBAOnly.m` | 阵列建模、单元放置 |
+| 2 | ~~Translate 变换~~ ✅已完成 | `Modeling/translationObj.m` | 复制-平移阵列 |
+| 3 | ~~Floquet 端口~~ ✅已完成 | `Simulation/setFloquetPort.m` | 周期边界仿真 |
+| 4 | ~~逐面边界设置~~ ✅已完成 | `Simulation/setUnitBoundary.m` | 单元格仿真 |
+| 5 | ~~阵列建模框架~~ ✅已完成 | `ArrayProcess/arrayModeling.m`, `fastArrayModeling.m` | 超表面整体建模 |
+| 6 | ~~Arc 曲线~~ ✅已完成 | `Modeling/defineArc.m`, `defineArcBlock.m` | C-ring 等曲线结构 |
+| 7 | ~~组件删除~~ ✅已完成 | `Modeling/deleteComponent.m` | 组件管理 |
 
 ### 2.3 P1 缺口（核心流程辅助）
 
 | # | 缺口 | MATLAB 文件 | 影响范围 |
 |---|------|------------|---------|
-| 8 | 程序化材料定义 | `Modeling/defineMaterial.m` | 动态创建新材料 |
-| 9 | 结果删除 | `Postprocessing/deleteResult.m` | 重跑仿真前清理 |
-| 10 | 结构重建 | `AssistFunction/updateStructure.m` | 参数修改后重建 |
-| 11 | 参数存在检查 | `AssistFunction/ensureParameterExist.m` | 参数校验 |
-| 12 | 材料存在检查 | `AssistFunction/check_material_exists.m` | 材料校验 |
-| 13 | 单元格参数化类 | `MetaUnitInfo/unit_Cyuanhuan.m` 等 | 编码→几何映射 |
-| 14 | S 参数频率插值 | `Postprocessing/getSParamAtFreq.m` | 精确频率点提取 |
+| 8 | ~~程序化材料定义~~ ✅已完成 | `Modeling/defineMaterial.m` | 动态创建新材料 |
+| 9 | ~~结果删除~~ ✅已完成 | `Postprocessing/deleteResult.m` | 重跑仿真前清理 |
+| 10 | ~~结构重建~~ ✅已完成 | `AssistFunction/updateStructure.m` | 参数修改后重建 |
+| 11 | ~~参数存在检查~~ ✅已完成 | `AssistFunction/ensureParameterExist.m` | 参数校验 |
+| 12 | ~~材料存在检查~~ ✅已完成 | `AssistFunction/check_material_exists.m` | 材料校验 |
+| 13 | ~~单元格参数化类~~ ✅已完成 | `MetaUnitInfo/unit_Cyuanhuan.m` 等 | 编码→几何映射 |
+| 14 | ~~S 参数频率插值~~ ✅已完成 | `Postprocessing/getSParamAtFreq.m` | 精确频率点提取 |
 
 ### 2.4 P2 缺口（高级功能）
 
 | # | 缺口 | MATLAB 文件 | 影响范围 |
 |---|------|------------|---------|
-| 15 | 参数扫频 + LUT | `CodeMataUnitProcess/crossProcess.m` | 自动化扫参 |
-| 16 | LUT 离线重建 | `CodeMataUnitProcess/rebuildLUT_Offline.m` | 数据后处理 |
+| 15 | ~~参数扫频 + LUT~~ ✅已完成 | `CodeMataUnitProcess/crossProcess.m` | 自动化扫参 |
+| 16 | ~~LUT 离线重建~~ ✅已完成 | `CodeMataUnitProcess/rebuildLUT_Offline.m` | 数据后处理 |
 | 17 | CST 导出文件解析 | `Postprocessing/disign_for_manual_export/` | 离线分析 |
 | 18 | 相位量化 | `Postprocessing/diffractionPhaseQuant.m` | D2NN 算法 |
 | 19 | FD 求解器配置 | `Simulation/setFrequencySolver.m` | 频域求解器 |
@@ -230,6 +230,8 @@ print(result["ydata"][0])  # 第一个频率点的 Re/Im
 ---
 
 ## 四、标准库风格拆分方案
+
+> ✅ **状态：已完成 (Commit b3e5eba7等)**
 
 > 目标：将 CST 控制代码拆分为多个独立小文件，每个文件可单独 import 使用，类似 Python 标准库风格。
 
