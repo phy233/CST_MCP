@@ -150,6 +150,13 @@ def _gui_add_to_history(project_path: str, command: str, history_name: str, proj
         )
 
 
+# NOTE:
+# This function executes arbitrary VBA immediately.
+# It intentionally bypasses _add_vba_history because
+# execute_vba_code() semantics differ from History Tree execution.
+#
+# The fallback add_to_history() is compatibility logic and is
+# intentionally excluded from Phase-1 Centralization.
 def _gui_execute_vba(project: Any, code: str) -> dict[str, Any]:
     errors: list[str] = []
     for entrypoint in ("schematic",):
