@@ -73,7 +73,14 @@ def build_array(
             return {"status": "error", "message": "unit_builder 必须返回 'component' 和 'solids'"}
 
         # 3. 遍历坐标，执行复制和平移
+        keep_reference = False
         for idx, (x, y, z) in enumerate(coordinates):
+            if abs(x) < 1e-9 and abs(y) < 1e-9 and abs(z) < 1e-9:
+                # CST 的 Transform.Translate 向量如果为 (0,0,0) 会抛出运行时异常，
+                # 导致整个 Batch 被 CST 回滚。因此，直接保留参考单元代替复制。
+                keep_reference = True
+                continue
+
             for solid in solids:
                 solid_full_name = f"{component}:{solid}"
                 # 将实体复制并平移到目标位置
@@ -87,9 +94,10 @@ def build_array(
                     destination=component,
                 )
         
-        # 4. 循环结束后，删除原点处的参考模型
-        for solid in solids:
-            _delete_entity(project_path, name=solid, component=component)
+        # 4. 循环结束后，按需删除原点处的参考模型
+        if not keep_reference:
+            for solid in solids:
+                _delete_entity(project_path, name=solid, component=component)
             
         # 5. 提交 Batch
         return _flush_batch(project_path)
