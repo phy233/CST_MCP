@@ -22,6 +22,8 @@ from ..core.session import open_project as _open_project
 from ..core.session import close_project as _close_project
 from ..core.session import inspect as _inspect
 from ..core.session import quit_cst as _quit_cst
+from ..core.session import create_blank_project as _create_blank_project
+from ..core.project import save_project as _save_project
 from ..core.identity import list_open_projects as _list_open_projects
 
 
@@ -40,6 +42,21 @@ def open_project(project_path: str) -> dict[str, Any]:
     result = _open_project(project_path)
     if result.get("status") == "error":
         raise RuntimeError(result.get("message", "Failed to open project, check if a hung process, incorrect path, or license issue."))
+    return result
+
+
+def create_blank_project(project_path: str) -> dict[str, Any]:
+    """创建一个全新的空白 CST 工程。
+
+    Args:
+        project_path: .cst 文件的绝对路径。
+
+    Returns:
+        包含 CST 状态信息和工程详情的字典。
+    """
+    result = _create_blank_project(project_path)
+    if result.get("status") == "error":
+        raise RuntimeError(result.get("message", "Failed to create blank project"))
     return result
 
 
@@ -72,6 +89,21 @@ def inspect(project_path: str = "") -> dict[str, Any]:
         包含环境状态信息的字典
     """
     return _inspect(project_path)
+
+
+def save_project(project_path: str) -> dict[str, Any]:
+    """保存当前的 CST 工程。
+
+    Args:
+        project_path: .cst 文件的绝对路径。
+
+    Returns:
+        包含执行信息的字典。
+    """
+    result = _save_project(project_path)
+    if result.get("status") == "error":
+        raise RuntimeError(result.get("message", "Failed to save project"))
+    return result
 
 
 def quit_cst(project_path: str = "") -> dict[str, Any]:
