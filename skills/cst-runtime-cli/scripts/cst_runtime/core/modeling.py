@@ -4,6 +4,7 @@ import difflib
 from pathlib import Path
 from typing import Any
 
+from . import buffer
 from .errors import error_response
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
@@ -11,6 +12,9 @@ from .utils import abs_project_path as _abs_project_path
 
 def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str], project: Any = None) -> dict[str, Any]:
     normalized_project = _abs_project_path(project_path)
+    if buffer.is_batch_mode(normalized_project):
+        buffer.append_to_batch(normalized_project, vba_lines)
+        return {"status": "success", "project_path": normalized_project}
     if project is None:
         project, status = attach_expected_project(normalized_project)
         if project is None:
@@ -30,6 +34,40 @@ def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str],
 
 def _single_vba(project_path: str, history_name: str, vba: str, project: Any = None) -> dict[str, Any]:
     return _add_vba_history(project_path, history_name, [vba], project=project)
+
+
+def begin_batch(project_path: str, summary: str = "Batch Execution") -> dict[str, Any]:
+    normalized_project = _abs_project_path(project_path)
+    try:
+        buffer.begin_batch(normalized_project, summary=summary)
+        return {"status": "success", "project_path": normalized_project}
+    except RuntimeError as exc:
+        return error_response(
+            "begin_batch_failed", str(exc),
+            project_path=normalized_project,
+            runtime_module="cst_runtime.modeling",
+        )
+
+
+def flush_batch(project_path: str) -> dict[str, Any]:
+    normalized_project = _abs_project_path(project_path)
+    try:
+        name, script = buffer.pop_batch(normalized_project)
+    except RuntimeError as exc:
+        return error_response(
+            "flush_batch_failed", str(exc),
+            project_path=normalized_project,
+            runtime_module="cst_runtime.modeling",
+        )
+    if not script.strip():
+        return {"status": "success", "project_path": normalized_project, "message": "empty batch, nothing to flush"}
+    return _add_vba_history(normalized_project, name, [script])
+
+
+def discard_batch(project_path: str) -> dict[str, Any]:
+    normalized_project = _abs_project_path(project_path)
+    buffer.discard_batch(normalized_project)
+    return {"status": "success", "project_path": normalized_project}
 
 
 _BUILTIN_MATERIALS = frozenset({

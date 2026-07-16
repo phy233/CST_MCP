@@ -1,60 +1,63 @@
-import time
-from dataclasses import dataclass, field
+"""buffer.py — Pure data module for VBA command buffering.
+
+Manages buffered VBA commands per project session.
+Does not interact with COM or CST — the actual "send to CST"
+is the caller's responsibility (see modeling.flush_batch).
+"""
+from __future__ import annotations
+
 from typing import Dict, List, Tuple
 
-@dataclass
-class Command:
-    """Represents a single VBA operation for batch execution."""
-    name: str
-    vba_script: str
-    timestamp: float = field(default_factory=time.time)
 
 class CommandBuffer:
-    """Manages a buffered list of VBA commands for batch execution."""
-    def __init__(self) -> None:
-        self.commands: List[Command] = []
+    """Buffered VBA commands for a single project session."""
 
-    def append(self, name: str, vba_script: str) -> None:
-        self.commands.append(Command(name=name, vba_script=vba_script))
+    def __init__(self, summary: str) -> None:
+        self.summary = summary
+        self._scripts: List[str] = []
+
+    def append(self, vba_script: str) -> None:
+        self._scripts.append(vba_script)
 
     def get_vba_script(self) -> str:
-        # 移除 VBA 注释，直接拼接指令，并在末尾补一个换行符
-        scripts = [cmd.vba_script for cmd in self.commands if cmd.vba_script.strip()]
+        scripts = [s for s in self._scripts if s.strip()]
         if not scripts:
             return ""
         return "\n".join(scripts) + "\n"
-    
-    def get_summary_name(self) -> str:
-        names = [cmd.name for cmd in self.commands if cmd.name]
-        if not names:
-            return "Batch Execution"
-        
-        summary = ", ".join(names[:3])
-        if len(names) > 3:
-            summary += f" and {len(names) - 3} more"
-        return f"Batch: {summary}"
 
-# 全局映射：将 session_id (即标准化后的项目路径) 映射到其专属的 CommandBuffer
+
+# session_id (normalized project path) -> CommandBuffer
 _buffers: Dict[str, CommandBuffer] = {}
 
-def begin_batch(session_id: str) -> None:
-    """为特定的 session 开启批量缓冲模式。"""
-    _buffers[session_id] = CommandBuffer()
+
+def begin_batch(session_id: str, summary: str = "Batch Execution") -> None:
+    """Start a new batch. Raises RuntimeError if already active."""
+    if session_id in _buffers:
+        raise RuntimeError(f"Batch already active for session: {session_id}")
+    _buffers[session_id] = CommandBuffer(summary=summary)
+
 
 def is_batch_mode(session_id: str) -> bool:
-    """检查特定 session 是否处于批量缓冲模式。"""
+    """Check whether the given session has an active batch."""
     return session_id in _buffers
 
-def append_to_batch(session_id: str, name: str, lines: List[str]) -> None:
-    """向缓冲池追加指令。"""
-    buffer = _buffers.get(session_id)
-    if buffer:
-        buffer.append(name=name, vba_script="\n".join(lines))
+
+def append_to_batch(session_id: str, vba_lines: List[str]) -> None:
+    """Append VBA lines to the active batch. Raises if no active batch."""
+    buf = _buffers.get(session_id)
+    if buf is None:
+        raise RuntimeError(f"No active batch for session: {session_id}")
+    buf.append("\n".join(vba_lines))
+
 
 def pop_batch(session_id: str) -> Tuple[str, str]:
-    """取出并清除特定 session 的缓冲区内容，返回 (History Name, VBA Script)。"""
-    buffer = _buffers.pop(session_id, None)
-    if not buffer:
-        return "", ""
-    return buffer.get_summary_name(), buffer.get_vba_script()
+    """Remove and return (summary, vba_script). Raises if no active batch."""
+    buf = _buffers.pop(session_id, None)
+    if buf is None:
+        raise RuntimeError(f"No active batch for session: {session_id}")
+    return buf.summary, buf.get_vba_script()
 
+
+def discard_batch(session_id: str) -> None:
+    """Discard the batch. No-op if not active (idempotent)."""
+    _buffers.pop(session_id, None)
