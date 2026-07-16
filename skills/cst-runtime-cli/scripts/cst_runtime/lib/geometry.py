@@ -319,7 +319,10 @@ def translate(
         f'    .Vector "{vector[0]}", "{vector[1]}", "{vector[2]}"',
         f'    .MultipleObjects "{"True" if multiple_objects else "False"}"',
         f'    .Repetitions "{repetitions}"',
+        '    .MultipleSelection "False"',
         f'    .Destination "{destination}"',
+        '    .Material ""',
+        '    .AutoDestination "True"',
         '    .Transform "Shape", "Translate"',
         "End With",
     ]
