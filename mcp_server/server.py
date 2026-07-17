@@ -40,7 +40,7 @@ def create_mcp_server():
         instructions=config.instructions,
     )
 
-    # Register all tools from lib layer
+    # Register all modular tools
     from .adapter import register_all_tools
 
     count = register_all_tools(mcp)
