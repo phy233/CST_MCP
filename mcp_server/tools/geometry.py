@@ -1,8 +1,11 @@
+"""MCP Tool definitions: CST Geometry operations."""
 from typing import Any
-from cst_runtime.core.proxy import call_cst
 
-async def define_brick(
-    project_path: str, component: str, name: str, material: str, 
+from ..proxy import call_cst
+
+
+def define_brick(
+    project_path: str, component: str, name: str, material: str,
     x_range: tuple[float, float], y_range: tuple[float, float], z_range: tuple[float, float]
 ) -> dict[str, Any]:
     """[WRITE] Create a 3D brick solid.
@@ -17,12 +20,12 @@ async def define_brick(
         z_range: A tuple of (zmin, zmax).
     """
     return call_cst(
-        "lib.geometry", "brick", 
-        project_path=project_path, component=component, name=name, 
+        "lib.geometry", "brick",
+        project_path=project_path, component=component, name=name,
         material=material, xrange=x_range, yrange=y_range, zrange=z_range
     )
 
-async def boolean_add(project_path: str, shape1: str, shape2: str) -> dict[str, Any]:
+def boolean_add(project_path: str, shape1: str, shape2: str) -> dict[str, Any]:
     """[WRITE] Boolean Add two solids.
 
     Args:
@@ -32,7 +35,7 @@ async def boolean_add(project_path: str, shape1: str, shape2: str) -> dict[str, 
     """
     return call_cst("lib.geometry", "boolean_add", project_path=project_path, shape1=shape1, shape2=shape2)
 
-async def boolean_subtract(project_path: str, target: str, tool: str) -> dict[str, Any]:
+def boolean_subtract(project_path: str, target: str, tool: str) -> dict[str, Any]:
     """[WRITE] Boolean Subtract one solid from another.
 
     Args:

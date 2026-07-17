@@ -1,7 +1,10 @@
+"""MCP Tool definitions: CST Parameter operations."""
 from typing import Any
-from cst_runtime.core.proxy import call_cst
 
-async def list_parameters(project_path: str) -> dict[str, Any]:
+from ..proxy import call_cst
+
+
+def list_parameters(project_path: str) -> dict[str, Any]:
     """[READ] List all global parameters and their current values.
 
     Args:
@@ -9,7 +12,7 @@ async def list_parameters(project_path: str) -> dict[str, Any]:
     """
     return call_cst("lib.parameters", "list_params", project_path=project_path)
 
-async def get_parameter(project_path: str, name: str) -> dict[str, Any]:
+def get_parameter(project_path: str, name: str) -> dict[str, Any]:
     """[READ] Get the value of a single parameter.
 
     Args:
@@ -18,7 +21,7 @@ async def get_parameter(project_path: str, name: str) -> dict[str, Any]:
     """
     return call_cst("lib.parameters", "get_param", project_path=project_path, name=name)
 
-async def set_parameter(project_path: str, name: str, value: float) -> dict[str, Any]:
+def set_parameter(project_path: str, name: str, value: float) -> dict[str, Any]:
     """[WRITE] Set the value of a parameter.
 
     Note: After modification, call rebuild-structure to apply.
@@ -30,7 +33,7 @@ async def set_parameter(project_path: str, name: str, value: float) -> dict[str,
     """
     return call_cst("lib.parameters", "set_param", project_path=project_path, name=name, value=value)
 
-async def set_parameters(project_path: str, params: dict[str, float]) -> dict[str, Any]:
+def set_parameters(project_path: str, params: dict[str, float]) -> dict[str, Any]:
     """[WRITE] Set multiple parameters at once.
 
     Args:
@@ -39,7 +42,7 @@ async def set_parameters(project_path: str, params: dict[str, float]) -> dict[st
     """
     return call_cst("lib.parameters", "set_params", project_path=project_path, params=params)
 
-async def parameter_exists(project_path: str, name: str) -> dict[str, Any]:
+def parameter_exists(project_path: str, name: str) -> dict[str, Any]:
     """[READ] Check if a specific parameter exists in the project.
 
     Args:

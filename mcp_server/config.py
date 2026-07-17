@@ -13,7 +13,7 @@ class MCPConfig:
     transport: str = "stdio"
 
     # Paths
-    cst_runtime_root: Path = field(default_factory=lambda: _find_cst_runtime_root())
+    worker_script: Path = field(default_factory=lambda: _find_worker_script())
     log_dir: Path = field(default_factory=lambda: Path.home() / ".cst-mcp" / "logs")
 
     # Tool settings
@@ -23,33 +23,37 @@ class MCPConfig:
 
     # Simulation
     default_poll_interval: int = 10
-    default_timeout: int = 3600
+    default_timeout: int = 120
 
     @property
     def instructions(self) -> str:
         return (
             "CST Studio Suite automation server. "
-            "113+ tools for electromagnetic simulation: modeling, solver control, "
-            "results extraction, farfield analysis, optimization. "
+            "Tools for electromagnetic simulation: session management, "
+            "geometry modeling, parameter control, solver operations. "
             "Tools tagged with [WRITE] modify CST projects; [READ] tools are safe. "
             "Always run 'inspect-session' first to check environment. "
             "Use 'start-simulation' + 'sim-status' for non-blocking simulation workflow."
         )
 
 
-def _find_cst_runtime_root() -> Path:
-    """Find the cst_runtime package root."""
-    # Try relative to this file
+def _find_worker_script() -> Path:
+    """Locate cst_worker.py relative to the project root.
+
+    Layout:
+        project_root/
+        ├── mcp_server/config.py   (this file)
+        └── skills/cst-runtime-cli/scripts/cst_worker.py
+    """
+    project_root = Path(__file__).resolve().parent.parent
     candidates = [
-        Path(__file__).parent.parent / "skills" / "cst-runtime-cli" / "scripts",
-        Path(__file__).parent.parent / "cst_runtime",
+        project_root / "skills" / "cst-runtime-cli" / "scripts" / "cst_worker.py",
     ]
     for candidate in candidates:
-        if (candidate / "cst_runtime" / "__init__.py").exists():
+        if candidate.exists():
             return candidate
-        if (candidate / "__init__.py").exists() and candidate.name == "cst_runtime":
-            return candidate.parent
-    return Path(__file__).parent.parent / "skills" / "cst-runtime-cli" / "scripts"
+    # Fallback: return first candidate path (will fail at runtime with clear error)
+    return candidates[0]
 
 
 def get_config() -> MCPConfig:
