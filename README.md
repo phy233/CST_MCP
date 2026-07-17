@@ -10,19 +10,19 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 113 �
 
 ## 核心能力
 
-| 分类 | 工具数 | 代表工具 |
-|------|-------|---------|
-| **几何建模** | 42 | `define-brick`, `define-cylinder`, `boolean-subtract`, `change-material`, `transform-shape` |
-| **工程操作** | 25 | `change-parameter`, `define-port`, `define-mesh`, `inspect-project`, `capture-3d-view` |
-| **结果读取** | 11 | `get-1d-result`, `get-2d-result`, `export-run-results`, `list-run-ids`, `generate-report` |
-| **优化** | 11 | `create-study`, `ask-study`, `tell-study`, `run-probe-phase`, `run-optimization-step` |
-| **会话管理** | 7 | `cst-session-open`, `cst-session-close`, `cst-session-quit`, `create-blank-project`, `save-project` |
-| **远场** | 4 | `export-farfield-grid`, `export-farfield-cut`, `inspect-farfield-monitors`, `inspect-model-view` |
-| **工作区** | 4 | `init-workspace`, `init-task`, `health-check`, `install-cst-libraries` |
-| **项目身份** | 4 | `verify-project-identity`, `infer-run-dir`, `wait-project-unlocked`, `list-open-projects` |
-| **审计** | 3 | `record-stage`, `update-status`, `stage-evidence` |
-| **DOE** | 2 | `design-probes`, `analyze-probes` |
-| **运行** | 2 | `prepare-run`, `get-run-context` |
+| 分类               | 工具数 | 代表工具                                                                                                      |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------- |
+| **几何建模** | 42     | `define-brick`, `define-cylinder`, `boolean-subtract`, `change-material`, `transform-shape`         |
+| **工程操作** | 25     | `change-parameter`, `define-port`, `define-mesh`, `inspect-project`, `capture-3d-view`              |
+| **结果读取** | 11     | `get-1d-result`, `get-2d-result`, `export-run-results`, `list-run-ids`, `generate-report`           |
+| **优化**     | 11     | `create-study`, `ask-study`, `tell-study`, `run-probe-phase`, `run-optimization-step`               |
+| **会话管理** | 7      | `cst-session-open`, `cst-session-close`, `cst-session-quit`, `create-blank-project`, `save-project` |
+| **远场**     | 4      | `export-farfield-grid`, `export-farfield-cut`, `inspect-farfield-monitors`, `inspect-model-view`      |
+| **工作区**   | 4      | `init-workspace`, `init-task`, `health-check`, `install-cst-libraries`                                |
+| **项目身份** | 4      | `verify-project-identity`, `infer-run-dir`, `wait-project-unlocked`, `list-open-projects`             |
+| **审计**     | 3      | `record-stage`, `update-status`, `stage-evidence`                                                       |
+| **DOE**      | 2      | `design-probes`, `analyze-probes`                                                                         |
+| **运行**     | 2      | `prepare-run`, `get-run-context`                                                                          |
 
 113 个工具各含 JSON Schema 定义，入参校验、输出格式统一。
 
@@ -49,14 +49,14 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 113 �
 
 内建 10+ 个运行时安全护栏，拦截已知 CST 陷阱：
 
-| 陷阱 | 表现 | 保护 |
-|------|------|------|
-| T2 | 改参后未重建模型直接仿真 | 拦截并提示 `next_action` |
-| T3 | 远场导出后 save 损坏工程 | 强制 `save=False` |
-| T4 | S11 复数据当 dB 用 | `20*log10(hypot(real,imag))` 转换 |
-| T5 | modeler/results session 混用 | 拒绝跨 session 操作 |
-| T8 | Abs(E) 当增益证据 | 拒绝非增益量 |
-| T13 | `StoreDoubleParameter` 只改参数表不重建模型 | 操作成功但附加警告 |
+| 陷阱 | 表现                                          | 保护                                |
+| ---- | --------------------------------------------- | ----------------------------------- |
+| T2   | 改参后未重建模型直接仿真                      | 拦截并提示`next_action`           |
+| T3   | 远场导出后 save 损坏工程                      | 强制`save=False`                  |
+| T4   | S11 复数据当 dB 用                            | `20*log10(hypot(real,imag))` 转换 |
+| T5   | modeler/results session 混用                  | 拒绝跨 session 操作                 |
+| T8   | Abs(E) 当增益证据                             | 拒绝非增益量                        |
+| T13  | `StoreDoubleParameter` 只改参数表不重建模型 | 操作成功但附加警告                  |
 
 每个 trap 触发时附带 `cst_raw` 上下文和 `next_action` 指导，帮助 agent 自动恢复。
 
@@ -137,8 +137,8 @@ uv run python -m cst_runtime export-run-results --args-file <args.json>
 
 解压到对应工具的 skills 目录：
 
-| AI 工具 | 路径 |
-|---------|------|
+| AI 工具                         | 路径                                                             |
+| ------------------------------- | ---------------------------------------------------------------- |
 | OpenCode / Cursor / Claude Code | `%USERPROFILE%\.config\opencode\skills\`（或其他工具对应路径） |
 
 解压后结构需包含 `skills/cst-runtime-cli/` 和 `skills/cst-runtime-optimization/`。
