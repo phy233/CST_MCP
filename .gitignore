@@ -2,3 +2,5 @@ __pycache__/
 *.cst
 test_*/
 *.json
+*_test/
+*.log

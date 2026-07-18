@@ -96,7 +96,20 @@ def open_project(project_path: str) -> dict[str, Any]:
 
     try:
         de = _connect_new_design_environment()
+        
+        # PROFILING
+        import time
+        from . import utils as core_utils
+        is_profile = hasattr(core_utils, "_PROFILE_DATA")
+        if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
+            core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
+            
         project = de.open_project(normalized_project)
+        
+        # PROFILING
+        if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
+            core_utils._PROFILE_DATA["t_com_end"] = time.perf_counter()
+            
         _OPENED_PROJECTS[normalized_project] = project
         gateway.on_session_open(normalized_project, "modeler")
         return {
@@ -171,9 +184,21 @@ def close_project(
     close_result: dict[str, Any] = a_status if project is None else {"status": "success"}
     if project is not None:
         try:
+            # PROFILING
+            import time
+            from . import utils as core_utils
+            is_profile = hasattr(core_utils, "_PROFILE_DATA")
+            if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
+                core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
+                
             if effective_save:
                 project.save()
             project.close()
+            
+            # PROFILING
+            if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
+                core_utils._PROFILE_DATA["t_com_end"] = time.perf_counter()
+                
             close_result = {
                 "status": "success",
                 "project_path": normalized_project,

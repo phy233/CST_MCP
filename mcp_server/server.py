@@ -54,6 +54,10 @@ def create_mcp_server():
 
 def main():
     """Run the MCP server with stdio transport."""
+    import os
+    # 强制开启 Profiling，省去在 OpenCode 里配置环境变量的麻烦
+    os.environ["CST_RUNTIME_PROFILE"] = "1"
+    
     mcp = create_mcp_server()
     config = get_config()
     mcp.run(transport=config.transport)

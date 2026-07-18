@@ -21,7 +21,20 @@ def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str],
             return status
     try:
         sCommand = "\n".join(vba_lines)
+        
+        # PROFILING
+        import time
+        from . import utils as core_utils
+        is_profile = hasattr(core_utils, "_PROFILE_DATA")
+        if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
+            core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
+            
         project.modeler.add_to_history(history_name, sCommand)
+        
+        # PROFILING
+        if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
+            core_utils._PROFILE_DATA["t_com_end"] = time.perf_counter()
+            
         return {"status": "success", "project_path": normalized_project}
     except Exception as exc:
         return error_response(
