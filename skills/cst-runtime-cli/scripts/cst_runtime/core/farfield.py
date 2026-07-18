@@ -9,10 +9,11 @@ from typing import Any
 
 from . import process as process_cleanup
 from . import gateway
-from .errors import error_response
+from .errors import error_response, UnsupportedFeatureError
 from .session import get_attached_project, open_project, close_project
 from .utils import abs_project_path, serialize_value
 from .modeling import _single_vba
+from .compatibility import get_model3d, get_tree_items, select_tree_item, get_farfield_calculator
 from ..analysis.farfield import (
     _extract_farfield_frequency_ghz,
     _build_farfield_angle_values,
@@ -180,7 +181,11 @@ def _gui_execute_vba(project: Any, code: str) -> dict[str, Any]:
             errors.append(f"{entrypoint}: {str(exc)}")
 
     # CST 2026: model3d._execute_vba_code (private method)
-    m3d = getattr(project, "model3d", None)
+    try:
+        m3d = get_model3d(project)
+    except UnsupportedFeatureError:
+        m3d = None
+
     if m3d is not None:
         execute = getattr(m3d, "_execute_vba_code", None)
         if callable(execute):
@@ -293,13 +298,13 @@ def _read_farfield_scalar_grid_via_calculator(
         return error_response("invalid_angle_range", str(exc), runtime_module="cst_runtime.farfield")
 
     try:
-        calculator = project.model3d.FarfieldCalculator
+        calculator = get_farfield_calculator(project)
         calculator.Reset()
         calculator.SetScaleLinear(False)
         calculator.DBUnit("0")
 
         tree_path = f"Farfields\\{farfield_name}"
-        project.model3d.SelectTreeItem(tree_path)
+        select_tree_item(project, tree_path)
         for phi_value in phi_values:
             for theta_value in theta_values:
                 calculator.AddListEvaluationPoint(
@@ -389,7 +394,7 @@ def discover_farfield_monitors(project_path: str) -> dict[str, Any]:
             )
         project = open_result["project"]
         discovered: list[str] = []
-        for item in project.model3d.get_tree_items():
+        for item in get_tree_items(project):
             tree_path = str(item)
             low = tree_path.lower()
             if "farfields" in low and "\\farfield" in low and "cut" not in low:

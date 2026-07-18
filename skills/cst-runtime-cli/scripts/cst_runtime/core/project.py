@@ -9,6 +9,7 @@ from . import gateway
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _single_vba
+from .compatibility import get_model3d, get_tree_items
 
 def _connect_new_design_environment():
     import cst.interface
@@ -69,7 +70,7 @@ def list_parameters(project_path: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
-        m3d = project.model3d
+        m3d = get_model3d(project)
         params: dict[str, Any] = {}
         # Try to load descriptions from Model/Parameters.json
         desc_map: dict[str, str] = {}
@@ -119,7 +120,7 @@ def list_entities(project_path: str, component: str = "") -> dict[str, Any]:
     if project is None:
         return status
     try:
-        all_items = project.modeler.get_tree_items()
+        all_items = get_tree_items(project)
         sep = "\\"
         entity_paths = [item for item in all_items if str(item).startswith("Components" + sep)]
         entities: list[dict[str, str]] = []
