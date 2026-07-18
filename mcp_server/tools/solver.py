@@ -1,54 +1,117 @@
 """MCP Tool definitions: CST Solver operations."""
-from typing import Any
+from typing import Any, Sequence, Tuple, List, Dict, Optional, Union
 
 from ..proxy import call_cst
 
-
-def set_frequency_range(project_path: str, fmin: float, fmax: float) -> dict[str, Any]:
-    """[WRITE] Set the solver frequency range.
-
-    Args:
-        project_path: Absolute path to the .cst file.
-        fmin: Minimum frequency (e.g. in GHz based on project units).
-        fmax: Maximum frequency.
+def start(project_path: str) -> dict[str, Any]:
     """
-    return call_cst("lib.solver", "set_frequency_range", project_path=project_path, fmin=fmin, fmax=fmax)
-
-def rebuild_structure(project_path: str) -> dict[str, Any]:
-    """[WRITE] Rebuild the 3D structure (e.g. after parameter changes).
+    启动仿真 (阻塞模式，直到完成才会返回)。
 
     Args:
-        project_path: Absolute path to the .cst file.
-    """
-    return call_cst("lib.solver", "rebuild", project_path=project_path)
+        project_path: .cst 文件的绝对路径
 
-def start_simulation(project_path: str) -> dict[str, Any]:
-    """[SESSION] Start the solver (runs non-blocking in the background).
-
-    After calling this, use 'sim-status' to poll whether the simulation
-    has finished. Do NOT block waiting — simulations can take hours.
-
-    Args:
-        project_path: Absolute path to the .cst file.
-    """
-    return call_cst("lib.solver", "start_async", project_path=project_path)
-
-def sim_status(project_path: str) -> dict[str, Any]:
-    """[READ] Check whether a simulation is currently running.
-
-    Use this to poll simulation progress after calling 'start-simulation'.
-
-    Args:
-        project_path: Absolute path to the .cst file.
+    Raises:
+        RuntimeError: 如果无法启动仿真时抛出
 
     Returns:
-        Dict with 'running' (bool) indicating if the simulation is still active.
+        dict[str, Any]: The execution result from CST.
+    """
+    return call_cst("lib.solver", "start", project_path=project_path)
+
+def wait(project_path: str, timeout: int = 3600, interval: int = 10) -> dict[str, Any]:
+    """
+    等待仿真完成。
+
+    Args:
+        project_path: .cst 文件的绝对路径
+        timeout: 最大等待时间 (秒)，默认 3600 秒 (1小时)
+        interval: 轮询状态的间隔 (秒)，默认 10 秒
+
+    Returns:
+        如果仿真在超时前完成则返回 True，如果超时未完成则返回 False
+    """
+    return call_cst("lib.solver", "wait", project_path=project_path, timeout=timeout, interval=interval)
+
+def is_running(project_path: str) -> dict[str, Any]:
+    """
+    检查仿真当前是否正在运行。
+
+    Args:
+        project_path: .cst 文件的绝对路径
+
+    Returns:
+        如果正在运行返回 True，否则返回 False
     """
     return call_cst("lib.solver", "is_running", project_path=project_path)
 
+def stop(project_path: str) -> dict[str, Any]:
+    """
+    手动停止正在运行的仿真。
+
+    Args:
+        project_path: .cst 文件的绝对路径
+
+    Raises:
+        RuntimeError: 如果无法停止仿真时抛出
+
+    Returns:
+        dict[str, Any]: The execution result from CST.
+    """
+    return call_cst("lib.solver", "stop", project_path=project_path)
+
+def rebuild(project_path: str) -> dict[str, Any]:
+    """
+    根据最新的参数重建几何结构 (相当于点击 CST 里的 F7)。
+
+    Args:
+        project_path: .cst 文件的绝对路径
+
+    Raises:
+        RuntimeError: 如果重建失败时抛出
+
+    Returns:
+        dict[str, Any]: The execution result from CST.
+    """
+    return call_cst("lib.solver", "rebuild", project_path=project_path)
+
+def delete_results(project_path: str) -> dict[str, Any]:
+    """
+    删除当前工程的所有仿真结果。
+
+    Args:
+        project_path: .cst 文件的绝对路径
+
+    Raises:
+        RuntimeError: 如果无法删除结果时抛出
+
+    Returns:
+        dict[str, Any]: The execution result from CST.
+    """
+    return call_cst("lib.solver", "delete_results", project_path=project_path)
+
+def set_frequency_range(project_path: str, fmin: float, fmax: float) -> dict[str, Any]:
+    """
+    设置求解器的频率范围。
+
+    Args:
+        project_path: .cst 文件的绝对路径
+        fmin: 最小频率 (GHz)
+        fmax: 最大频率 (GHz)
+
+    Raises:
+        RuntimeError: 如果无法设置频率范围时抛出
+
+    Returns:
+        dict[str, Any]: The execution result from CST.
+    """
+    return call_cst("lib.solver", "set_frequency_range", project_path=project_path, fmin=fmin, fmax=fmax)
+
 SOLVER_TOOLS = [
-    {"name": "define-frequency-range", "handler": set_frequency_range},
-    {"name": "rebuild-structure", "handler": rebuild_structure},
-    {"name": "start-simulation", "handler": start_simulation},
-    {"name": "sim-status", "handler": sim_status},
+    {"name": "start", "handler": start},
+    {"name": "wait", "handler": wait},
+    {"name": "is-running", "handler": is_running},
+    {"name": "stop", "handler": stop},
+    {"name": "rebuild", "handler": rebuild},
+    {"name": "delete-results", "handler": delete_results},
+    {"name": "set-frequency-range", "handler": set_frequency_range},
 ]

@@ -1,80 +1,85 @@
-"""MCP Tool definitions: CST Session management."""
-from typing import Any
+"""MCP Tool definitions: CST Session operations."""
+from typing import Any, Sequence, Tuple, List, Dict, Optional, Union
 
 from ..proxy import call_cst
 
-
 def open_project(project_path: str) -> dict[str, Any]:
-    """[SESSION] Open an existing CST project.
+    """
+    打开 CST 工程 (Public API)。
 
-    Args:
-        project_path: Absolute path to the .cst file.
+    Args (参数):
+        project_path: .cst 文件的绝对路径。
+
+    Returns (返回值):
+        包含 CST 状态信息和工程详情的字典。
+
+    Raises (抛出异常):
+        RuntimeError: 如果由于进程卡死、路径错误或许可证问题导致工程无法打开时抛出。
+
+    Returns:
+        dict[str, Any]: The execution result from CST.
     """
     return call_cst("lib.session", "open_project", project_path=project_path)
 
-def create_blank_project(project_path: str) -> dict[str, Any]:
-    """[SESSION] Create a new blank CST project.
-
-    Args:
-        project_path: Absolute path to the new .cst file.
-    """
-    return call_cst("lib.session", "create_blank_project", project_path=project_path)
-
 def close_project(project_path: str, save: bool = False) -> dict[str, Any]:
-    """[SESSION] Close a CST project.
+    """
+    关闭CST工程.
 
     Args:
-        project_path: Absolute path to the .cst file.
-        save: Whether to save changes before closing.
+        project_path: .cst 文件的绝对路径。
+        save: 关闭前是否保存
+
+    Returns:
+        包含 CST 状态信息和工程详情的字典。
+
+    Raises:
+        RuntimeError: 如果工程无法关闭，抛出错误
     """
     return call_cst("lib.session", "close_project", project_path=project_path, save=save)
 
-def inspect_session(project_path: str = "") -> dict[str, Any]:
-    """[READ] Inspect the state of the CST environment.
+def create_blank_project(project_path: str) -> dict[str, Any]:
+    """
+    创建一个全新的空白 CST 工程。
 
     Args:
-        project_path: (Optional) Path to a specific project. Leave empty for global state.
+        project_path: .cst 文件的绝对路径。
+
+    Returns:
+        包含 CST 状态信息和工程详情的字典。
     """
-    return call_cst("lib.session", "inspect", project_path=project_path)
+    return call_cst("lib.session", "create_blank_project", project_path=project_path)
 
 def save_project(project_path: str) -> dict[str, Any]:
-    """[WRITE] Save the current CST project.
+    """
+    保存当前的 CST 工程。
 
     Args:
-        project_path: Absolute path to the .cst file.
+        project_path: .cst 文件的绝对路径。
+
+    Returns:
+        包含执行信息的字典。
     """
     return call_cst("lib.session", "save_project", project_path=project_path)
 
-def quit_cst(project_path: str = "") -> dict[str, Any]:
-    """[SESSION] Quit the CST Design Environment completely.
+def quit_cst(project_path: str = '') -> dict[str, Any]:
+    """
+    完全退出 CST 软件进程。
 
     Args:
-        project_path: (Optional) Path to the current project context.
+        project_path: （可选）特定工程的路径
+
+    Returns:
+        包含状态的字典
+
+    Raises:
+        RuntimeError: 如果 CST 进程无法退出时抛出
     """
     return call_cst("lib.session", "quit_cst", project_path=project_path)
 
-def list_open_projects() -> dict[str, Any]:
-    """[READ] List all currently open CST projects.
-
-    Returns the raw list directly from proxy.
-    """
-    return call_cst("lib.session", "list_open")
-
-def is_project_locked(project_path: str) -> dict[str, Any]:
-    """[READ] Check if a CST project is locked (running or crashed).
-
-    Args:
-        project_path: Absolute path to the .cst file.
-    """
-    return call_cst("lib.session", "is_locked", project_path=project_path)
-
 SESSION_TOOLS = [
     {"name": "open-project", "handler": open_project},
-    {"name": "create-blank-project", "handler": create_blank_project},
     {"name": "close-project", "handler": close_project},
+    {"name": "create-blank-project", "handler": create_blank_project},
     {"name": "save-project", "handler": save_project},
-    {"name": "inspect-session", "handler": inspect_session},
     {"name": "quit-cst", "handler": quit_cst},
-    {"name": "list-open-projects", "handler": list_open_projects},
-    {"name": "is-project-locked", "handler": is_project_locked},
 ]
