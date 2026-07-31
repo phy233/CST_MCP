@@ -250,6 +250,9 @@ def _atomic_operations() -> dict[str, OperationSpec]:
                 value = _handler(args)
             if not isinstance(value, dict):
                 value = {"status": "success", "result": value}
+            else:
+                # IPC 边界只暴露普通 JSON 字典，不泄漏 Python 专用结果类型。
+                value = dict(value)
             output = captured.getvalue().strip()
             if output:
                 value.setdefault("stdout", output)
@@ -308,7 +311,7 @@ def invoke(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]
         result = spec.handler(dict(arguments or {}))
         if not isinstance(result, dict):
             return {"status": "success", "result": result}
-        return result
+        return dict(result)
     except ValueError as exc:
         return {
             "status": "error",
@@ -318,7 +321,7 @@ def invoke(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]
     except Exception as exc:
         return {
             "status": "error",
-            "error_type": type(exc).__name__,
+            "error_type": "internal_error",
             "message": str(exc),
         }
 

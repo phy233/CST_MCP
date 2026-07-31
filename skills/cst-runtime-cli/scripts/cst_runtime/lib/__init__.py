@@ -9,6 +9,11 @@ from typing import Any
 
 
 __all__ = [
+    "OperationResult",
+    "CSTOperationError",
+    "as_result",
+    "success_result",
+    "error_result",
     "session",
     "parameters",
     "geometry",
@@ -22,7 +27,25 @@ __all__ = [
     "farfield",
     "optimization",
     "batch",
+    "project",
+    "modeling",
+    "simulation",
+    "identity",
+    "audit",
+    "evidence",
+    "doe",
+    "workspace",
+    "environment",
+    "experiments",
 ]
+
+from .contracts import (
+    CSTOperationError,
+    OperationResult,
+    as_result,
+    error_result,
+    success_result,
+)
 
 
 def __getattr__(name: str) -> Any:
