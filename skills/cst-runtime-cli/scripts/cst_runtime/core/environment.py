@@ -512,10 +512,10 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
     ws_checks: list[dict[str, Any]] = []
 
     # 1a. Python version
-    py_ok = sys.version_info >= (3, 12)
+    py_ok = sys.version_info[:2] == (3, 9)
     ws_checks.append(_r("python_version", "pass" if py_ok else "error",
-        version=sys.version, required=">=3.12",
-        user_action="Install Python 3.12+" if not py_ok else ""))
+        version=sys.version, required="==3.9",
+        user_action="使用 CST 兼容的 Python 3.9 worker 启动 cst-runtime" if not py_ok else ""))
 
     # 1b. uv
     uv_path = shutil.which("uv")

@@ -16,13 +16,13 @@ MCP 客户端 (Claude Desktop / opencode / ...)
 │   mcp_server/ → FastMCP, 注册 20 个工具          │
 │   mcp_server/proxy.py → 启动并管理 Worker 子进程 │
 └─────────────────────────────────────────────────┘
-    │  conda run -n cst39 python cst_worker.py
+    │  配置的 Python 3.9 worker executable -m cst_runtime.worker
     │  JSON-RPC over stdin/stdout
     ▼
 ┌─────────────────────────────────────────────────┐
 │ CST Core 层 — 低版本 Python (3.9)                │
 │   conda 环境 cst39                               │
-│   skills/cst-runtime-cli/scripts/cst_worker.py   │
+│   cst_runtime.worker（由 worker executable 启动） │
 │   → Registry / tools → cst_runtime.lib.*         │
 │   → cst_runtime.core.* → CST COM / VBA / Results │
 │   → cst.interface (COM) → CST Studio Suite       │
@@ -32,66 +32,74 @@ MCP 客户端 (Claude Desktop / opencode / ...)
 - **MCP 层**只负责 MCP 协议与工具注册，**禁止**直接 import `cst_runtime`（见 `proxy.py`  docstring）。
 - **公开业务边界**固定为 `cst_runtime.lib`；tools、CLI pipeline 和 workflow 禁止跨层调用 `core`。
 - **CST Core 层**必须用能导入 CST `python_cst_libraries` 的低版本 Python（CST 2022 对应 Python 3.9），因此固定在 conda 环境 `cst39` 中运行。
-- Worker 启动时从 `.cst_config.json` 读取 `cst_path` 并注入 `sys.path`，从而 `import cst.interface`。
+- Worker 启动时从 `.cst_config.json` 读取 `cst_path` 并注入 `sys.path`，从而 `import cst.interface`；MCP 进程只读取配置并创建子进程，不会导入 runtime。
 
 ## 前置条件
 
-| 组件 | 版本要求 | 本机路径（参考） |
-|------|----------|------------------|
-| CST Studio Suite | 2022+（含 `python_cst_libraries`） | `D:\Program Files (x86)\CST Studio Suite 2022\AMD64\python_cst_libraries` |
-| Miniconda / Anaconda | 任意 | `C:\Users\14163\miniconda3` |
-| conda 环境 `cst39` | Python 3.9 | `conda create -n cst39 python=3.9` |
-| uv 包管理器 | 任意 | `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
+| 组件                 | 版本要求                            | 本机路径（参考）                                                            |
+| -------------------- | ----------------------------------- | --------------------------------------------------------------------------- |
+| CST Studio Suite     | 2022+（含`python_cst_libraries`） | `D:\Program Files (x86)\CST Studio Suite 2022\AMD64\python_cst_libraries` |
+| Miniconda / Anaconda | 任意                                | `C:\Users\14163\miniconda3`                                               |
+| conda 环境`cst39`  | Python 3.9                          | `conda create -n cst39 python=3.9`                                        |
+| uv 包管理器          | 任意                                | `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"`              |
 
-## 关键：conda 必须加入用户 PATH
+## 两套安装流程
 
-MCP 层通过 `mcp_server/proxy.py` 执行以下命令启动 Worker：
-
-```python
-cmd_str = f'conda run -n cst39 --no-capture-output python "{worker_script}"'
-```
-
-这要求 **`conda` 命令在 PATH 中可解析**。MCP 客户端（Claude Desktop 等）以服务方式拉起 MCP Server 时继承的是用户登录环境，因此必须**永久加入用户 PATH**（仅当前会话临时设置会在客户端重启后失效）。
-
-将以下两项加入用户环境变量 `Path`：
-
-```
-C:\Users\14163\miniconda3\condabin
-C:\Users\14163\miniconda3\Scripts
-```
-
-> 注意：**不要**加入 `C:\Users\14163\miniconda3` 根目录，否则 base 环境的 `python.exe` 会遮蔽系统已有的 Python。
-
-PowerShell 一键执行（永久生效）：
+### 1. 在 CST Python 3.9 环境中部署 `cst-runtime`
 
 ```powershell
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-$toAdd = @("C:\Users\14163\miniconda3\condabin", "C:\Users\14163\miniconda3\Scripts")
-$entries = $userPath -split ';' | Where-Object { $_ }
-foreach ($p in $toAdd) { if ($entries -notcontains $p) { $entries += $p } }
-[Environment]::SetEnvironmentVariable("Path", ($entries -join ';'), "User")
+# 仅首次创建 worker 环境
+conda create -n cst39 python=3.9 -y
+
+# 获取该环境的解释器路径，并持久配置给 MCP 服务
+$env:CST_WORKER_PYTHON = "C:\Users\<用户名>\miniconda3\envs\cst39\python.exe"
+
+# 可选：部署一份 runtime 工作区副本；不要使用 uv 执行此命令
+& $env:CST_WORKER_PYTHON .\bootstrap.py --skill-path .\skills\cst-runtime-cli\scripts
 ```
 
-修改后**重启 MCP 客户端**（或注销重登）使其继承新 PATH。
+若使用部署后的副本，在 `.cst_config.json` 增加 `runtime.source_path`；否则默认使用仓库内 `skills/cst-runtime-cli/scripts`。worker executable 必须是 **Python 3.9**，不可填 `.venv\Scripts\python.exe`。
+
+```json
+{
+  "runtime": {
+    "worker_python": "C:\\Users\\<用户名>\\miniconda3\\envs\\cst39\\python.exe",
+    "source_path": "D:\\workspace\\.cst_runtime"
+  },
+  "project": {
+    "cst_path": "D:\\Program Files (x86)\\CST Studio Suite 2022\\AMD64\\python_cst_libraries"
+  }
+}
+```
+
+### 2. 在现代 Python 环境中安装 `cst-mcp`
+
+```powershell
+# Python 3.12+；uv 可自行下载受管解释器
+cd D:\My_Program\Python\CST_MCP
+uv sync --extra dev
+uv run cst-mcp
+```
+
+`cst-mcp` 不安装 `cst-runtime`，也不直接导入它。两者唯一连接是 `runtime.worker_python` 指定的可执行文件，以及进程间 stdin/stdout JSON-RPC。
 
 ## 安装步骤
 
 ```powershell
-# 1. 安装 uv（若未安装）
+# 1. 安装 uv（用于 cst-mcp 的现代 Python 环境；若未安装）
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# 2. 创建低版本 Worker 环境（若 cst39 不存在）
+# 2. 创建并配置 Python 3.9 worker（仅供 cst-runtime 使用）
 conda create -n cst39 python=3.9 -y
 
-# 3. 确认 .cst_config.json 指向本机 CST 库路径
-#    {"project": {"cst_path": "<CST安装目录>\\AMD64\\python_cst_libraries"}}
+# 3. 在 .cst_config.json 中同时设置 runtime.worker_python 和 project.cst_path
 
-# 4. 创建高版本虚拟环境并安装依赖（uv 自动下载 Python ≥3.12）
+# 4. 创建高版本虚拟环境并仅安装 cst-mcp 依赖
 cd D:\My_Program\Python\CST_MCP
 uv sync --extra dev
 ```
 
-`uv sync` 会：自动下载 CPython 3.12+（当前解析为 3.14）→ 创建 `.venv` → 安装 `mcp[cli]`、`pytest` 等 44 个包 → 以可编辑方式安装本项目（生成 `.venv\Scripts\cst-mcp.exe` 入口）。
+`uv sync` 会：自动下载 CPython 3.12+ → 创建 `.venv` → 安装 `mcp[cli]`、`pytest` 等依赖 → 以可编辑方式安装 `cst-mcp`（生成 `.venv\Scripts\cst-mcp.exe` 入口）。它不会安装或运行 `cst-runtime`。
 
 ## 验证
 
@@ -108,8 +116,7 @@ uv run pytest tests\ -v
 
 预期结果：
 
-- `verify_mcp.py`：Worker 启动成功，`list_open` 返回 `{'status': 'success', ...}`；kill 后自动重启（PID 变化）。
-- `pytest`：**12 passed, 13 failed 为当前已知正常状态**。13 个失败全部在 `tests/test_mcp_server.py`，原因是该测试文件仍引用旧版 adapter API（`list_available_tools` / `TOOL_SPECS` / `_wrap_lib_function` / `cst_runtime_root`），与当前实现不匹配——属于待修复的测试代码，**不是安装问题**。
+- `verify_mcp.py`：Worker 启动成功，`list_open` 返回 `{'status': 'success', ...}`；kill 后自动重启（PID 变化）
 
 ## MCP 客户端配置示例
 

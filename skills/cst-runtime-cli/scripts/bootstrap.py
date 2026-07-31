@@ -1,27 +1,29 @@
-"""Minimal bootstrap: deploy cst_runtime to workspace and run uv sync.
+"""将 cst_runtime 部署到供 Python 3.9 worker 使用的目录。
 
 Usage:
-  uv run python bootstrap.py --skill-path <skill-root>\\scripts
+  <Python 3.9 worker> bootstrap.py --skill-path <skill-root>\\scripts
 
 Agent flow:
   1. Read this file from skill -> Write as bootstrap.py at workspace root
-  2. uv run python bootstrap.py --skill-path <skill-root>\\scripts
+  2. <Python 3.9 worker> bootstrap.py --skill-path <skill-root>\\scripts
   3. If status=need_fallback: agent writes files manually -> retry
   4. On status=ready: delete bootstrap.py
 
 After success:
-  uv run python -m cst_runtime init-workspace ...
+  由 cst-mcp 使用配置的 worker executable 启动 cst_runtime。
 """
 from __future__ import annotations
 
-import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 
 def main() -> int:
+    if sys.version_info[:2] != (3, 9):
+        print("status=error")
+        print("message=cst-runtime 必须由 CST 兼容的 Python 3.9 worker 部署；请设置 CST_WORKER_PYTHON 后重试。")
+        return 1
     ws = Path.cwd().resolve()
     dst = ws / ".cst_runtime"
 
@@ -59,7 +61,7 @@ def main() -> int:
             "[project]\n"
             'name = "cst-runtime"\n'
             'version = "0.1.0"\n'
-            'requires-python = ">=3.12"\n'
+            'requires-python = ">=3.9,<3.10"\n'
             "\n"
             "[build-system]\n"
             'requires = ["setuptools"]\n'
@@ -75,36 +77,9 @@ def main() -> int:
         print("message=.cst_runtime/cst_runtime/ not found. Provide --skill-path or run fallback first.")
         return 1
 
-    # Workspace pyproject.toml
-    pyproject = ws / "pyproject.toml"
-    if not pyproject.exists():
-        pyproject.write_text(
-            "[project]\n"
-            'name = "cst-workspace"\n'
-            'version = "0.1.0"\n'
-            'requires-python = ">=3.12"\n'
-            'dependencies = ["cst-runtime"]\n'
-            "\n"
-            "[tool.uv.sources]\n"
-            'cst-runtime = { path = ".cst_runtime", editable = true }\n',
-            encoding="utf-8",
-        )
-
-    # uv sync
-    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
-    try:
-        r = subprocess.run(["uv", "sync"], cwd=ws, capture_output=True, text=True, timeout=300, env=env)
-        if r.returncode != 0:
-            print("status=error")
-            err = r.stderr.strip()[:500]
-            print(f"message=uv sync failed: {err}")
-            return 1
-    except Exception as exc:
-        print("status=error")
-        print(f"message={exc}")
-        return 1
-
     print("status=ready")
+    print(f"runtime_source={dst.resolve()}")
+    print("message=已部署 cst-runtime；在 cst-mcp 的 .cst_config.json 中设置 runtime.source_path，并由 Python 3.9 worker 启动。")
     return 0
 
 

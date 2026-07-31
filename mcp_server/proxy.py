@@ -62,6 +62,25 @@ class CSTWorkerProxy:
                 "找不到 Python 3.9 worker 解释器："
                 f"{worker_python}；请设置 CST_WORKER_PYTHON"
             )
+        try:
+            version = subprocess.run(
+                [str(worker_python), "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+                check=False,
+            )
+        except OSError as exc:
+            raise CSTTransportError(f"无法执行 Python worker：{worker_python}：{exc}") from exc
+        worker_version = version.stdout.strip()
+        if version.returncode != 0 or worker_version != "3.9":
+            raise CSTTransportError(
+                "CST worker 必须使用 Python 3.9；"
+                f"当前 worker 为 {worker_version or '未知版本'}：{worker_python}。"
+                "请在 .cst_config.json 的 runtime.worker_python 中配置 CST 兼容解释器。"
+            )
         self._responses = queue.Queue()
         self.process = subprocess.Popen(
             [str(worker_python), "-m", "cst_runtime.worker"],
