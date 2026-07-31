@@ -106,7 +106,11 @@ def save_project(project_path: str) -> dict[str, Any]:
     return result
 
 
-def quit_cst(project_path: str = "") -> dict[str, Any]:
+def quit_cst(
+    project_path: str = "",
+    *,
+    force_global_cleanup: bool = False,
+) -> dict[str, Any]:
     """完全退出 CST 软件进程。
 
     Args:
@@ -118,7 +122,10 @@ def quit_cst(project_path: str = "") -> dict[str, Any]:
     Raises:
         RuntimeError: 如果 CST 进程无法退出时抛出
     """
-    result = _quit_cst(project_path)
+    result = _quit_cst(
+        project_path,
+        force_global_cleanup=force_global_cleanup,
+    )
     if result.get("status") == "error":
         raise RuntimeError(result.get("message", "Failed to quit CST"))
     return result

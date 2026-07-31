@@ -39,6 +39,7 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
     project_dir.mkdir(parents=True, exist_ok=True)
     try:
         import cst.interface
+
         de = cst.interface.DesignEnvironment.new()
         # 目前仅创建 MWS(微波工作室)。若需拓展其他类型，可用：
         # de.new_cs() / new_ds() / new_ems() / new_fd3d() / new_mps() / new_pcbs() / new_ps()
@@ -152,7 +153,7 @@ def close_project(
     wait_unlock: bool = True,
     timeout_seconds: float = 30.0,
     poll_interval_seconds: float = 0.5,
-    kill_processes: bool = True,
+    kill_processes: bool = False,
 ) -> dict[str, Any]:
     """安全关闭当前正在运行的 CST 工程。
     
@@ -215,13 +216,6 @@ def close_project(
                 project_path=normalized_project,
                 runtime_module="cst_runtime.core.session",
             )
-        except Exception as exc:
-            close_result = error_response(
-                "close_project_failed",
-                str(exc),
-                project_path=normalized_project,
-                runtime_module="cst_runtime.core.session",
-            )
 
     unlock_result: dict[str, Any] | None = None
     if close_result.get("status") != "error" and wait_unlock:
@@ -237,9 +231,8 @@ def close_project(
     else:
         kill_result = None
 
+    # 不扫描或终止其他 CST 会话；只允许处理已与当前项目关联的 PID。
     orphan_result: dict[str, Any] | None = None
-    if kill_processes:
-        orphan_result = process_cleanup.cleanup_orphan_processes(settle_seconds=0.5)
 
     status = "success"
     if close_result.get("status") == "error" or (unlock_result or {}).get("status") == "error":
@@ -266,6 +259,7 @@ def quit_cst(
     project_path: str = "",
     dry_run: bool = False,
     settle_seconds: float = 0.5,
+    force_global_cleanup: bool = False,
 ) -> dict[str, Any]:
     """彻底退出整个 CST 应用程序实例并清理所有相关的后台子进程。
     
@@ -281,11 +275,35 @@ def quit_cst(
         清理报告字典。
     """
     before = inspect(project_path)
-    cleanup = process_cleanup.cleanup_cst_processes(
-        project_path=project_path,
-        dry_run=dry_run,
-        settle_seconds=settle_seconds,
-    )
+    if dry_run or force_global_cleanup:
+        cleanup = process_cleanup.cleanup_cst_processes(
+            project_path=project_path,
+            dry_run=dry_run,
+            settle_seconds=settle_seconds,
+        )
+    elif not project_path:
+        cleanup = error_response(
+            "session_scope_required",
+            "非 dry-run 退出必须提供 project_path；全局清理需显式启用 force_global_cleanup",
+            runtime_module="cst_runtime.core.session",
+        )
+    else:
+        _project, attach_status = project_identity.attach_expected_project(
+            _abs_project_path(project_path)
+        )
+        owned_pid = attach_status.get("design_environment_pid")
+        if owned_pid:
+            cleanup = process_cleanup.stop_process(
+                int(owned_pid),
+                "CST DESIGN ENVIRONMENT_AMD64",
+            )
+        else:
+            cleanup = error_response(
+                "owned_process_not_found",
+                "未找到与指定项目关联的 CST 进程，拒绝执行全局清理",
+                project_path=project_path,
+                runtime_module="cst_runtime.core.session",
+            )
     after = inspect(project_path)
     status = "success" if cleanup.get("status") != "error" else "error"
     payload: dict[str, Any] = {

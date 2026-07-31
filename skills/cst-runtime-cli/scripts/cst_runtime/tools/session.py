@@ -140,6 +140,10 @@ TOOL_DEFS = {
                 "examples": [
                     0.5
                 ]
+            },
+            "force_global_cleanup": {
+                "type": "boolean",
+                "default": False
             }
         },
         "required": [
@@ -228,6 +232,7 @@ def tool_cst_session_quit(args: dict) -> dict:
         project_path=str(args.get("project_path") or ""),
         dry_run=bool(args.get("dry_run", False)),
         settle_seconds=float(args.get("settle_seconds", 0.5)),
+        force_global_cleanup=bool(args.get("force_global_cleanup", False)),
     )
 
 

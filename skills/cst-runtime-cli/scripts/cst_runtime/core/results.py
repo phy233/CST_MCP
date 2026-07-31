@@ -9,6 +9,7 @@ from typing import Any
 
 from .errors import error_response
 from .utils import serialize_value as _serialize_value
+from .compatibility import get_result2d_item, get_colormap_items, supports_2d_results
 
 
 def _load_project(project_path: str, allow_interactive: bool = False, subproject_treepath: str = "") -> tuple[Any, dict[str, Any]]:
@@ -294,7 +295,7 @@ def get_2d_result(
     try:
         project, context = _load_project(project_path, allow_interactive, subproject_treepath)
         result_module, normalized_module = _get_result_module(project, module_type)
-        result_2d = result_module.get_result2d_item(treepath)
+        result_2d = get_result2d_item(result_module, treepath)
         if export_path:
             export_file = Path(export_path).expanduser()
             if export_file.suffix.lower() != ".json":
@@ -537,7 +538,7 @@ def export_run_results(
                 if r.get("status") == "success":
                     exported.append(r["export_path"])
 
-            tree_items = [str(it) for it in m3d2.get_tree_items(filter="colormap")]
+            tree_items = get_colormap_items(m3d2)
             for ti in tree_items:
                 try:
                     r2 = get_2d_result(project_path=str(p), treepath=ti, allow_interactive=True)
