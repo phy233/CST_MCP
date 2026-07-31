@@ -45,3 +45,8 @@ packages = ["cst_runtime"]
 [tool.pytest.ini_options]
 testpaths = ["../tests"]
 pythonpath = ["."]
+addopts = "--import-mode=importlib"
+markers = [
+    "cst_integration: 需要真实 CST 安装和许可证的串行集成测试",
+    "cst_destructive: 会关闭会话、退出进程或不可逆修改工程的真机测试",
+]

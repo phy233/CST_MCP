@@ -1,0 +1,107 @@
+"""lib 公开结果契约测试。"""
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from cst_runtime.lib.contracts import (
+    CSTOperationError,
+    OperationResult,
+    as_result,
+    error_result,
+    success_result,
+)
+
+
+def test_operation_result_is_json_dict() -> None:
+    result = success_result(value=3.5)
+
+    assert isinstance(result, dict)
+    assert json.loads(json.dumps(result)) == {"status": "success", "value": 3.5}
+
+
+def test_raise_for_error_preserves_complete_result() -> None:
+    result = error_result("project_not_open", "工程未打开", project_path="a.cst")
+
+    with pytest.raises(CSTOperationError) as caught:
+        result.raise_for_error()
+
+    assert caught.value.result == result
+    assert caught.value.result["project_path"] == "a.cst"
+
+
+def test_unwrap_fast_fails_and_returns_semantic_field() -> None:
+    assert success_result(value=12).unwrap("value") == 12
+    with pytest.raises(CSTOperationError):
+        error_result("read_failed", "读取失败").unwrap("value")
+
+
+def test_as_result_normalizes_plain_values_and_statuses() -> None:
+    assert as_result(False, field="exists") == {
+        "status": "success",
+        "exists": False,
+    }
+    assert isinstance(as_result({"status": "success"}), OperationResult)
+
+
+def test_existing_geometry_api_no_longer_throws_business_error(monkeypatch) -> None:
+    from cst_runtime.lib import geometry
+
+    monkeypatch.setattr(
+        geometry,
+        "_define_brick",
+        lambda *args, **kwargs: {
+            "status": "error",
+            "error_type": "material_not_found",
+            "message": "材料不存在",
+        },
+    )
+
+    result = geometry.brick(
+        "model.cst",
+        "component1",
+        "brick1",
+        "missing",
+        (0, 1),
+        (0, 1),
+        (0, 1),
+    )
+
+    assert isinstance(result, OperationResult)
+    assert result["status"] == "error"
+    with pytest.raises(CSTOperationError):
+        result.raise_for_error()
+
+
+def test_parameter_scalar_is_exposed_as_semantic_value(monkeypatch) -> None:
+    from cst_runtime.lib import parameters
+
+    monkeypatch.setattr(
+        parameters,
+        "_list_parameters",
+        lambda project_path: {
+            "status": "success",
+            "parameters": {"length": {"value": 12.5}},
+        },
+    )
+
+    assert parameters.get_param("model.cst", "length").unwrap("value") == 12.5
+
+
+def test_parameter_read_error_is_not_converted_to_false_or_empty(monkeypatch) -> None:
+    from cst_runtime.lib import parameters
+
+    monkeypatch.setattr(
+        parameters,
+        "_list_parameters",
+        lambda project_path: {
+            "status": "error",
+            "error_type": "project_not_open",
+            "message": "工程未打开",
+        },
+    )
+
+    result = parameters.param_exists("model.cst", "length")
+    assert result["status"] == "error"
+    assert result["error_type"] == "project_not_open"

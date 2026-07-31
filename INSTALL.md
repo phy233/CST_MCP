@@ -23,12 +23,14 @@ MCP 客户端 (Claude Desktop / opencode / ...)
 │ CST Core 层 — 低版本 Python (3.9)                │
 │   conda 环境 cst39                               │
 │   skills/cst-runtime-cli/scripts/cst_worker.py   │
-│   → cst_runtime.lib.* / cst_runtime.core.*       │
+│   → Registry / tools → cst_runtime.lib.*         │
+│   → cst_runtime.core.* → CST COM / VBA / Results │
 │   → cst.interface (COM) → CST Studio Suite       │
 └─────────────────────────────────────────────────┘
 ```
 
 - **MCP 层**只负责 MCP 协议与工具注册，**禁止**直接 import `cst_runtime`（见 `proxy.py`  docstring）。
+- **公开业务边界**固定为 `cst_runtime.lib`；tools、CLI pipeline 和 workflow 禁止跨层调用 `core`。
 - **CST Core 层**必须用能导入 CST `python_cst_libraries` 的低版本 Python（CST 2022 对应 Python 3.9），因此固定在 conda 环境 `cst39` 中运行。
 - Worker 启动时从 `.cst_config.json` 读取 `cst_path` 并注入 `sys.path`，从而 `import cst.interface`。
 

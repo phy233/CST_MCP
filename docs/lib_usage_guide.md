@@ -4,6 +4,8 @@
 
 `lib/` 层是 CST Runtime 的标准库风格公开 API，提供简洁的函数接口用于 CST 仿真自动化。
 
+所有公开函数都返回 `OperationResult`。它是普通 `dict` 的子类，因此可直接发送给 MCP 或使用 `json.dumps`；Python 脚本需要 fast fail 时调用 `raise_for_error()` 或 `unwrap()`。业务失败不会默认抛异常，也不会退化为空列表、`False` 或 `None`。
+
 ## 模块列表
 
 | 模块 | 功能 | 主要函数 |
@@ -33,26 +35,26 @@ from cst_runtime.lib.parameters import list_params, set_param
 from cst_runtime.lib.solver import start, wait
 from cst_runtime.lib.results import get_sparam
 
-# 打开工程
-open_project("C:\\path\\to\\model.cst")
+# 打开工程；失败时立即抛出带完整结果的 CSTOperationError
+open_project("C:\\path\\to\\model.cst").raise_for_error()
 
 # 读取参数
 params = list_params("C:\\path\\to\\model.cst")
-print(params)
+print(params.unwrap("values"))
 
 # 修改参数
-set_param("C:\\path\\to\\model.cst", "g", 24.0)
+set_param("C:\\path\\to\\model.cst", "g", 24.0).raise_for_error()
 
 # 运行仿真
-start("C:\\path\\to\\model.cst")
-wait("C:\\path\\to\\model.cst")
+start("C:\\path\\to\\model.cst").raise_for_error()
+wait("C:\\path\\to\\model.cst").raise_for_error()
 
 # 读取结果
 result = get_sparam("C:\\path\\to\\model.cst", "1D Results\\S-Parameters\\S1,1")
 print(result)
 
 # 关闭工程
-close_project("C:\\path\\to\\model.cst")
+close_project("C:\\path\\to\\model.cst").raise_for_error()
 ```
 
 ### 几何建模

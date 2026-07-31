@@ -36,11 +36,14 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 113 �
 
 - **入参**：JSON Schema 校验，支持 `--args-file <json>`、`--args-json`、stdin、直接标志四种传参方式
 - **返回值**：`{status: "success"|"error", message?, ...}` 字典结构，零异常控制流
+- **Python fast fail**：返回值是可 JSON 序列化的 `OperationResult` 字典；需要立即中止时调用 `.raise_for_error()`，读取单个字段时调用 `.unwrap("字段名")`
 - **审计落盘**：每次调用自动写入 `stages/` + `logs/production_chain.md`
+
+业务调用严格遵循 `MCP / CLI → Registry / tools → lib → core → CST`。`lib` 是唯一稳定公开 API；CST 版本、COM、VBA、History、底层对象和结果树细节均留在 `core`。
 
 ### 双层命令
 
-- **原子工具**（113 个）：单步操作，可独立调用。
+- **原子工具**：单步操作，可独立调用；准确数量由 Registry 动态清册生成，不在文档中手工维护。
 - **管道**：编排示例，将原子工具组合为多步流程（如 `inspect-project`、`prepare-experiment`、`run-experiment`）。
 
 管道仅为使用参考，用户可完全按自己的策略编排工作流。
@@ -155,8 +158,14 @@ uv run python -m cst_runtime list-tools
 ### 方式 C：Python 包
 
 ```python
-from cst_runtime.core.session import open_project, close_project
-from cst_runtime.core.results import get_1d_result
+from cst_runtime.lib.session import open_project, close_project
+from cst_runtime.lib.results import get_1d_result
+
+opened = open_project("C:\\path\\model.cst").raise_for_error()
+data = get_1d_result(
+    "C:\\path\\model.cst",
+    "1D Results\\S-Parameters\\S1,1",
+).raise_for_error()
 ```
 
 ---

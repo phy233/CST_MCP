@@ -9,6 +9,7 @@ from .registry import (
     operations,
     tools,
 )
+from .inventory import operation_inventory
 
 __all__ = [
     "OperationSpec",
@@ -18,4 +19,5 @@ __all__ = [
     "invoke_tool",
     "operations",
     "tools",
+    "operation_inventory",
 ]

@@ -1,5 +1,7 @@
 # API Reference & Inventory
 
+> **统一契约说明（优先于下方旧版逐函数 Raises 描述）**：所有 `cst_runtime.lib` 公开函数现在返回可 JSON 序列化的 `OperationResult`。默认情况下业务失败返回 `{status: "error", error_type, message}`；只有 Python 调用者显式执行 `raise_for_error()` 或 `unwrap()` 时才抛出 `CSTOperationError`。下方尚未重新生成的 `Raises: RuntimeError` 条目仅描述旧行为，不再代表当前公开契约。
+
 ## `array` Module
 
 ### Function: `build_array`
