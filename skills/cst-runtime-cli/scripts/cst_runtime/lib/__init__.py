@@ -1,39 +1,34 @@
-"""cst_runtime.lib — CST 控制公开 API
+"""CST 原子能力的公共 Python 门面。
 
-标准库风格，每个模块可独立 import:
-
-    from cst_runtime.lib.parameters import list_params, set_param
-    from cst_runtime.lib.geometry import brick, boolean_subtract
-    from cst_runtime.lib.results import get_sparam
-    from cst_runtime.lib.solver import start, wait, is_running
-
-或统一导入:
-
-    from cst_runtime import lib
-    lib.parameters.list_params("C:\\path\\to\\model.cst")
+子模块按需加载，未安装可选依赖时不会影响其他原子能力。
 """
-from . import (
-    session,
-    parameters,
-    geometry,
-    materials,
-    mesh,
-    boundary,
-    port,
-    solver,
-    monitors,
-    results,
-    farfield,
-    optimization,
-    array,
-    unit_cells,
-    sweep,
-    cross_process,
-)
+from __future__ import annotations
+
+import importlib
+from typing import Any
+
 
 __all__ = [
-    "session", "parameters", "geometry", "materials", "mesh",
-    "boundary", "port", "solver", "monitors", "results",
-    "farfield", "optimization", "array", "unit_cells", "sweep",
-    "cross_process",
+    "session",
+    "parameters",
+    "geometry",
+    "materials",
+    "mesh",
+    "boundary",
+    "port",
+    "solver",
+    "monitors",
+    "results",
+    "farfield",
+    "optimization",
+    "batch",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """按需导入公开子模块。"""
+    if name not in __all__:
+        raise AttributeError(name)
+    module = importlib.import_module(f"{__name__}.{name}")
+    globals()[name] = module
+    return module

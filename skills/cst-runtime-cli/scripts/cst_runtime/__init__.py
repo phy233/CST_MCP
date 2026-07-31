@@ -1,20 +1,17 @@
-﻿"""Shared CST runtime primitives.
+"""独立、协议无关的 CST Studio Suite Python 库。"""
+from __future__ import annotations
 
-This package is intentionally protocol-neutral. CLI adapters should
-import from cst_runtime.cli or cst_runtime.cli_pipelines.
-"""
-from cst_runtime.core import (
-    modeling,
-    project as project_ops,
-    results,
-    farfield,
-    session as session_manager,
-    audit,
-    workspace,
-    identity as project_identity,
-    process as process_cleanup,
-    environment as cst_env,
-    evidence,
-    errors,
-    utils,
-)
+import importlib
+from typing import Any
+
+
+__all__ = ["api", "core", "lib", "workflows", "analysis"]
+
+
+def __getattr__(name: str) -> Any:
+    """按需加载公开子包。"""
+    if name in __all__:
+        module = importlib.import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    raise AttributeError(name)
