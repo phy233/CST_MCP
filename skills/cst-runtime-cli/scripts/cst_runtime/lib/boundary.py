@@ -22,6 +22,7 @@ from typing import Any
 from ..core.modeling import define_boundary as _define_boundary
 from ..core.modeling import add_to_history as _add_to_history
 from ._facade import wrap_public
+from .contracts import raise_result_error
 
 
 def set_all(project_path: str, boundary_type: str = "expanded open") -> None:
@@ -36,7 +37,7 @@ def set_all(project_path: str, boundary_type: str = "expanded open") -> None:
     """
     result = _define_boundary(project_path, face_type=boundary_type)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set boundary"))
+        raise_result_error(result, "Failed to set boundary")
 
 
 def set_per_face(
@@ -77,7 +78,7 @@ def set_per_face(
 End With"""
     result = _add_to_history(project_path, vba, "Define Boundary Per Face")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set boundary per face"))
+        raise_result_error(result, "Failed to set boundary per face")
 
 
 def set_unit_cell(project_path: str, periodic_angle: float = 0) -> None:

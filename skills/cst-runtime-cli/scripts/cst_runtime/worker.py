@@ -35,6 +35,8 @@ def _configure_cst_path() -> None:
 
 def handle_request(request: dict[str, Any]) -> dict[str, Any]:
     """处理一个白名单请求并回显请求 ID。"""
+    from .contracts import error_response, normalize_response
+
     request_id = request.get("id")
     action = request.get("action")
     try:
@@ -47,23 +49,28 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any]:
         elif action == "call_tool":
             from .api import invoke_tool
 
-            payload = invoke_tool(
-                str(request.get("name", "")),
-                request.get("arguments") or {},
+            payload = normalize_response(
+                invoke_tool(
+                    str(request.get("name", "")),
+                    request.get("arguments") or {},
+                )
             )
         else:
-            payload = {
-                "status": "error",
-                "error_type": "unsupported_action",
-                "message": f"不支持的 worker 动作: {action}",
-            }
+            payload = error_response(
+                "unsupported_action",
+                f"不支持的 worker 动作: {action}",
+                phase="validation",
+                action=action,
+            )
     except Exception as exc:
-        payload = {
-            "status": "error",
-            "error_type": type(exc).__name__,
-            "message": str(exc),
-            "traceback": traceback.format_exc(),
-        }
+        traceback.print_exc(file=sys.stderr)
+        payload = error_response(
+            "worker_error",
+            str(exc) or "worker 内部调用失败",
+            phase="worker",
+            action=action,
+            tool_name=request.get("name"),
+        )
     return {"id": request_id, **payload}
 
 
@@ -87,11 +94,28 @@ def main() -> int:
                 return 0
             response = handle_request(request)
         except json.JSONDecodeError as exc:
+            from .contracts import error_response
+
             response = {
                 "id": None,
-                "status": "error",
-                "error_type": "json_error",
-                "message": str(exc),
+                **error_response(
+                    "validation_error",
+                    str(exc),
+                    phase="validation",
+                    protocol_error="json_error",
+                ),
+            }
+        except Exception as exc:
+            from .contracts import error_response
+
+            traceback.print_exc(file=sys.stderr)
+            response = {
+                "id": None,
+                **error_response(
+                    "worker_error",
+                    str(exc) or "worker 请求处理失败",
+                    phase="worker",
+                ),
             }
         print(json.dumps(response, ensure_ascii=False, default=str), flush=True)
     return 0

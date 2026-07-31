@@ -29,6 +29,7 @@ from ..core.optimizer import tell_study as _tell_study
 from ..core.optimizer import best_study as _best_study
 from ..core import optimizer as _core_optimizer
 from ._facade import wrap_core, wrap_public
+from .contracts import raise_result_error
 
 
 def create_study(
@@ -55,7 +56,7 @@ def create_study(
         direction=direction,
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to create study"))
+        raise_result_error(result, "Failed to create study")
 
 
 def ask(storage_path: str, study_name: str) -> dict[str, Any]:
@@ -73,7 +74,7 @@ def ask(storage_path: str, study_name: str) -> dict[str, Any]:
     """
     result = _ask_study(storage_path, study_name)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to get suggestion"))
+        raise_result_error(result, "Failed to get suggestion")
     return result
 
 
@@ -101,7 +102,7 @@ def tell(
         value=value, values=values,
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to report result"))
+        raise_result_error(result, "Failed to report result")
 
 
 def best(storage_path: str, study_name: str) -> dict[str, Any]:
@@ -119,7 +120,7 @@ def best(storage_path: str, study_name: str) -> dict[str, Any]:
     """
     result = _best_study(storage_path, study_name)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to get best result"))
+        raise_result_error(result, "Failed to get best result")
     return result
 
 

@@ -43,6 +43,7 @@ from ..core.modeling import change_material as _change_material
 from ..core.modeling import transform_shape as _transform_shape
 from ..core.modeling import add_to_history as _add_to_history
 from ._facade import wrap_public
+from .contracts import raise_result_error
 
 
 def brick(
@@ -73,7 +74,7 @@ def brick(
         x_range[0], x_range[1], y_range[0], y_range[1], z_range[0], z_range[1]
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to create brick"))
+        raise_result_error(result, "Failed to create brick")
 
 
 def cylinder(
@@ -109,7 +110,7 @@ def cylinder(
         z_range[0], z_range[1], center[0], center[1]
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to create cylinder"))
+        raise_result_error(result, "Failed to create cylinder")
 
 
 def cone(
@@ -145,7 +146,7 @@ def cone(
         z_range[0], z_range[1], center[0], center[1]
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to create cone"))
+        raise_result_error(result, "Failed to create cone")
 
 
 def rectangle(
@@ -172,7 +173,7 @@ def rectangle(
         x_range[0], x_range[1], y_range[0], y_range[1]
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to create rectangle"))
+        raise_result_error(result, "Failed to create rectangle")
 
 
 def boolean_add(project_path: str, shape1: str, shape2: str) -> None:
@@ -188,7 +189,7 @@ def boolean_add(project_path: str, shape1: str, shape2: str) -> None:
     """
     result = _boolean_add(project_path, shape1, shape2)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to boolean add"))
+        raise_result_error(result, "Failed to boolean add")
 
 
 def boolean_subtract(project_path: str, target: str, tool: str) -> None:
@@ -204,7 +205,7 @@ def boolean_subtract(project_path: str, target: str, tool: str) -> None:
     """
     result = _boolean_subtract(project_path, target, tool)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to boolean subtract"))
+        raise_result_error(result, "Failed to boolean subtract")
 
 
 def boolean_intersect(project_path: str, shape1: str, shape2: str) -> None:
@@ -220,7 +221,7 @@ def boolean_intersect(project_path: str, shape1: str, shape2: str) -> None:
     """
     result = _boolean_intersect(project_path, shape1, shape2)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to boolean intersect"))
+        raise_result_error(result, "Failed to boolean intersect")
 
 
 def delete_entity(project_path: str, name: str, component: str = "") -> None:
@@ -240,7 +241,7 @@ def delete_entity(project_path: str, name: str, component: str = "") -> None:
         full_name = name
     result = _delete_entity(project_path, component or "", name)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to delete entity"))
+        raise_result_error(result, "Failed to delete entity")
 
 
 def delete_component(project_path: str, component: str) -> None:
@@ -256,7 +257,7 @@ def delete_component(project_path: str, component: str) -> None:
     vba = f'Component.Delete "{component}"'
     result = _add_to_history(project_path, vba, f"Delete component: {component}")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to delete component"))
+        raise_result_error(result, "Failed to delete component")
 
 
 def rotate(
@@ -287,7 +288,7 @@ def rotate(
         multiple_objects=multiple_objects, repetitions=repetitions
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to rotate"))
+        raise_result_error(result, "Failed to rotate")
 
 
 def translate(
@@ -329,7 +330,7 @@ def translate(
     ]
     result = _add_to_history(project_path, "\n".join(vba), f"Translate: {name}")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to translate"))
+        raise_result_error(result, "Failed to translate")
 
 
 def mirror(
@@ -356,7 +357,7 @@ def mirror(
         plane_normal_z=str(plane_normal[2])
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to mirror"))
+        raise_result_error(result, "Failed to mirror")
 
 
 def activate_wcs(
@@ -387,7 +388,7 @@ def activate_wcs(
 End With"""
     result = _add_to_history(project_path, vba, f"Activate WCS: {name}")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to activate WCS"))
+        raise_result_error(result, "Failed to activate WCS")
 
 
 def deactivate_wcs(project_path: str) -> None:
@@ -402,7 +403,7 @@ def deactivate_wcs(project_path: str) -> None:
     vba = 'WCS.ActivateWCS "global"'
     result = _add_to_history(project_path, vba, "Deactivate WCS")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to deactivate WCS"))
+        raise_result_error(result, "Failed to deactivate WCS")
 
 
 def arc(
@@ -443,7 +444,7 @@ def arc(
 End With"""
     result = _add_to_history(project_path, vba, f"Define Arc: {name}")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to create arc"))
+        raise_result_error(result, "Failed to create arc")
 
 
 def polygon(
@@ -487,7 +488,7 @@ def polygon(
     ])
     result = _add_to_history(project_path, "\n".join(vba_lines), f"Define Polygon: {name}")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to create polygon"))
+        raise_result_error(result, "Failed to create polygon")
 
 
 for _public_name in (

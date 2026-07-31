@@ -5,6 +5,7 @@ from functools import wraps
 from typing import Any, Callable
 
 from .contracts import (
+    CSTOperationError,
     OperationResult,
     as_result,
     error_result,
@@ -48,6 +49,8 @@ def wrap_public(function: Callable[..., Any], *, field: str = "result") -> Calla
             return as_result(value, field=field)
         except (TypeError, ValueError, KeyError) as exc:
             return invalid_arguments(str(exc))
+        except CSTOperationError as exc:
+            return as_result(exc.result)
         except RuntimeError as exc:
             return error_result("operation_failed", str(exc))
         except Exception as exc:

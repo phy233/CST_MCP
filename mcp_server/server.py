@@ -5,7 +5,21 @@ import asyncio
 from typing import Any
 
 from .config import get_config
-from .proxy import get_proxy
+from .proxy import CSTTransportError, get_proxy
+
+
+def _call_tool_with_transport_envelope(
+    proxy: Any,
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    timeout: int,
+) -> dict[str, Any]:
+    """Keep transport failures inside the public structured-result contract."""
+    try:
+        return proxy.call_tool(name, arguments, timeout=timeout)
+    except CSTTransportError as exc:
+        return exc.to_response(tool_name=name)
 
 
 def create_mcp_server():
@@ -45,7 +59,8 @@ def create_mcp_server():
             else config.request_timeout
         )
         return await asyncio.to_thread(
-            proxy.call_tool,
+            _call_tool_with_transport_envelope,
+            proxy,
             name,
             arguments,
             timeout=timeout,

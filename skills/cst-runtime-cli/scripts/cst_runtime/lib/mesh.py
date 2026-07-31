@@ -22,6 +22,7 @@ from ..core.simulation import set_solver_acceleration as _set_solver_acceleratio
 from ..core.simulation import set_mesh_fpbavoid_nonreg_unite as _set_mesh_fpbavoid_nonreg_unite
 from ..core.simulation import set_mesh_minimum_step_number as _set_mesh_minimum_step_number
 from ._facade import wrap_public
+from .contracts import raise_result_error
 
 
 def settings(
@@ -66,7 +67,7 @@ def settings(
         use_gpu=use_gpu,
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to configure mesh settings"))
+        raise_result_error(result, "Failed to configure mesh settings")
 
 
 def acceleration(
@@ -105,7 +106,7 @@ def acceleration(
         max_gpus=max_gpus,
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to configure acceleration"))
+        raise_result_error(result, "Failed to configure acceleration")
 
 
 def set_fpbavoid_nonreg_unite(project_path: str, enable: bool = True) -> None:
@@ -120,7 +121,7 @@ def set_fpbavoid_nonreg_unite(project_path: str, enable: bool = True) -> None:
     """
     result = _set_mesh_fpbavoid_nonreg_unite(project_path, enable)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set FPBA option"))
+        raise_result_error(result, "Failed to set FPBA option")
 
 
 def set_minimum_step_number(project_path: str, num_steps: int = 5) -> None:
@@ -135,7 +136,7 @@ def set_minimum_step_number(project_path: str, num_steps: int = 5) -> None:
     """
     result = _set_mesh_minimum_step_number(project_path, num_steps)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set minimum step number"))
+        raise_result_error(result, "Failed to set minimum step number")
 
 
 settings = wrap_public(settings)

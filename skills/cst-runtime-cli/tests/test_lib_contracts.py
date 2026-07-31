@@ -70,8 +70,37 @@ def test_existing_geometry_api_no_longer_throws_business_error(monkeypatch) -> N
 
     assert isinstance(result, OperationResult)
     assert result["status"] == "error"
+    assert result["error_type"] == "material_not_found"
     with pytest.raises(CSTOperationError):
         result.raise_for_error()
+
+
+def test_wrap_public_preserves_nested_error_envelope() -> None:
+    from cst_runtime.lib._facade import wrap_public
+    from cst_runtime.lib.contracts import raise_result_error
+
+    def operation():
+        raise_result_error(
+            {
+                "ok": False,
+                "status": "error",
+                "error_type": "vba_runtime_error",
+                "message": "missing material",
+                "error": {
+                    "type": "vba_runtime_error",
+                    "message": "missing material",
+                    "phase": "execution",
+                },
+                "context": {"operation_id": "op-1"},
+            },
+            "fallback",
+        )
+
+    result = wrap_public(operation)()
+
+    assert result["error_type"] == "vba_runtime_error"
+    assert result["error"]["phase"] == "execution"
+    assert result["context"]["operation_id"] == "op-1"
 
 
 def test_parameter_scalar_is_exposed_as_semantic_value(monkeypatch) -> None:

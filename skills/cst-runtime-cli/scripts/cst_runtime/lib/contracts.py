@@ -64,6 +64,13 @@ def error_result(error_type: str, message: str, **context: Any) -> OperationResu
     )
 
 
+def raise_result_error(result: Mapping[str, Any], default_message: str) -> None:
+    """Raise an exception that retains the complete structured core result."""
+    payload = dict(result)
+    payload.setdefault("message", default_message)
+    raise CSTOperationError(payload)
+
+
 def invalid_arguments(message: str, **context: Any) -> OperationResult:
     """创建统一的参数错误结果。"""
     return error_result("invalid_arguments", message, **context)

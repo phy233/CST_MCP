@@ -9,6 +9,8 @@ import io
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from ..contracts import error_response, normalize_response, success_response
+
 
 OperationHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -249,7 +251,7 @@ def _atomic_operations() -> dict[str, OperationSpec]:
             with contextlib.redirect_stdout(captured):
                 value = _handler(args)
             if not isinstance(value, dict):
-                value = {"status": "success", "result": value}
+                value = success_response(result=value)
             else:
                 # IPC 边界只暴露普通 JSON 字典，不泄漏 Python 专用结果类型。
                 value = dict(value)
@@ -301,39 +303,31 @@ def invoke(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]
     """按稳定操作名调用白名单中的一个操作。"""
     spec = operations().get(name)
     if spec is None:
-        return {
-            "status": "error",
-            "error_type": "unknown_operation",
-            "message": f"未知操作: {name}",
-            "available_operations": sorted(operations()),
-        }
+        return error_response(
+            "unknown_operation",
+            f"未知操作: {name}",
+            phase="validation",
+            available_operations=sorted(operations()),
+        )
     try:
         result = spec.handler(dict(arguments or {}))
         if not isinstance(result, dict):
-            return {"status": "success", "result": result}
-        return dict(result)
+            return success_response(result=result)
+        return normalize_response(result)
     except ValueError as exc:
-        return {
-            "status": "error",
-            "error_type": "invalid_arguments",
-            "message": str(exc),
-        }
+        return error_response("invalid_arguments", str(exc), phase="validation")
     except Exception as exc:
-        return {
-            "status": "error",
-            "error_type": "internal_error",
-            "message": str(exc),
-        }
+        return error_response("runtime_error", str(exc), phase="runtime")
 
 
 def invoke_tool(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
     """按 CLI/MCP 公开名调用统一 API handler。"""
     spec = tools().get(name)
     if spec is None:
-        return {
-            "status": "error",
-            "error_type": "unknown_tool",
-            "message": f"未知工具: {name}",
-            "available_tools": sorted(tools()),
-        }
+        return error_response(
+            "unknown_tool",
+            f"未知工具: {name}",
+            phase="validation",
+            available_tools=sorted(tools()),
+        )
     return invoke(spec.name, arguments)

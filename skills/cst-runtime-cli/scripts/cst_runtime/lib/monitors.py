@@ -30,6 +30,7 @@ from ..core.modeling import set_probe as _set_probe
 from ..core.modeling import delete_probe_by_id as _delete_probe_by_id
 from ..core.modeling import delete_monitor as _delete_monitor
 from ._facade import wrap_public
+from .contracts import raise_result_error
 
 
 def set_farfield(
@@ -70,7 +71,7 @@ def set_farfield(
         })
     result = _set_farfield_monitor(project_path, **kwargs)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set farfield monitor"))
+        raise_result_error(result, "Failed to set farfield monitor")
 
 
 def set_efield(
@@ -111,7 +112,7 @@ def set_efield(
         })
     result = _set_efield_monitor(project_path, **kwargs)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set E-field monitor"))
+        raise_result_error(result, "Failed to set E-field monitor")
 
 
 def set_field(
@@ -135,7 +136,7 @@ def set_field(
     """
     result = _set_field_monitor(project_path, field_type, start_freq, end_freq, num_samples)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set field monitor"))
+        raise_result_error(result, "Failed to set field monitor")
 
 
 def set_probe(
@@ -158,7 +159,7 @@ def set_probe(
         str(position[0]), str(position[1]), str(position[2])
     )
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set probe"))
+        raise_result_error(result, "Failed to set probe")
 
 
 def delete_probe(project_path: str, probe_id: str) -> None:
@@ -173,7 +174,7 @@ def delete_probe(project_path: str, probe_id: str) -> None:
     """
     result = _delete_probe_by_id(project_path, probe_id)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to delete probe"))
+        raise_result_error(result, "Failed to delete probe")
 
 
 def delete_monitor(project_path: str, monitor_name: str) -> None:
@@ -188,7 +189,7 @@ def delete_monitor(project_path: str, monitor_name: str) -> None:
     """
     result = _delete_monitor(project_path, monitor_name)
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to delete monitor"))
+        raise_result_error(result, "Failed to delete monitor")
 
 
 for _public_name in (

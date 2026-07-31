@@ -20,6 +20,7 @@ from typing import Any
 
 from ..core.modeling import add_to_history as _add_to_history
 from ._facade import wrap_public
+from .contracts import raise_result_error
 
 
 def define_waveguide(
@@ -62,7 +63,7 @@ def define_waveguide(
     ])
     result = _add_to_history(project_path, "\n".join(vba_lines), f"Define Waveguide Port {port_number}")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to define waveguide port"))
+        raise_result_error(result, "Failed to define waveguide port")
 
 
 def define_floquet(
@@ -101,7 +102,7 @@ def define_floquet(
 End With"""
     result = _add_to_history(project_path, vba, "Define Floquet Port")
     if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to define Floquet port"))
+        raise_result_error(result, "Failed to define Floquet port")
 
 
 define_waveguide = wrap_public(define_waveguide)

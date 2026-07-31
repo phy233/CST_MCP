@@ -17,6 +17,34 @@ from .config import MCPConfig, get_config
 class CSTTransportError(RuntimeError):
     """worker 启动、通信或超时时抛出的错误。"""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "transport_error",
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.context = dict(context or {})
+
+    def to_response(self, **context: Any) -> dict[str, Any]:
+        """Return the same public envelope shape used by runtime errors."""
+        merged_context = {**self.context, **context}
+        return {
+            "ok": False,
+            "status": "error",
+            "error_type": "transport_error",
+            "message": str(self),
+            "error": {
+                "type": "transport_error",
+                "code": self.code,
+                "message": str(self),
+                "phase": "transport",
+            },
+            "context": merged_context,
+        }
+
 
 class CSTWorkerProxy:
     """串行管理一个 cst_runtime worker。"""
@@ -60,21 +88,30 @@ class CSTWorkerProxy:
         if not worker_python.is_file():
             raise CSTTransportError(
                 "找不到 Python 3.9 worker 解释器："
-                f"{worker_python}；请设置 CST_WORKER_PYTHON"
+                f"{worker_python}；请设置 CST_WORKER_PYTHON",
+                code="worker_python_not_found",
+                context={"worker_python": str(worker_python)},
             )
         self._responses = queue.Queue()
-        self.process = subprocess.Popen(
-            [str(worker_python), "-m", "cst_runtime.worker"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-            shell=False,
-            env=self._worker_environment(),
-        )
+        try:
+            self.process = subprocess.Popen(
+                [str(worker_python), "-m", "cst_runtime.worker"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+                shell=False,
+                env=self._worker_environment(),
+            )
+        except OSError as exc:
+            raise CSTTransportError(
+                f"无法启动 cst_runtime worker: {exc}",
+                code="worker_process_start_failed",
+                context={"worker_python": str(worker_python)},
+            ) from exc
         self._reader_thread = threading.Thread(
             target=self._read_stdout,
             args=(self.process, self._responses),
@@ -93,10 +130,16 @@ class CSTWorkerProxy:
             ready = self._responses.get(timeout=self.config.startup_timeout)
         except queue.Empty as exc:
             self._terminate_worker()
-            raise CSTTransportError("等待 cst_runtime worker 就绪超时") from exc
+            raise CSTTransportError(
+                "等待 cst_runtime worker 就绪超时",
+                code="worker_startup_timeout",
+            ) from exc
         if ready.get("status") != "ready":
             self._terminate_worker()
-            raise CSTTransportError(f"worker 启动失败: {ready}")
+            raise CSTTransportError(
+                f"worker 启动失败: {ready}",
+                code="worker_startup_failed",
+            )
 
     def _read_stdout(
         self,
@@ -142,16 +185,28 @@ class CSTWorkerProxy:
         **payload: Any,
     ) -> dict[str, Any]:
         """串行发送一个请求并校验响应 ID。"""
+        request_id = uuid.uuid4().hex
+        request = {"id": request_id, "action": action, **payload}
+        serialized_request = json.dumps(request, ensure_ascii=False)
         with self._call_lock:
             self._ensure_worker()
-            request_id = uuid.uuid4().hex
-            request = {"id": request_id, "action": action, **payload}
             process = self.process
             if process is None or process.stdin is None:
-                raise CSTTransportError("worker 标准输入不可用")
+                raise CSTTransportError(
+                    "worker 标准输入不可用",
+                    code="worker_stdin_unavailable",
+                    context={"action": action},
+                )
             try:
-                process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
+                process.stdin.write(serialized_request + "\n")
                 process.stdin.flush()
+            except (OSError, ValueError) as exc:
+                raise CSTTransportError(
+                    f"worker IPC 失败: {exc}",
+                    code="worker_ipc_failed",
+                    context={"action": action},
+                ) from exc
+            try:
                 response = self._responses.get(
                     timeout=timeout or self.config.request_timeout
                 )
@@ -159,18 +214,22 @@ class CSTWorkerProxy:
                 # 超时请求的迟到响应会污染后续请求，因此必须重启 worker。
                 self._terminate_worker()
                 raise CSTTransportError(
-                    f"worker 调用超时: {action}"
+                    f"worker 调用超时: {action}",
+                    code="worker_request_timeout",
+                    context={"action": action},
                 ) from exc
-            except Exception as exc:
-                raise CSTTransportError(f"worker IPC 失败: {exc}") from exc
             if response.get("_transport_error"):
                 self._terminate_worker()
                 raise CSTTransportError(
-                    "cst_runtime worker 在请求完成前退出"
+                    "cst_runtime worker 在请求完成前退出",
+                    code="worker_exited",
+                    context={"action": action},
                 )
             if response.get("id") != request_id:
                 raise CSTTransportError(
-                    f"worker 响应 ID 不匹配: {response.get('id')} != {request_id}"
+                    f"worker 响应 ID 不匹配: {response.get('id')} != {request_id}",
+                    code="worker_response_id_mismatch",
+                    context={"action": action},
                 )
             return response
 
@@ -178,7 +237,10 @@ class CSTWorkerProxy:
         """读取 runtime 拥有的工具清单。"""
         response = self.request("describe_tools")
         if response.get("status") == "error":
-            raise CSTTransportError(response.get("message", "工具清单读取失败"))
+            raise CSTTransportError(
+                response.get("message", "工具清单读取失败"),
+                code="tool_manifest_failed",
+            )
         return list(response.get("tools", []))
 
     def call_tool(

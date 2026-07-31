@@ -216,6 +216,20 @@ class TestCoreImports:
         core_init = SKILL_SCRIPTS / "cst_runtime" / "core" / "__init__.py"
         assert core_init.exists(), "Missing core/__init__.py"
 
+    def test_worker_uses_protocol_neutral_contracts(self):
+        """The IPC worker must not depend on core just to shape responses."""
+        worker_path = SKILL_SCRIPTS / "cst_runtime" / "worker.py"
+        tree = ast.parse(worker_path.read_text(encoding="utf-8"))
+        core_imports = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            and node.level == 1
+            and node.module
+            and node.module.startswith("core")
+        ]
+        assert not core_imports, f"worker.py imports core at lines: {core_imports}"
+
 
 # ===========================================================================
 # GV — Governance invariants

@@ -55,3 +55,29 @@ def test_mcp_layer_does_not_import_runtime() -> None:
                 ):
                     violations.append(f"{path.name}:{node.lineno}")
     assert not violations
+
+
+def test_transport_error_is_returned_as_mcp_error_envelope() -> None:
+    from mcp_server.proxy import CSTTransportError
+    from mcp_server.server import _call_tool_with_transport_envelope
+
+    class FailingProxy:
+        def call_tool(self, name, arguments, *, timeout):
+            raise CSTTransportError(
+                "worker timed out",
+                code="worker_request_timeout",
+                context={"action": "call_tool"},
+            )
+
+    result = _call_tool_with_transport_envelope(
+        FailingProxy(),
+        "define-brick",
+        {"name": "demo"},
+        timeout=1,
+    )
+
+    assert result["ok"] is False
+    assert result["error_type"] == "transport_error"
+    assert result["error"]["phase"] == "transport"
+    assert result["error"]["code"] == "worker_request_timeout"
+    assert result["context"]["tool_name"] == "define-brick"

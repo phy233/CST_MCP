@@ -160,7 +160,12 @@ def test_array_api_matches_python_result(monkeypatch) -> None:
             "elements": [{"code": "a", "x": 0, "y": 0, "z": 0}],
         },
     )
-    assert payload == expected.to_dict()
+    assert payload["ok"] is True
+    assert payload["submission"] == "not_applicable"
+    assert payload["execution"] == "not_run"
+    assert payload["verification"] == "not_run"
+    for key, value in expected.to_dict().items():
+        assert payload[key] == value
 
 
 def test_api_manifest_contains_workflows() -> None:
