@@ -11,7 +11,8 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Import sweep module
-from cst_runtime.lib.sweep import ParameterSweep, quick_sweep, load_lut
+from cst_runtime.analysis.lut import load_lut
+from cst_runtime.workflows.sweep import ParameterSweep, quick_sweep
 
 
 def example_basic_sweep():

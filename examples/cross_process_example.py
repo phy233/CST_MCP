@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 
 # Import cross_process module
-from cst_runtime.lib.cross_process import CrossProcessSweep, quick_cross_sweep
+from cst_runtime.workflows.cross_process import CrossProcessSweep, quick_cross_sweep
 
 
 def example_cross_sweep():
