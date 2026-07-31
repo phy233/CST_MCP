@@ -249,7 +249,7 @@ CLI 命令：`cst-session-inspect` / `cst-session-open` / `cst-session-reattach`
 
 硬性停止条件：
 - `cst-session-close` 或 `close_project` 未成功时，不执行后续操作。
-- `close_project()` 默认 `kill_processes=True`，自动杀死该 project 的 DE 进程并清理孤悬 DE。如需保留 DE（罕见），传 `kill_processes=False`。
+- `close_project()` 默认 `kill_processes=False`，只关闭工程；需要同时退出该工程关联的 DE 进程时，显式传入 `kill_processes=True`。
 - 存在多个 open projects 时，不做写操作或关闭操作。
 - `Access is denied` 残留只能记录；必须带 PID、进程名、错误文本和锁文件状态。
 
@@ -260,7 +260,7 @@ CLI 命令：`cst-session-inspect` / `cst-session-open` / `cst-session-reattach`
 - S11 原始数据是复数字典，不是 dB 值。
 - 远场增益证据只允许使用 `Realized Gain`、`Gain` 或 `Directivity`。`Abs(E)` 不能写成 dBi 增益。
 - modeler session 与 results session 是两个独立 session，禁止混用。
-- 仿真完成后调用 `close_project()`（默认 `kill_processes=True`）释放工程并清理 DE 进程。下次 `open_project()` 自动获得干净 DE。
+- 仿真完成后调用 `close_project(kill_processes=True)` 释放工程并清理关联 DE 进程。下次 `open_project()` 自动获得干净 DE。
 - 关闭 project 的正确做法：`save=True` 时先 `project.save()`，再调用 `close_project()`。远场导出后 `close_project(save=False)`。
 
 ## 错误处理

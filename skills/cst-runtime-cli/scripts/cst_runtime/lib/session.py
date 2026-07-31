@@ -64,12 +64,14 @@ def close_project(
     wait_unlock: bool = True,
     timeout_seconds: float = 30.0,
     poll_interval_seconds: float = 0.5,
+    kill_processes: bool = False,
 ) -> OperationResult:
     """关闭CST工程.
 
     Args:
         project_path: .cst 文件的绝对路径。
         save: 关闭前是否保存
+        kill_processes: 是否在关闭工程后退出其关联的 CST DE 进程
 
     Returns:
         包含 CST 状态信息和工程详情的字典。
@@ -84,6 +86,7 @@ def close_project(
         wait_unlock=wait_unlock,
         timeout_seconds=timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
+        kill_processes=kill_processes,
     )
 
 

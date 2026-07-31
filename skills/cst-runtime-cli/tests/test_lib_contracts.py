@@ -45,6 +45,24 @@ def test_as_result_normalizes_plain_values_and_statuses() -> None:
     assert isinstance(as_result({"status": "success"}), OperationResult)
 
 
+def test_close_project_forwards_process_cleanup_choice(monkeypatch) -> None:
+    from cst_runtime.lib import session
+
+    received = {}
+
+    def fake_close_project(project_path, **kwargs):
+        received["project_path"] = project_path
+        received.update(kwargs)
+        return {"status": "success"}
+
+    monkeypatch.setattr(session, "_close_project", fake_close_project)
+
+    result = session.close_project("model.cst", kill_processes=True)
+
+    assert result["status"] == "success"
+    assert received["kill_processes"] is True
+
+
 def test_existing_geometry_api_no_longer_throws_business_error(monkeypatch) -> None:
     from cst_runtime.lib import geometry
 

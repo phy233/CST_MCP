@@ -504,7 +504,7 @@ if result["status"] == "success":
 
 | 项 | 说明 |
 |---|---|
-| **签名** | `close_project(project_path: str, save: bool = False, wait_unlock: bool = True, timeout_seconds: float = 30.0, poll_interval_seconds: float = 0.5, kill_processes: bool = True) -> dict[str, Any]` |
+| **签名** | `close_project(project_path: str, save: bool = False, wait_unlock: bool = True, timeout_seconds: float = 30.0, poll_interval_seconds: float = 0.5, kill_processes: bool = False) -> dict[str, Any]` |
 | **返回值** | 包含 `close_result`, `unlock_result`, `kill_result`, `orphan_result`, `post_inspect` 的复合字典 |
 | **功能** | 安全关闭运行中的 CST 项目。可选保存（受 gateway T3 远场导出陷阱保护），等待锁文件清除，终止 DE 进程，清理孤儿进程 |
 

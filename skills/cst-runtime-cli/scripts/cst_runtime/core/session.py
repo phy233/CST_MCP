@@ -235,7 +235,14 @@ def close_project(
     orphan_result: dict[str, Any] | None = None
 
     status = "success"
-    if close_result.get("status") == "error" or (unlock_result or {}).get("status") == "error":
+    if (
+        close_result.get("status") == "error"
+        or (unlock_result or {}).get("status") == "error"
+        or (
+            kill_processes
+            and (kill_result or {}).get("status") == "error"
+        )
+    ):
         status = "error"
     payload: dict[str, Any] = {
         "status": status,
@@ -251,7 +258,7 @@ def close_project(
     }
     if status == "error":
         payload["error_type"] = "session_close_failed"
-        payload["message"] = "close_project or lock-release verification failed"
+        payload["message"] = "关闭工程、释放文件锁或退出关联 CST 进程失败"
     return payload
 
 

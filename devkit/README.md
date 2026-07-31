@@ -147,7 +147,7 @@ uv run pytest <repo>\\skills\\cst-runtime-cli\\tests -v
 - modeler session 与 results session 独立，禁止混用
 - 仿真后先关 modeler，再 results 侧 reopen 刷新
 - 远场导出放流程最后，导出后 `close(save=False)`
-- `close_project()` 默认 `kill_processes=True`，自动清理孤悬 DE
+- `close_project()` 默认 `kill_processes=False`；需要退出关联 DE 时显式传入 `kill_processes=True`
 - `change-parameter` 改参后必须 save → close → reopen → 仿真才能生效
 
 ---

@@ -19,3 +19,41 @@ def test_session_quit_dry_run(run_cli):
     result = run_cli("cst-session-quit", "--dry-run", "true")
     assert result["status"] == "success"
     assert "dry_run" in result
+
+
+def test_close_project_reports_process_stop_failure(monkeypatch):
+    from cst_runtime.core import session
+
+    class FakeProject:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        session.project_identity,
+        "attach_expected_project",
+        lambda _path: (
+            FakeProject(),
+            {"status": "success", "design_environment_pid": 12345},
+        ),
+    )
+    monkeypatch.setattr(
+        session.project_identity,
+        "wait_project_unlocked",
+        lambda **_kwargs: {"status": "success"},
+    )
+    monkeypatch.setattr(
+        session.process_cleanup,
+        "stop_process",
+        lambda *_args: {"status": "error", "message": "拒绝访问"},
+    )
+    monkeypatch.setattr(session, "inspect", lambda _path="": {"status": "success"})
+
+    result = session.close_project(
+        "C:/temporary-test.cst",
+        save=False,
+        kill_processes=True,
+    )
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "session_close_failed"
+    assert result["kill_result"]["status"] == "error"

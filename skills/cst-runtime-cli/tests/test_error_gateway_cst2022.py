@@ -46,7 +46,11 @@ def disposable_cst_project(tmp_path: Path):
     try:
         yield str(working)
     finally:
-        close_project(str(working), save=False)
+        close_project(
+            str(working),
+            save=False,
+            kill_processes=True,
+        ).raise_for_error()
 
 
 def test_case_1_normal_brick(disposable_cst_project: str) -> None:
@@ -187,4 +191,6 @@ def test_case_5_observe_history_and_private_undo(
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
 
     assert failed["status"] == "error"
+    assert failed["error_type"] == "vba_runtime_error"
+    assert failed["error"]["phase"] == "execution"
     assert report_path.is_file()

@@ -61,6 +61,10 @@ TOOL_DEFS = {
                 "examples": [
                     0.5
                 ]
+            },
+            "kill_processes": {
+                "type": "boolean",
+                "default": False
             }
         },
         "required": [
@@ -215,6 +219,7 @@ def tool_cst_session_close(args: dict) -> dict:
         wait_unlock=bool(args.get("wait_unlock", True)),
         timeout_seconds=float(args.get("timeout_seconds", 30.0)),
         poll_interval_seconds=float(args.get("poll_interval_seconds", 0.5)),
+        kill_processes=bool(args.get("kill_processes", False)),
     )
 
 
