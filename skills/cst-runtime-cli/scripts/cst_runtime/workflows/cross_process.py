@@ -4,7 +4,7 @@ This module implements parameter sweep for cross-shaped metasurface unit cells,
 similar to MATLAB's crossProcess.m.
 
 Usage:
-    from cst_runtime.lib.cross_process import CrossProcessSweep
+    from cst_runtime.workflows.cross_process import CrossProcessSweep
 
     # Create sweep for cross-shaped unit cell
     sweep = CrossProcessSweep(
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -58,11 +58,13 @@ class CrossProcessSweep:
     def __init__(
         self,
         project_path: str,
-        lx_range: np.ndarray,
-        ly1_range: np.ndarray,
+        lx_range: Sequence[float],
+        ly1_range: Sequence[float],
         target_freq_ghz: float,
         y_polarization_path: str = "1D Results\\S-Parameters\\SZmax(1),Zmax(1)",
         x_polarization_path: str = "1D Results\\S-Parameters\\SZmax(2),Zmax(2)",
+        continue_on_error: bool = True,
+        restore_parameters: bool = True,
     ) -> None:
         self.project_path = project_path
         self.lx_range = lx_range
@@ -70,6 +72,8 @@ class CrossProcessSweep:
         self.target_freq_ghz = target_freq_ghz
         self.y_polarization_path = y_polarization_path
         self.x_polarization_path = x_polarization_path
+        self.continue_on_error = continue_on_error
+        self.restore_parameters = restore_parameters
 
     def _callback(
         self,
@@ -125,6 +129,8 @@ class CrossProcessSweep:
                 self.x_polarization_path,
             ],
             callback=self._callback,
+            continue_on_error=self.continue_on_error,
+            restore_parameters=self.restore_parameters,
         )
 
         # Run sweep
@@ -132,8 +138,24 @@ class CrossProcessSweep:
 
         # Rename columns for clarity
         results.lut = self._rename_columns(results.lut)
+        self._rewrite_lut_exports(results)
 
         return results
+
+    @staticmethod
+    def _rewrite_lut_exports(results: SweepResult) -> None:
+        """使磁盘 LUT 与返回 DataFrame 使用相同的双极化列名。"""
+        for path in results.exported_files:
+            if path.name == "lut.csv":
+                results.lut.to_csv(path, index=False)
+            elif path.name == "lut.npz":
+                np.savez(
+                    path,
+                    **{
+                        column: results.lut[column].values
+                        for column in results.lut.columns
+                    },
+                )
 
     def _rename_columns(self, lut: pd.DataFrame) -> pd.DataFrame:
         """Rename columns for better readability.
@@ -156,10 +178,12 @@ class CrossProcessSweep:
 
 def quick_cross_sweep(
     project_path: str,
-    lx_range: np.ndarray,
-    ly1_range: np.ndarray,
+    lx_range: Sequence[float],
+    ly1_range: Sequence[float],
     target_freq_ghz: float,
     output_dir: str | Path | None = None,
+    continue_on_error: bool = True,
+    restore_parameters: bool = True,
 ) -> SweepResult:
     """Quick parameter sweep for cross-shaped unit cells.
 
@@ -175,7 +199,7 @@ def quick_cross_sweep(
 
     Example:
         import numpy as np
-        from cst_runtime.lib.cross_process import quick_cross_sweep
+        from cst_runtime.workflows.cross_process import quick_cross_sweep
 
         results = quick_cross_sweep(
             project_path="C:\\model.cst",
@@ -189,6 +213,8 @@ def quick_cross_sweep(
         lx_range=lx_range,
         ly1_range=ly1_range,
         target_freq_ghz=target_freq_ghz,
+        continue_on_error=continue_on_error,
+        restore_parameters=restore_parameters,
     )
 
     return sweep.run(output_dir=output_dir)
