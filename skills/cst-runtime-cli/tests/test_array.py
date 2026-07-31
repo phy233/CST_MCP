@@ -84,6 +84,36 @@ def test_array_rolls_back_on_unknown_builder(monkeypatch) -> None:
     assert events == ["begin", "discard"]
 
 
+def test_array_keeps_batch_when_flush_fails(monkeypatch) -> None:
+    events = _fake_batch(monkeypatch)
+    monkeypatch.setattr(
+        array.batch,
+        "flush",
+        lambda project_path: events.append("flush") or {
+            "status": "error",
+            "message": "VBA failed",
+            "batch_retained": True,
+        },
+    )
+    registry = array.UnitBuilderRegistry(load_entry_points=False)
+    registry.register(
+        "test",
+        lambda project_path, code, parameters: array.BuildResult("cells", ["ref"]),
+    )
+
+    result = array.build_array(
+        "model.cst",
+        units={"a": {"builder_id": "test"}},
+        elements=[{"code": "a", "x": 0, "y": 0, "z": 0}],
+        registry=registry,
+    )
+
+    assert result.status == "error"
+    assert "仅保留用于诊断" in result.message
+    assert "请勿直接重试" in result.message
+    assert events == ["begin", "flush"]
+
+
 def test_builtin_brick_builder(monkeypatch) -> None:
     calls: list[dict] = []
     monkeypatch.setattr(array, "brick", lambda project_path, **kwargs: calls.append(kwargs))

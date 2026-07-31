@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from . import buffer
-from .errors import error_response
+from .error_gateway import submit_vba_history
+from .errors import error_response, success_response
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 
@@ -14,35 +15,37 @@ def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str],
     normalized_project = _abs_project_path(project_path)
     if buffer.is_batch_mode(normalized_project):
         buffer.append_to_batch(normalized_project, vba_lines)
-        return {"status": "success", "project_path": normalized_project}
+        return success_response(
+            submission="buffered",
+            execution="not_run",
+            verification="not_run",
+            project_path=normalized_project,
+            history_label=history_name,
+        )
     if project is None:
         project, status = attach_expected_project(normalized_project)
         if project is None:
             return status
-    try:
-        sCommand = "\n".join(vba_lines)
-        
-        # PROFILING
-        import time
-        from . import utils as core_utils
-        is_profile = hasattr(core_utils, "_PROFILE_DATA")
-        if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
-            core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
-            
-        project.modeler.add_to_history(history_name, sCommand)
-        
-        # PROFILING
-        if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
-            core_utils._PROFILE_DATA["t_com_end"] = time.perf_counter()
-            
-        return {"status": "success", "project_path": normalized_project}
-    except Exception as exc:
-        return error_response(
-            f"{history_name}_failed",
-            str(exc),
-            project_path=normalized_project,
-            runtime_module="cst_runtime.modeling",
-        )
+
+    # PROFILING
+    import time
+    from . import utils as core_utils
+    is_profile = hasattr(core_utils, "_PROFILE_DATA")
+    if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
+        core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
+
+    result = submit_vba_history(
+        project,
+        history_name,
+        vba_lines,
+        project_path=normalized_project,
+    )
+
+    # PROFILING
+    if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
+        core_utils._PROFILE_DATA["t_com_end"] = time.perf_counter()
+
+    return result
 
 
 def _single_vba(project_path: str, history_name: str, vba: str, project: Any = None) -> dict[str, Any]:
@@ -53,7 +56,12 @@ def begin_batch(project_path: str, summary: str = "Batch Execution") -> dict[str
     normalized_project = _abs_project_path(project_path)
     try:
         buffer.begin_batch(normalized_project, summary=summary)
-        return {"status": "success", "project_path": normalized_project}
+        return success_response(
+            submission="buffered",
+            execution="not_run",
+            verification="not_run",
+            project_path=normalized_project,
+        )
     except RuntimeError as exc:
         return error_response(
             "begin_batch_failed", str(exc),
@@ -65,7 +73,7 @@ def begin_batch(project_path: str, summary: str = "Batch Execution") -> dict[str
 def flush_batch(project_path: str) -> dict[str, Any]:
     normalized_project = _abs_project_path(project_path)
     try:
-        name, script = buffer.pop_batch(normalized_project)
+        name, script = buffer.peek_batch(normalized_project)
     except RuntimeError as exc:
         return error_response(
             "flush_batch_failed", str(exc),
@@ -73,14 +81,42 @@ def flush_batch(project_path: str) -> dict[str, Any]:
             runtime_module="cst_runtime.modeling",
         )
     if not script.strip():
-        return {"status": "success", "project_path": normalized_project, "message": "empty batch, nothing to flush"}
-    return _add_vba_history(normalized_project, name, [script])
+        buffer.commit_batch(normalized_project)
+        return success_response(
+            submission="not_required",
+            execution="not_run",
+            verification="not_run",
+            project_path=normalized_project,
+            message="empty batch, nothing to flush",
+            batch_committed=True,
+        )
+
+    project, status = attach_expected_project(normalized_project)
+    if project is None:
+        return {**status, "batch_retained": True, "retry_safe": True}
+
+    result = submit_vba_history(
+        project,
+        name,
+        [script],
+        project_path=normalized_project,
+        feature="modeling.batch",
+    )
+    if result.get("ok") is True:
+        buffer.commit_batch(normalized_project)
+        return {**result, "batch_committed": True}
+    return {**result, "batch_retained": True, "retry_safe": False}
 
 
 def discard_batch(project_path: str) -> dict[str, Any]:
     normalized_project = _abs_project_path(project_path)
     buffer.discard_batch(normalized_project)
-    return {"status": "success", "project_path": normalized_project}
+    return success_response(
+        submission="discarded",
+        execution="not_run",
+        verification="not_run",
+        project_path=normalized_project,
+    )
 
 
 _BUILTIN_MATERIALS = frozenset({

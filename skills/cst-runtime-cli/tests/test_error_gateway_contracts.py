@@ -230,6 +230,27 @@ def test_gateway_classifies_com_exception_as_submission_error(tmp_path: Path) ->
     assert result["error"]["phase"] == "submission"
 
 
+def test_gateway_converts_temp_probe_exception_to_submission_error(monkeypatch) -> None:
+    def fail_probe(*args, **kwargs):
+        raise CSTSubmissionError("temp probe failed")
+
+    monkeypatch.setattr(
+        "cst_runtime.core.error_gateway.resolve_cst_temp_directory",
+        fail_probe,
+    )
+
+    result = submit_vba_history(
+        _FakeProject(lambda _label, _script: True),
+        "Probe failure",
+        ["With Brick", "End With"],
+        project_path="C:/model.cst",
+    )
+
+    assert result["ok"] is False
+    assert result["error_type"] == "cst_submission_error"
+    assert result["error"]["phase"] == "submission"
+
+
 def test_wait_accepts_delayed_status_write(tmp_path: Path) -> None:
     status_path = tmp_path / "delayed.status"
 

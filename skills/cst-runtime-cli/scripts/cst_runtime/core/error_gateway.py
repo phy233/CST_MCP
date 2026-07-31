@@ -301,30 +301,31 @@ def submit_vba_history(
     ) or uuid.uuid4().hex
     status_file_name = f"cst-runtime-{safe_operation_id}.status"
     arm_file_name = f"cst-runtime-{safe_operation_id}.arm"
-    if _status_directory is None:
-        status_directory = resolve_cst_temp_directory(project, project_path)
-        status_directory_expression = 'GetProjectPathName("Temp")'
-    else:
-        status_directory = Path(_status_directory).resolve()
-        status_directory_expression = f'"{_vba_string(str(status_directory))}"'
-    resolved_status_path = status_directory / status_file_name
-    arm_path = status_directory / arm_file_name
     context = {
         "project_path": project_path,
         "history_label": history_label,
         "operation_id": resolved_operation_id,
         "vba_sha256": digest,
     }
-    if resolved_status_path.exists() or arm_path.exists():
-        return CSTSubmissionError(
-            "VBA side-channel file collision; refusing to trust or overwrite stale state.",
-            feature=feature,
-            next_action="Retry the operation to generate a new operation ID.",
-            context=context,
-        ).to_response()
-
+    resolved_status_path: Path | None = None
+    arm_path: Path | None = None
     owns_side_channel = False
     try:
+        if _status_directory is None:
+            status_directory = resolve_cst_temp_directory(project, project_path)
+            status_directory_expression = 'GetProjectPathName("Temp")'
+        else:
+            status_directory = Path(_status_directory).resolve()
+            status_directory_expression = f'"{_vba_string(str(status_directory))}"'
+        resolved_status_path = status_directory / status_file_name
+        arm_path = status_directory / arm_file_name
+        if resolved_status_path.exists() or arm_path.exists():
+            raise CSTSubmissionError(
+                "VBA side-channel file collision; refusing to trust or overwrite stale state.",
+                feature=feature,
+                next_action="Retry the operation to generate a new operation ID.",
+                context=context,
+            )
         with arm_path.open("x", encoding="utf-8") as arm_file:
             arm_file.write(resolved_operation_id)
         owns_side_channel = True
@@ -392,7 +393,7 @@ def submit_vba_history(
             context=context,
         ).to_response()
     finally:
-        if owns_side_channel:
+        if owns_side_channel and arm_path is not None and resolved_status_path is not None:
             for owned_path in (arm_path, resolved_status_path):
                 try:
                     owned_path.unlink(missing_ok=True)

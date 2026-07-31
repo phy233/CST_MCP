@@ -282,7 +282,18 @@ def build_array(
 
         flush_result = batch.flush(project_path)
         if flush_result.get("status") == "error":
-            raise RuntimeError(flush_result.get("message", "批处理提交失败"))
+            return ArrayBuildResult(
+                status="error",
+                project_path=project_path,
+                groups_built=len(references),
+                instances_created=instances_created,
+                reference_objects=references,
+                message=(
+                    f"{flush_result.get('message', '批处理提交失败')}；"
+                    "批次仅保留用于诊断，执行状态可能包含部分副作用，"
+                    "请勿直接重试 flush；人工确认后显式 discard"
+                ),
+            )
         return ArrayBuildResult(
             status="success",
             project_path=project_path,

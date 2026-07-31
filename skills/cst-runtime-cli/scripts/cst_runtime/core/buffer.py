@@ -51,11 +51,29 @@ def append_to_batch(session_id: str, vba_lines: List[str]) -> None:
 
 
 def pop_batch(session_id: str) -> Tuple[str, str]:
-    """Remove and return (summary, vba_script). Raises if no active batch."""
-    buf = _buffers.pop(session_id, None)
+    """Remove and return a batch.
+
+    New submission code must use ``peek_batch`` followed by ``commit_batch`` so
+    a failed CST call does not destroy the only retry/diagnostic copy.
+    """
+    summary, script = peek_batch(session_id)
+    commit_batch(session_id)
+    return summary, script
+
+
+def peek_batch(session_id: str) -> Tuple[str, str]:
+    """Return ``(summary, vba_script)`` without removing the active batch."""
+    buf = _buffers.get(session_id)
     if buf is None:
         raise RuntimeError(f"No active batch for session: {session_id}")
     return buf.summary, buf.get_vba_script()
+
+
+def commit_batch(session_id: str) -> None:
+    """Remove a batch only after its submission and execution were accepted."""
+    if session_id not in _buffers:
+        raise RuntimeError(f"No active batch for session: {session_id}")
+    del _buffers[session_id]
 
 
 def discard_batch(session_id: str) -> None:

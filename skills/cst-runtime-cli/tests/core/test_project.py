@@ -32,6 +32,16 @@ def test_change_parameter_marks_dirty_and_annotates(mocker, tmp_path):
         "cst_runtime.core.project.attach_expected_project",
         return_value=(mock_project, {"status": "success"}),
     )
+    mocker.patch(
+        "cst_runtime.core.project._single_vba",
+        return_value={
+            "ok": True,
+            "status": "success",
+            "submission": "accepted",
+            "execution": "reported_ok",
+            "verification": "not_run",
+        },
+    )
 
     dummy = tmp_path / "test_gate.cst"
     dummy.write_bytes(b"")
