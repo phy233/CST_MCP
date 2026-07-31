@@ -10,6 +10,7 @@ from typing import Any
 from . import process as process_cleanup
 from . import gateway
 from .errors import error_response, UnsupportedFeatureError
+from .error_gateway import submit_vba_history
 from .session import get_attached_project, open_project, close_project
 from .utils import abs_project_path, serialize_value
 from .modeling import _single_vba
@@ -156,9 +157,23 @@ def _gui_add_to_history(project_path: str, command: str, history_name: str, proj
 # It intentionally bypasses _add_vba_history because
 # execute_vba_code() semantics differ from History Tree execution.
 #
-# The fallback add_to_history() is compatibility logic and is
-# intentionally excluded from Phase-1 Centralization.
-def _gui_execute_vba(project: Any, code: str) -> dict[str, Any]:
+def _history_body_from_immediate_macro(code: str) -> str:
+    """Remove a top-level ``Sub Main`` wrapper before History execution."""
+    lines = code.splitlines()
+    nonempty = [index for index, line in enumerate(lines) if line.strip()]
+    if not nonempty:
+        return code
+    first = nonempty[0]
+    last = nonempty[-1]
+    if (
+        re.fullmatch(r"(?i:sub\s+main\s*\(\s*\))", lines[first].strip())
+        and re.fullmatch(r"(?i:end\s+sub)", lines[last].strip())
+    ):
+        return "\n".join(lines[first + 1:last])
+    return code
+
+
+def _gui_execute_vba(project: Any, code: str, project_path: str = "") -> dict[str, Any]:
     errors: list[str] = []
     for entrypoint in ("schematic",):
         target = getattr(project, entrypoint, None)
@@ -200,27 +215,26 @@ def _gui_execute_vba(project: Any, code: str) -> dict[str, Any]:
             except Exception as exc:
                 errors.append(f"model3d._execute_vba_code: {str(exc)}")
 
-    try:
-        project.modeler.add_to_history("ExecuteVBA", code)
-        return {
-            "status": "success",
-            "entrypoint": "modeler.add_to_history",
-            "result": None,
-            "runtime_module": "cst_runtime.farfield",
-        }
-    except Exception as exc:
-        errors.append(f"modeler.add_to_history: {str(exc)}")
-    return error_response(
-        "execute_vba_unavailable",
-        " ; ".join(errors) if errors else "execute_vba_code unavailable",
-        runtime_module="cst_runtime.farfield",
+    history_result = submit_vba_history(
+        project,
+        "ExecuteVBA",
+        [_history_body_from_immediate_macro(code)],
+        project_path=project_path,
+        feature="farfield.execute_vba_fallback",
     )
+    return {
+        **history_result,
+        "entrypoint": "modeler.add_to_history",
+        "immediate_entrypoint_errors": errors,
+        "runtime_module": "cst_runtime.farfield",
+    }
 
 
 def _gui_set_result_navigator_selection(
     project: Any,
     run_ids: list[int] | None,
     selection_tree_path: str = "1D Results\\S-Parameters",
+    project_path: str = "",
 ) -> dict[str, Any]:
     normalized_tree_path = (selection_tree_path or "").strip()
     if not normalized_tree_path:
@@ -244,7 +258,7 @@ def _gui_set_result_navigator_selection(
             "End Sub",
         ]
     )
-    result = _gui_execute_vba(project, macro)
+    result = _gui_execute_vba(project, macro, project_path=project_path)
     if result.get("status") == "success":
         result.update(
             {
@@ -495,7 +509,12 @@ def export_farfield_grid(
     reuse = open_result.get("reused", False)
     try:
         if run_id is not None:
-            sel_result = _gui_set_result_navigator_selection(project=project, run_ids=[int(run_id)], selection_tree_path=selection_tree_path)
+            sel_result = _gui_set_result_navigator_selection(
+                project=project,
+                run_ids=[int(run_id)],
+                selection_tree_path=selection_tree_path,
+                project_path=normalized_project,
+            )
             flow_log.append({"step": "set_result_navigator_selection", "result": sel_result})
             if sel_result.get("status") != "success":
                 import warnings
@@ -554,7 +573,12 @@ def export_farfield_grid(
     finally:
         if run_id is not None:
             try:
-                reset_result = _gui_set_result_navigator_selection(project=project, run_ids=None, selection_tree_path=selection_tree_path)
+                reset_result = _gui_set_result_navigator_selection(
+                    project=project,
+                    run_ids=None,
+                    selection_tree_path=selection_tree_path,
+                    project_path=normalized_project,
+                )
             except Exception:
                 reset_result = {"status": "error", "message": "reset navigator selection failed (non-fatal)"}
             flow_log.append({"step": "reset_result_navigator_selection", "result": reset_result})

@@ -1,10 +1,79 @@
 """Test core/farfield.py: guard integration."""
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from helpers import assert_json_error
+
+
+def test_gui_execute_vba_routes_history_fallback_through_gateway(monkeypatch):
+    from cst_runtime.core import farfield
+
+    captured = {}
+
+    def fake_submit(project, history_label, vba_lines, **kwargs):
+        captured.update(
+            project=project,
+            history_label=history_label,
+            vba_lines=list(vba_lines),
+            kwargs=kwargs,
+        )
+        return {
+            "ok": False,
+            "status": "error",
+            "error_type": "vba_runtime_error",
+            "message": "navigator failed",
+            "error": {
+                "type": "vba_runtime_error",
+                "message": "navigator failed",
+                "phase": "execution",
+            },
+            "context": {"operation_id": "op-1"},
+        }
+
+    monkeypatch.setattr(farfield, "get_model3d", lambda _project: None)
+    monkeypatch.setattr(farfield, "submit_vba_history", fake_submit)
+    project = SimpleNamespace(schematic=SimpleNamespace())
+    macro = "Sub Main()\n    Err.Raise 5\nEnd Sub"
+
+    result = farfield._gui_execute_vba(project, macro, project_path="C:/demo.cst")
+
+    assert captured["history_label"] == "ExecuteVBA"
+    assert captured["vba_lines"] == ["    Err.Raise 5"]
+    assert captured["kwargs"] == {
+        "project_path": "C:/demo.cst",
+        "feature": "farfield.execute_vba_fallback",
+    }
+    assert result["error_type"] == "vba_runtime_error"
+    assert result["error"]["phase"] == "execution"
+    assert result["context"]["operation_id"] == "op-1"
+
+
+def test_result_navigator_passes_project_path_to_vba_gateway(monkeypatch):
+    from cst_runtime.core import farfield
+
+    captured = {}
+
+    def fake_execute(project, code, project_path=""):
+        captured.update(project=project, code=code, project_path=project_path)
+        return {"status": "success"}
+
+    monkeypatch.setattr(farfield, "_gui_execute_vba", fake_execute)
+    project = object()
+
+    result = farfield._gui_set_result_navigator_selection(
+        project,
+        [3, 1, 3],
+        project_path="C:/demo.cst",
+    )
+
+    assert result["status"] == "success"
+    assert captured["project"] is project
+    assert captured["project_path"] == "C:/demo.cst"
+    assert "Sub Main()" in captured["code"]
+    assert result["selected_run_ids"] == [1, 3]
 
 
 def test_export_farfield_grid_missing_file():
