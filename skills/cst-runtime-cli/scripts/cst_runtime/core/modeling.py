@@ -1174,21 +1174,21 @@ def capture_3d_view(
     
     if not project_path:
         return error_response("project_path_required", "project_path is required")
-    
-    p = Path(project_path)
-    if not p.exists():
-        return error_response("project_not_found", f"Project not found: {p}")
-    
+
     if zoom <= 0:
         return error_response("invalid_zoom", f"zoom must be > 0, got {zoom}")
-    
+
     valid_presets = {"Front", "Back", "Top", "Bottom", "Left", "Right", "Isometric"}
     if preset_name not in valid_presets:
         return error_response("invalid_preset_name", f"preset_name must be one of {sorted(valid_presets)}")
-    
+
     if view_type not in {"custom", "preset"}:
         return error_response("invalid_view_type", f"view_type must be 'custom' or 'preset'")
-    
+
+    p = Path(project_path)
+    if not p.exists():
+        return error_response("project_not_found", f"Project not found: {p}")
+
     # Resolve project path first
     p = p.resolve()
     
