@@ -32,13 +32,16 @@ def foldable_panel(
     tag_html = f'<span class="foldable-tag {tag_class}">{escape(tag)}</span>' if tag else ""
     open_attr = " open" if open else ""
     title_content = title_html if title_html else escape(title)
+    meta_html = (
+        f'<span class="foldable-meta">{escape(meta)}</span>' if meta else ""
+    )
     return (
         f'<details class="{cls}"{open_attr}>'
         f'<summary>'
         f'{tag_html}'
         f'<span class="foldable-header">'
         f'<span class="foldable-title">{title_content}</span>'
-        f'{f'<span class="foldable-meta">{escape(meta)}</span>' if meta else ""}'
+        f'{meta_html}'
         f'</span>'
         f'</summary>'
         f'<div class="foldable-body">{body}</div>'

@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import os
 from pathlib import Path
 from typing import Any
 import json
@@ -11,17 +12,16 @@ import re
 from .errors import error_response
 
 
-# 扫描常见的 CST Studio Suite 安装路径，按优先级顺序排列
+# 显式路径只来自环境变量，避免把开发机路径写入发行包。
 _COMMON_CST_PATHS = [
-    r"C:\Program Files\CST Studio Suite 2026\AMD64\python_cst_libraries",
-    r"C:\Program Files (x86)\CST Studio Suite 2026\AMD64\python_cst_libraries",
-    r"D:\Program Files (x86)\CST Studio Suite 2022\AMD64\python_cst_libraries",
-    r"D:\Program Files\CST Studio Suite 2022\AMD64\python_cst_libraries"
+    value
+    for value in os.environ.get("CST_PYTHON_LIBS", "").split(os.pathsep)
+    if value.strip()
 ]
 
 def load_cst_config(workspace_root: str = "") -> dict[str, Any]:
     """
-    读取项目配置文件。如果不存在则创建一个带默认值的。
+    读取项目配置文件。如果不存在则返回不含本机路径的默认值。
     """
     # 确定配置文件的绝对路径
     if workspace_root:
@@ -29,19 +29,13 @@ def load_cst_config(workspace_root: str = "") -> dict[str, Any]:
     else:
         config_path = Path.cwd().resolve() / ".cst_config.json"
         
-    # 定义你设想的分类字典结构（默认配置）
     default_config = {
-        "project": {
-            "cst_path": r"D:\Program Files\CST Studio Suite 2022\AMD64\python_cst_libraries",
-            "description": "项目运行所依赖的 CST 接口路径"
+        "runtime": {
+            "cst_python_libraries": os.environ.get("CST_PYTHON_LIBS", ""),
+            "description": "CST Python 接口库路径"
         }
     }
-    # 如果文件不存在，我们就抛出警告并创建一个
     if not config_path.exists():
-        import warnings
-        warnings.warn(f"未找到配置文件，已在 {config_path} 创建默认配置。请确认 CST 路径是否正确。")
-        # 把字典写入文件，indent=4 表示漂亮地缩进换行
-        config_path.write_text(json.dumps(default_config, indent=4), encoding="utf-8")
         return default_config
         
     # 如果文件存在，读取它并转为 Python 字典
@@ -149,10 +143,13 @@ def _scan_cst_named_dirs() -> list[dict[str, Any]]:
     """
     found: list[dict[str, Any]] = []
     search_roots = [
-        r"C:\Program Files",
-        r"C:\Program Files (x86)",
-        r"D:\Program Files",
-        r"D:\Program Files (x86)",
+        value
+        for value in {
+            os.environ.get("ProgramFiles"),
+            os.environ.get("ProgramFiles(x86)"),
+            os.environ.get("ProgramW6432"),
+        }
+        if value
     ]
     for root in search_roots:
         root_p = Path(root)

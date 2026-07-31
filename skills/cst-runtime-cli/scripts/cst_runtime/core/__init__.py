@@ -1,61 +1,50 @@
-"""cst_runtime.core — CST path auto-detection at import time."""
+"""CST core 层初始化。
+
+仅从显式环境变量或系统 Program Files 根目录探测 CST，不读取项目打包配置，
+也不包含开发机绝对路径。
+"""
 from __future__ import annotations
 
+import os
 import sys
 import warnings
 from pathlib import Path
-from typing import Any
 
-_CST_SEARCH_PATHS: list[str] = [
-    r"C:\Program Files\CST Studio Suite 2026\AMD64\python_cst_libraries",
-    r"C:\Program Files\CST Studio Suite 2025\AMD64\python_cst_libraries",
-    r"C:\Program Files\CST Studio Suite 2022\AMD64\python_cst_libraries",
-    r"C:\Program Files (x86)\CST Studio Suite 2026\AMD64\python_cst_libraries",
-    r"C:\Program Files (x86)\CST Studio Suite 2022\AMD64\python_cst_libraries",
-]
 
-_cst_found = False
-try:
-    _pp = Path.cwd().resolve() / "pyproject.toml"
-    if _pp.exists():
-        try:
-            import tomllib
-        except ImportError:
-            import tomli as tomllib
-        _src = tomllib.loads(_pp.read_text(encoding="utf-8")).get("tool", {}).get("uv", {}).get("sources", {}).get("cst-studio-suite-link", {})
-        if isinstance(_src, dict) and _src.get("path"):
-            _p = Path(_src["path"]).resolve()
-            if str(_p) not in sys.path:
-                sys.path.insert(0, str(_p))
-                _cst_found = True
-except Exception:
-    pass
-
-if not _cst_found:
-    _probe_roots = [
-        Path(r"C:\Program Files"),
-        Path(r"C:\Program Files (x86)"),
+def _candidate_library_paths() -> list[Path]:
+    configured = os.environ.get("CST_PYTHON_LIBS", "")
+    candidates = [
+        Path(value).expanduser()
+        for value in configured.split(os.pathsep)
+        if value.strip()
     ]
-    for _root in _probe_roots:
-        if not _root.is_dir():
+    program_roots = {
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
+        os.environ.get("ProgramW6432"),
+    }
+    for raw_root in program_roots:
+        if not raw_root:
+            continue
+        root = Path(raw_root)
+        if not root.is_dir():
             continue
         try:
-            for _child in _root.iterdir():
-                if _child.is_dir() and "CST Studio Suite" in _child.name:
-                    _pypath = _child / "AMD64" / "python_cst_libraries"
-                    if _pypath.is_dir() and str(_pypath) not in sys.path:
-                        sys.path.insert(0, str(_pypath))
-                        _cst_found = True
-                        break
+            for child in root.iterdir():
+                if child.is_dir() and child.name.startswith("CST Studio Suite"):
+                    candidates.append(
+                        child / "AMD64" / "python_cst_libraries"
+                    )
         except PermissionError:
             continue
-        if _cst_found:
-            break
+    return candidates
 
-if not _cst_found:
-    for _p in _CST_SEARCH_PATHS:
-        if Path(_p).is_dir() and str(_p) not in sys.path:
-            sys.path.insert(0, _p)
-            break
+
+for _candidate in _candidate_library_paths():
+    if _candidate.is_dir():
+        _value = str(_candidate.resolve())
+        if _value not in sys.path:
+            sys.path.insert(0, _value)
+        break
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)

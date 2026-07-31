@@ -218,11 +218,16 @@ def metric_cards_html(metrics: list[dict[str, str]]) -> str:
     cards = []
     for m in metrics:
         css_class = m.get("css_class", "")
+        unit_html = (
+            f'<span class="metric-unit">{escape(m["unit"])}</span>'
+            if m.get("unit")
+            else ""
+        )
         cards.append(
             f'<div class="metric-card">'
             f'<div class="metric-label">{escape(m["label"])}</div>'
             f'<div class="metric-value {css_class}">{escape(m["value"])}'
-            f'{f'<span class="metric-unit">{escape(m["unit"])}</span>' if m.get("unit") else ""}'
+            f'{unit_html}'
             f'</div>'
             f'</div>'
         )

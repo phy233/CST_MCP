@@ -1121,7 +1121,8 @@ def _report_module_timeline(exports_d: Path, data_dir: Path) -> tuple[str, list[
         return "", [], {}
     s11_data = _load_s11_exports(str(exports_d))
     parts: list[str] = []
-    parts.append(f'{section_header(f"{_SECTION_LABELS["timeline"]}（{len(timeline)} 步）")}')
+    timeline_title = f"{_SECTION_LABELS['timeline']}（{len(timeline)} 步）"
+    parts.append(section_header(timeline_title))
     for idx, rec in enumerate(timeline, 1):
         parts.append(_step_card_html(idx, rec, s11_data))
     param_changes = [r for r in timeline if _categorize_step(r) == "param_change"]
@@ -1194,7 +1195,11 @@ def _report_module_audit(exports_d: Path, data_dir: Path) -> tuple[str, list[dic
         step_cards: list[str] = []
         for idx, r in enumerate(timeline, 1):
             step_cards.append(_step_card_html(idx, r, s11_exports))
-        parts.append(f'{section_header(f"{_SECTION_LABELS["audit"]}（{len(timeline)} 条操作）")}<div class="step-list">{"".join(step_cards)}</div>')
+        audit_title = f"{_SECTION_LABELS['audit']}（{len(timeline)} 条操作）"
+        parts.append(
+            f'{section_header(audit_title)}'
+            f'<div class="step-list">{"".join(step_cards)}</div>'
+        )
     html = "\n".join(parts)
     return html, [], {"timeline_count": len(timeline), "s11_count": len(s11_exports)}
 
@@ -1230,8 +1235,9 @@ def _report_module_cuts(exports_d: Path) -> tuple[str, list[dict], dict[str, Any
             pass
     if not rows:
         return "", [], {}
+    cuts_title = f"{_SECTION_LABELS['cuts']}（{len(rows)} 切面）"
     html = (
-        f'{section_header(f"{_SECTION_LABELS["cuts"]}（{len(rows)} 切面）")}'
+        f'{section_header(cuts_title)}'
         f'<table><thead><tr><th>切面</th><th>采样点</th><th>最小值(dB)</th><th>最大值(dB)</th><th>波动(dB)</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
     )

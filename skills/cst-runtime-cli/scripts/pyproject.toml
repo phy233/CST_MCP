@@ -3,12 +3,33 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cst-runtime-cli"
+name = "cst-runtime"
 version = "1.0.0"
 description = "CST Studio Suite CLI toolchain - modeling, simulation, optimization, results, farfield"
-requires-python = ">=3.13"
+requires-python = ">=3.9,<3.10"
 license = {text = "MIT"}
 readme = "README.md"
+dependencies = [
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+sweep = [
+    "numpy>=2.0,<2.1",
+    "pandas>=2.3,<2.4",
+    "scipy>=1.13,<1.14",
+]
+optimization = [
+    "optuna>=3.6,<5",
+    "scikit-learn>=1.4,<1.7",
+]
+report = [
+    "cbor2>=5.6,<6",
+    "matplotlib>=3.8,<3.10",
+]
+dev = [
+    "pytest>=8,<9",
+]
 
 [project.urls]
 Homepage = "https://github.com/bbl21/cst-runtime-cli"
@@ -16,6 +37,7 @@ Source = "https://github.com/bbl21/cst-runtime-cli"
 
 [project.scripts]
 cst-runtime = "cst_runtime.cli:main"
+cst-runtime-worker = "cst_runtime.worker:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cst_runtime"]

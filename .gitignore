@@ -4,3 +4,5 @@ test_*/
 *.json
 *_test/
 *.log
+dist/
+.pytest-tmp/
