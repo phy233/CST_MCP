@@ -9,7 +9,7 @@ SCRIPTS_ROOT = REPO_ROOT / "skills" / "cst-runtime-cli" / "scripts"
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from cst_runtime import project_identity
+from cst_runtime.core import identity as project_identity
 
 
 class FakeProject:

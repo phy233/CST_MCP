@@ -21,7 +21,7 @@ def test_change_parameter_missing_value():
     assert_json_error(result, "parameter_value_missing")
 
 
-def test_change_parameter_marks_dirty_and_annotates(mocker):
+def test_change_parameter_marks_dirty_and_annotates(mocker, tmp_path):
     """Mock COM layer, verify gateway.mark_params_dirty called + T13 warning."""
     from cst_runtime.core.project import change_parameter
     from cst_runtime.core import gateway
@@ -33,8 +33,9 @@ def test_change_parameter_marks_dirty_and_annotates(mocker):
         return_value=(mock_project, {"status": "success"}),
     )
 
-    dummy = "/tmp/test_gate.cst"
-    result = change_parameter(dummy, name="g", value=24.0)
+    dummy = tmp_path / "test_gate.cst"
+    dummy.write_bytes(b"")
+    result = change_parameter(str(dummy), name="g", value=24.0)
 
     assert result["status"] == "success"
     assert result["changed"] == {"g": 24.0}

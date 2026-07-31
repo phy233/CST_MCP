@@ -7,13 +7,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from helpers import assert_json_error
 
 
-def test_start_sim_async_rejects_dirty_project():
+def test_start_sim_async_rejects_dirty_project(tmp_path):
     """T2: start_simulation_async refuses dirty project without reopen."""
     from cst_runtime.core.simulation import start_simulation_async
     from cst_runtime.core import gateway
     from cst_runtime.core.utils import abs_project_path
 
-    dummy = abs_project_path("/tmp/dirty.cst")
+    dummy = abs_project_path(str(tmp_path / "dirty.cst"))
     gateway.mark_params_dirty(dummy)
     result = start_simulation_async(dummy)
     assert_json_error(result, "params_not_rebuilt")
@@ -34,13 +34,13 @@ def test_start_sim_allows_clean_project(mocker):
     assert result["status"] == "success"
 
 
-def test_start_sim_sync_also_rejects_dirty():
+def test_start_sim_sync_also_rejects_dirty(tmp_path):
     """T2: synchronous start_simulation also checks dirty flag."""
     from cst_runtime.core.simulation import start_simulation
     from cst_runtime.core import gateway
     from cst_runtime.core.utils import abs_project_path
 
-    dummy = abs_project_path("/tmp/dirty2.cst")
+    dummy = abs_project_path(str(tmp_path / "dirty2.cst"))
     gateway.mark_params_dirty(dummy)
     result = start_simulation(dummy)
     assert_json_error(result, "params_not_rebuilt")
