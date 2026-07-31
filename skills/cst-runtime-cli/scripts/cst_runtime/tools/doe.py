@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core import doe as _doe
+from ..lib import doe as _doe
 from . import _register_tool_defs
 
 

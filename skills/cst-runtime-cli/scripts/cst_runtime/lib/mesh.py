@@ -21,6 +21,7 @@ from ..core.modeling import define_mesh as _define_mesh
 from ..core.simulation import set_solver_acceleration as _set_solver_acceleration
 from ..core.simulation import set_mesh_fpbavoid_nonreg_unite as _set_mesh_fpbavoid_nonreg_unite
 from ..core.simulation import set_mesh_minimum_step_number as _set_mesh_minimum_step_number
+from ._facade import wrap_public
 
 
 def settings(
@@ -135,3 +136,9 @@ def set_minimum_step_number(project_path: str, num_steps: int = 5) -> None:
     result = _set_mesh_minimum_step_number(project_path, num_steps)
     if result.get("status") == "error":
         raise RuntimeError(result.get("message", "Failed to set minimum step number"))
+
+
+settings = wrap_public(settings)
+acceleration = wrap_public(acceleration)
+set_fpbavoid_nonreg_unite = wrap_public(set_fpbavoid_nonreg_unite)
+set_minimum_step_number = wrap_public(set_minimum_step_number)

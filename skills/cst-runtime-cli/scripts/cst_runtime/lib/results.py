@@ -23,10 +23,13 @@ from ..core.results import list_result_items as _list_result_items
 from ..core.results import list_run_ids as _list_run_ids
 from ..core.results import get_parameter_combination as _get_parameter_combination
 from ..core.results import export_run_results as _export_run_results
-from ..core.identity import attach_expected_project
+from ..core.results import result_item_exists as _result_item_exists
+from ..core import results as _core_results
+from ._facade import call_core, wrap_core
+from .contracts import OperationResult, error_result, success_result
 
 
-def get_sparam(project_path: str, treepath: str, run_id: int = 0) -> dict[str, Any]:
+def get_sparam(project_path: str, treepath: str, run_id: int = 0) -> OperationResult:
     """Read S-parameter data (offline, no CST needed).
 
     Args:
@@ -40,13 +43,10 @@ def get_sparam(project_path: str, treepath: str, run_id: int = 0) -> dict[str, A
     Raises:
         RuntimeError: If result cannot be read
     """
-    result = _get_1d_result(project_path, treepath, run_id=run_id)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to read S-parameter"))
-    return result
+    return call_core(_get_1d_result, project_path, treepath, run_id=run_id)
 
 
-def get_sparam_at_freq(project_path: str, treepath: str, freq_ghz: float, run_id: int = 0) -> dict[str, Any]:
+def get_sparam_at_freq(project_path: str, treepath: str, freq_ghz: float, run_id: int = 0) -> OperationResult:
     """Get S-parameter at specific frequency (linear interpolation).
 
     Args:
@@ -62,9 +62,11 @@ def get_sparam_at_freq(project_path: str, treepath: str, freq_ghz: float, run_id
         RuntimeError: If result cannot be read or interpolated
     """
     result = get_sparam(project_path, treepath, run_id=run_id)
+    if result.get("status") == "error":
+        return result
     ydata = result.get("ydata", [])
     if not ydata:
-        raise RuntimeError("No data points found")
+        return error_result("result_data_empty", "结果中没有数据点", treepath=treepath)
 
     # Extract frequency and S-parameter data
     freqs = [d.get("frequency", 0) for d in ydata]
@@ -78,19 +80,18 @@ def get_sparam_at_freq(project_path: str, treepath: str, freq_ghz: float, run_id
     mag = float(np.sqrt(re_interp**2 + im_interp**2))
     phase = float(np.arctan2(im_interp, re_interp))
 
-    return {
-        "status": "success",
-        "frequency_ghz": freq_ghz,
-        "real": re_interp,
-        "imag": im_interp,
-        "magnitude": mag,
-        "magnitude_db": float(20 * np.log10(max(mag, 1e-30))),
-        "phase_rad": phase,
-        "phase_deg": float(np.degrees(phase)),
-    }
+    return success_result(
+        frequency_ghz=freq_ghz,
+        real=re_interp,
+        imag=im_interp,
+        magnitude=mag,
+        magnitude_db=float(20 * np.log10(max(mag, 1e-30))),
+        phase_rad=phase,
+        phase_deg=float(np.degrees(phase)),
+    )
 
 
-def get_2d_field(project_path: str, treepath: str) -> dict[str, Any]:
+def get_2d_field(project_path: str, treepath: str) -> OperationResult:
     """Read 2D field data.
 
     Args:
@@ -103,13 +104,10 @@ def get_2d_field(project_path: str, treepath: str) -> dict[str, Any]:
     Raises:
         RuntimeError: If result cannot be read
     """
-    result = _get_2d_result(project_path, treepath)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to read 2D field"))
-    return result
+    return call_core(_get_2d_result, project_path, treepath)
 
 
-def list_items(project_path: str, filter_type: str = "0D/1D") -> list[str]:
+def list_items(project_path: str, filter_type: str = "0D/1D") -> OperationResult:
     """List available result items.
 
     Args:
@@ -119,13 +117,10 @@ def list_items(project_path: str, filter_type: str = "0D/1D") -> list[str]:
     Returns:
         List of result tree paths
     """
-    result = _list_result_items(project_path, filter_type=filter_type)
-    if result.get("status") == "error":
-        return []
-    return result.get("items", [])
+    return call_core(_list_result_items, project_path, filter_type=filter_type)
 
 
-def list_sparams(project_path: str) -> list[str]:
+def list_sparams(project_path: str) -> OperationResult:
     """List available S-parameters.
 
     Args:
@@ -134,11 +129,14 @@ def list_sparams(project_path: str) -> list[str]:
     Returns:
         List of S-parameter tree paths
     """
-    all_items = list_items(project_path, filter_type="0D/1D")
-    return [item for item in all_items if "S-Parameters" in item]
+    result = list_items(project_path, filter_type="0D/1D")
+    if result.get("status") == "error":
+        return result
+    items = [item for item in result.get("items", []) if "S-Parameters" in item]
+    return success_result(project_path=project_path, items=items, count=len(items))
 
 
-def sparam_exists(project_path: str, treepath: str) -> bool:
+def sparam_exists(project_path: str, treepath: str) -> OperationResult:
     """Check if S-parameter exists.
 
     Args:
@@ -148,17 +146,10 @@ def sparam_exists(project_path: str, treepath: str) -> bool:
     Returns:
         True if S-parameter exists
     """
-    normalized_project = _abs_project_path(project_path)
-    project, status = attach_expected_project(normalized_project)
-    if project is None:
-        return False
-    try:
-        return project.model3d.ResultTree.DoesTreeItemExist(treepath)
-    except Exception:
-        return False
+    return call_core(_result_item_exists, project_path, treepath)
 
 
-def list_runs(project_path: str) -> list[int]:
+def list_runs(project_path: str) -> OperationResult:
     """List simulation run IDs.
 
     Args:
@@ -167,13 +158,10 @@ def list_runs(project_path: str) -> list[int]:
     Returns:
         List of run IDs
     """
-    result = _list_run_ids(project_path)
-    if result.get("status") == "error":
-        return []
-    return result.get("run_ids", [])
+    return call_core(_list_run_ids, project_path)
 
 
-def get_param_combo(project_path: str, run_id: int) -> dict[str, Any]:
+def get_param_combo(project_path: str, run_id: int) -> OperationResult:
     """Get parameter combination for a run.
 
     Args:
@@ -186,13 +174,10 @@ def get_param_combo(project_path: str, run_id: int) -> dict[str, Any]:
     Raises:
         RuntimeError: If parameter combination cannot be retrieved
     """
-    result = _get_parameter_combination(project_path, run_id)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to get parameter combination"))
-    return result.get("parameters", {})
+    return call_core(_get_parameter_combination, project_path, run_id)
 
 
-def export_all(project_path: str, **kwargs) -> dict[str, Any]:
+def export_all(project_path: str, **kwargs) -> OperationResult:
     """Export all results for a run.
 
     Args:
@@ -205,10 +190,21 @@ def export_all(project_path: str, **kwargs) -> dict[str, Any]:
     Raises:
         RuntimeError: If export fails
     """
-    result = _export_run_results(project_path, **kwargs)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to export results"))
-    return result
+    return call_core(_export_run_results, project_path, **kwargs)
+
+
+# 工具协议使用的原子业务名称；统一经过同一 lib 边界。
+open_project = wrap_core(_core_results.open_project)
+list_subprojects = wrap_core(_core_results.list_subprojects)
+get_version_info = wrap_core(_core_results.get_version_info)
+list_result_items = wrap_core(_core_results.list_result_items)
+list_run_ids = wrap_core(_core_results.list_run_ids)
+get_parameter_combination = wrap_core(_core_results.get_parameter_combination)
+get_1d_result = wrap_core(_core_results.get_1d_result)
+get_2d_result = wrap_core(_core_results.get_2d_result)
+export_run_results = wrap_core(_core_results.export_run_results)
+generate_report = wrap_core(_core_results.generate_report)
+plot_exported_file = wrap_core(_core_results.plot_exported_file)
 
 
 def _abs_project_path(project_path: str) -> str:

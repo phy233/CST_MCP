@@ -189,9 +189,9 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
-from ..core import workspace as _ws
-from ..core import workspace as _rw
-from ..core import environment as _ce
+from ..lib import workspace as _ws
+from ..lib import workspace as _rw
+from ..lib import environment as _ce
 
 
 def tool_init_workspace(args: dict) -> dict:

@@ -27,6 +27,8 @@ from ..core.optimizer import create_study as _create_study
 from ..core.optimizer import ask_study as _ask_study
 from ..core.optimizer import tell_study as _tell_study
 from ..core.optimizer import best_study as _best_study
+from ..core import optimizer as _core_optimizer
+from ._facade import wrap_core, wrap_public
 
 
 def create_study(
@@ -119,3 +121,20 @@ def best(storage_path: str, study_name: str) -> dict[str, Any]:
     if result.get("status") == "error":
         raise RuntimeError(result.get("message", "Failed to get best result"))
     return result
+
+
+# 工具层使用的完整原子优化业务入口。
+create_study = wrap_core(_core_optimizer.create_study)
+ask_study = wrap_core(_core_optimizer.ask_study)
+tell_study = wrap_core(_core_optimizer.tell_study)
+best_study = wrap_core(_core_optimizer.best_study)
+add_trials = wrap_core(_core_optimizer.add_trials)
+param_importances = wrap_core(_core_optimizer.param_importances)
+terminate_check = wrap_core(_core_optimizer.terminate_check)
+switch_sampler = wrap_core(_core_optimizer.switch_sampler)
+
+# 保留简洁 Python 名称，同时统一其返回和错误行为。
+create_study_legacy = create_study
+ask = wrap_public(ask)
+tell = wrap_public(tell)
+best = wrap_public(best)

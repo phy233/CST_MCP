@@ -202,9 +202,9 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
-from ..core import audit as _audit
-from ..core import evidence as _evidence
-from ..core.utils import parse_list_arg
+from ..lib import audit as _audit
+from ..lib import evidence as _evidence
+from ._arguments import parse_list_arg
 
 
 def tool_record_stage(args: dict) -> dict:

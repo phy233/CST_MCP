@@ -21,6 +21,9 @@ from typing import Any
 
 from ..core.farfield import export_farfield_grid as _export_farfield_grid
 from ..core.farfield import discover_farfield_monitors as _discover_farfield_monitors
+from ..core import farfield as _core_farfield
+from ._facade import call_core, wrap_core
+from .contracts import OperationResult, success_result
 
 
 def export_grid(
@@ -31,7 +34,7 @@ def export_grid(
     theta_step_deg: float = 1.0,
     phi_step_deg: float = 2.0,
     run_id: int | None = None,
-) -> dict[str, Any]:
+) -> OperationResult:
     """Export farfield grid data.
 
     Args:
@@ -49,23 +52,21 @@ def export_grid(
     Raises:
         RuntimeError: If export fails
     """
-    result = _export_farfield_grid(
+    return call_core(
+        _export_farfield_grid,
         project_path, farfield_name, export_dir,
         quantity=quantity,
         theta_step_deg=theta_step_deg,
         phi_step_deg=phi_step_deg,
         run_id=run_id,
     )
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to export farfield grid"))
-    return result
 
 
 def export_cut(
     project_path: str,
     tree_path: str,
     export_dir: str = "",
-) -> dict[str, Any]:
+) -> OperationResult:
     """Export farfield cut data.
 
     Args:
@@ -79,31 +80,15 @@ def export_cut(
     Raises:
         RuntimeError: If export fails
     """
-    # NOTE: This is a simplified implementation
-    # For full cut export, use the core farfield module directly
-    from ..core.farfield import _build_farfield_cut_export_command
-    from ..core.modeling import add_to_history
-
-    if not export_dir:
-        from pathlib import Path
-        export_dir = str(Path(project_path).parent.parent / "exports")
-
-    from pathlib import Path
-    output_file = str(Path(export_dir) / "farfield_cut.txt")
-
-    vba = _build_farfield_cut_export_command(tree_path, output_file)
-    result = add_to_history(project_path, vba, f"Export farfield cut: {tree_path}")
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to export farfield cut"))
-
-    return {
-        "status": "success",
-        "tree_path": tree_path,
-        "output_file": output_file,
-    }
+    return call_core(
+        _core_farfield.export_farfield_cut,
+        project_path=project_path,
+        tree_path=tree_path,
+        export_dir=export_dir,
+    )
 
 
-def list_monitors(project_path: str) -> list[str]:
+def list_monitors(project_path: str) -> OperationResult:
     """List farfield monitors.
 
     Args:
@@ -112,7 +97,12 @@ def list_monitors(project_path: str) -> list[str]:
     Returns:
         List of farfield monitor names
     """
-    result = _discover_farfield_monitors(project_path)
-    if result.get("status") == "error":
-        return []
-    return result.get("farfield_names", [])
+    return call_core(_discover_farfield_monitors, project_path)
+
+
+discover_farfield_monitors = wrap_core(_core_farfield.discover_farfield_monitors)
+export_farfield_grid = wrap_core(_core_farfield.export_farfield_grid)
+export_farfield_cut = wrap_core(_core_farfield.export_farfield_cut)
+calculate_farfield_neighborhood_flatness = wrap_core(
+    _core_farfield.calculate_farfield_neighborhood_flatness
+)

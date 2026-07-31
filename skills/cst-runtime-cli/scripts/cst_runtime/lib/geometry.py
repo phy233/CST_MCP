@@ -42,6 +42,7 @@ from ..core.modeling import create_component as _create_component
 from ..core.modeling import change_material as _change_material
 from ..core.modeling import transform_shape as _transform_shape
 from ..core.modeling import add_to_history as _add_to_history
+from ._facade import wrap_public
 
 
 def brick(
@@ -487,3 +488,12 @@ def polygon(
     result = _add_to_history(project_path, "\n".join(vba_lines), f"Define Polygon: {name}")
     if result.get("status") == "error":
         raise RuntimeError(result.get("message", "Failed to create polygon"))
+
+
+for _public_name in (
+    "brick", "cylinder", "cone", "rectangle", "boolean_add",
+    "boolean_subtract", "boolean_intersect", "delete_entity",
+    "delete_component", "rotate", "translate", "mirror", "activate_wcs",
+    "deactivate_wcs", "arc", "polygon",
+):
+    globals()[_public_name] = wrap_public(globals()[_public_name])

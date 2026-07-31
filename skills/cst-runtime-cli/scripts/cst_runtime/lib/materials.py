@@ -24,7 +24,9 @@ from typing import Any
 from ..core.modeling import define_material_from_mtd as _define_material_from_mtd
 from ..core.modeling import change_material as _change_material
 from ..core.modeling import add_to_history as _add_to_history
-from ..core.identity import attach_expected_project
+from ..core.project import list_materials as _list_materials
+from ._facade import call_core
+from .contracts import OperationResult, success_result
 
 
 def define(
@@ -35,7 +37,7 @@ def define(
     tan_d: float = 0.0,
     tan_d_freq: float = 0.0,
     transparency: float = 0.0,
-) -> None:
+) -> OperationResult:
     """Create a material with inline properties.
 
     Args:
@@ -61,12 +63,10 @@ def define(
     .Transparency {transparency}
     .Create
 End With"""
-    result = _add_to_history(project_path, vba, f"Define Material: {name}")
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to define material"))
+    return call_core(_add_to_history, project_path, vba, f"Define Material: {name}")
 
 
-def define_from_mtd(project_path: str, material_name: str) -> None:
+def define_from_mtd(project_path: str, material_name: str) -> OperationResult:
     """Load material from .mtd file.
 
     Args:
@@ -76,12 +76,10 @@ def define_from_mtd(project_path: str, material_name: str) -> None:
     Raises:
         RuntimeError: If material cannot be loaded
     """
-    result = _define_material_from_mtd(project_path, material_name)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to load material from MTD"))
+    return call_core(_define_material_from_mtd, project_path, material_name)
 
 
-def list_materials(project_path: str) -> list[str]:
+def list_materials(project_path: str) -> OperationResult:
     """List available materials.
 
     Args:
@@ -90,26 +88,10 @@ def list_materials(project_path: str) -> list[str]:
     Returns:
         List of material names
     """
-    normalized_project = _abs_project_path(project_path)
-    project, status = attach_expected_project(normalized_project)
-    if project is None:
-        return []
-    try:
-        # CST does not have a direct API to list all materials
-        # We can get materials from the tree items
-        tree_items = project.modeler.get_tree_items()
-        materials = []
-        for item in tree_items:
-            if str(item).startswith("Materials\\"):
-                mat_name = str(item).split("\\")[-1]
-                if mat_name not in materials:
-                    materials.append(mat_name)
-        return materials
-    except Exception:
-        return []
+    return call_core(_list_materials, project_path)
 
 
-def exists(project_path: str, name: str) -> bool:
+def exists(project_path: str, name: str) -> OperationResult:
     """Check if material exists.
 
     Args:
@@ -121,14 +103,17 @@ def exists(project_path: str, name: str) -> bool:
     """
     # NOTE: CST 2026 feature - Material.Exists() may not be available in CST 2022
     # Fallback: check if material is in the list
-    try:
-        materials = list_materials(project_path)
-        return name in materials
-    except Exception:
-        return False
+    result = list_materials(project_path)
+    if result.get("status") == "error":
+        return result
+    return success_result(
+        project_path=project_path,
+        material=name,
+        exists=name in result.get("items", []),
+    )
 
 
-def set_material(project_path: str, entity: str, material: str) -> None:
+def set_material(project_path: str, entity: str, material: str) -> OperationResult:
     """Modify entity material.
 
     Args:
@@ -139,9 +124,7 @@ def set_material(project_path: str, entity: str, material: str) -> None:
     Raises:
         RuntimeError: If material cannot be set
     """
-    result = _change_material(project_path, entity, material)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to set material"))
+    return call_core(_change_material, project_path, entity, material)
 
 
 def _abs_project_path(project_path: str) -> str:

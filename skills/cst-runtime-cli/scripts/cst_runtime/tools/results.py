@@ -495,8 +495,8 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
-from ..core import results as _res
-from ..core.utils import project_path_from_args, run_id_from_args
+from ..lib import results as _res
+from ._arguments import project_path_from_args, run_id_from_args
 
 
 def tool_open_results_project(args: dict) -> dict:

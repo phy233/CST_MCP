@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core import optimizer as _opt
+from ..lib import optimization as _opt
 from . import _register_tool_defs
 
 

@@ -209,8 +209,8 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
-from ..core import farfield as _ff
-from ..core.utils import project_path_from_args
+from ..lib import farfield as _ff
+from ._arguments import project_path_from_args
 
 
 def tool_inspect_farfield_monitors(args: dict) -> dict:

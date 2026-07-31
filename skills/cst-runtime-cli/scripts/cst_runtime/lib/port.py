@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..core.modeling import add_to_history as _add_to_history
+from ._facade import wrap_public
 
 
 def define_waveguide(
@@ -101,3 +102,7 @@ End With"""
     result = _add_to_history(project_path, vba, "Define Floquet Port")
     if result.get("status") == "error":
         raise RuntimeError(result.get("message", "Failed to define Floquet port"))
+
+
+define_waveguide = wrap_public(define_waveguide)
+define_floquet = wrap_public(define_floquet)

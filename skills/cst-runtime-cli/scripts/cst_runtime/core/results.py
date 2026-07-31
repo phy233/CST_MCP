@@ -8,6 +8,33 @@ from pathlib import Path
 from typing import Any
 
 from .errors import error_response
+from .identity import attach_expected_project
+from .compatibility import get_model3d
+
+
+def result_item_exists(project_path: str, treepath: str) -> dict[str, Any]:
+    """通过 core 兼容边界查询结果树节点是否存在。"""
+    project, status = attach_expected_project(project_path)
+    if project is None:
+        return status
+    try:
+        result_tree = get_model3d(project).ResultTree
+        exists = bool(result_tree.DoesTreeItemExist(treepath))
+        return {
+            "status": "success",
+            "project_path": project_path,
+            "treepath": treepath,
+            "exists": exists,
+            "runtime_module": "cst_runtime.core.results",
+        }
+    except Exception as exc:
+        return error_response(
+            "result_tree_query_failed",
+            str(exc),
+            project_path=project_path,
+            treepath=treepath,
+            runtime_module="cst_runtime.core.results",
+        )
 from .utils import serialize_value as _serialize_value
 from .compatibility import get_result2d_item, get_colormap_items, supports_2d_results
 

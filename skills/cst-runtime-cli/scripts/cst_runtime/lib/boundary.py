@@ -21,6 +21,7 @@ from typing import Any
 
 from ..core.modeling import define_boundary as _define_boundary
 from ..core.modeling import add_to_history as _add_to_history
+from ._facade import wrap_public
 
 
 def set_all(project_path: str, boundary_type: str = "expanded open") -> None:
@@ -89,7 +90,7 @@ def set_unit_cell(project_path: str, periodic_angle: float = 0) -> None:
     Raises:
         RuntimeError: If boundary cannot be set
     """
-    set_per_face(
+    return set_per_face(
         project_path,
         xmin="unit cell",
         xmax="unit cell",
@@ -99,3 +100,8 @@ def set_unit_cell(project_path: str, periodic_angle: float = 0) -> None:
         zmax="open",
         periodic_angle=periodic_angle,
     )
+
+
+set_all = wrap_public(set_all)
+set_per_face = wrap_public(set_per_face)
+set_unit_cell = wrap_public(set_unit_cell)

@@ -380,6 +380,16 @@ def install_cst_libraries(cst_path: str = "", dry_run: bool = False) -> dict[str
         valid_installations = [inst for inst in scan_result["installations"] if inst["has_interface"] and inst["has_results"]]
         
         if not valid_installations:
+            if dry_run:
+                return {
+                    "status": "success",
+                    "dry_run": True,
+                    "target_path": None,
+                    "active_path_matches": False,
+                    "scan": scan_result,
+                    "warning": "cst_not_found",
+                    "message": "未检测到 CST Python 库；dry-run 未修改任何文件。",
+                }
             return {
                 **error_response(
                     "cst_not_found",

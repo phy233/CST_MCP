@@ -29,6 +29,7 @@ from ..core.modeling import set_field_monitor as _set_field_monitor
 from ..core.modeling import set_probe as _set_probe
 from ..core.modeling import delete_probe_by_id as _delete_probe_by_id
 from ..core.modeling import delete_monitor as _delete_monitor
+from ._facade import wrap_public
 
 
 def set_farfield(
@@ -188,3 +189,10 @@ def delete_monitor(project_path: str, monitor_name: str) -> None:
     result = _delete_monitor(project_path, monitor_name)
     if result.get("status") == "error":
         raise RuntimeError(result.get("message", "Failed to delete monitor"))
+
+
+for _public_name in (
+    "set_farfield", "set_efield", "set_field", "set_probe",
+    "delete_probe", "delete_monitor",
+):
+    globals()[_public_name] = wrap_public(globals()[_public_name])
