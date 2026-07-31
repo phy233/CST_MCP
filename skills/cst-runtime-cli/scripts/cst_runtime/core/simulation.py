@@ -9,6 +9,7 @@ from typing import Any
 
 from . import gateway
 from .errors import error_response
+from .compatibility import get_model3d
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _add_vba_history, _single_vba
@@ -223,3 +224,39 @@ def _single_vba_pops(project_path: str, history_name: str, vba_line: str) -> dic
         return {"status": "success", "project_path": normalized_project, "runtime_module": "cst_runtime.simulation"}
     except Exception as exc:
         return error_response(f"{history_name}_failed", str(exc), project_path=normalized_project, runtime_module="cst_runtime.simulation")
+def set_frequency_range(project_path: str, fmin: float, fmax: float) -> dict[str, Any]:
+    """设置求解频率范围。"""
+    return _single_vba_pops(
+        project_path,
+        "Set Frequency Range",
+        f'Solver.FrequencyRange "{fmin}", "{fmax}"',
+    )
+
+
+def rebuild_structure(project_path: str) -> dict[str, Any]:
+    """根据当前参数重建结构。"""
+    return _single_vba_pops(project_path, "Rebuild", "Application.Rebuild")
+
+
+def delete_results(project_path: str) -> dict[str, Any]:
+    """删除工程结果，隐藏 model3d 具体访问。"""
+    project, status = attach_expected_project(project_path)
+    if project is None:
+        return status
+    try:
+        get_model3d(project).DeleteResults()
+        return {"status": "success", "project_path": project_path, "deleted": True}
+    except Exception as exc:
+        return error_response("delete_results_failed", str(exc), project_path=project_path)
+
+
+def get_solver_type(project_path: str) -> dict[str, Any]:
+    """读取当前求解器类型。"""
+    project, status = attach_expected_project(project_path)
+    if project is None:
+        return status
+    try:
+        solver_type = str(get_model3d(project).GetSolverType())
+        return {"status": "success", "project_path": project_path, "solver_type": solver_type}
+    except Exception as exc:
+        return error_response("get_solver_type_failed", str(exc), project_path=project_path)

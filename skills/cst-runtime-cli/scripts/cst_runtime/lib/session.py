@@ -25,9 +25,12 @@ from ..core.session import quit_cst as _quit_cst
 from ..core.session import create_blank_project as _create_blank_project
 from ..core.project import save_project as _save_project
 from ..core.identity import list_open_projects as _list_open_projects
+from ..core.session import reattach_project as _reattach_project
+from ._facade import call_core
+from .contracts import OperationResult, success_result
 
 
-def open_project(project_path: str) -> dict[str, Any]:
+def open_project(project_path: str) -> OperationResult:
     """打开 CST 工程 (Public API)。
 
     Args (参数):
@@ -39,13 +42,10 @@ def open_project(project_path: str) -> dict[str, Any]:
     Raises (抛出异常):
         RuntimeError: 如果由于进程卡死、路径错误或许可证问题导致工程无法打开时抛出。
     """
-    result = _open_project(project_path)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to open project, check if a hung process, incorrect path, or license issue."))
-    return result
+    return call_core(_open_project, project_path)
 
 
-def create_blank_project(project_path: str) -> dict[str, Any]:
+def create_blank_project(project_path: str) -> OperationResult:
     """创建一个全新的空白 CST 工程。
 
     Args:
@@ -54,13 +54,17 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
     Returns:
         包含 CST 状态信息和工程详情的字典。
     """
-    result = _create_blank_project(project_path)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to create blank project"))
-    return result
+    return call_core(_create_blank_project, project_path)
 
 
-def close_project(project_path: str, save: bool = False) -> dict[str, Any]:
+def close_project(
+    project_path: str,
+    save: bool = False,
+    *,
+    wait_unlock: bool = True,
+    timeout_seconds: float = 30.0,
+    poll_interval_seconds: float = 0.5,
+) -> OperationResult:
     """关闭CST工程.
 
     Args:
@@ -73,13 +77,17 @@ def close_project(project_path: str, save: bool = False) -> dict[str, Any]:
     Raises:
         RuntimeError: 如果工程无法关闭，抛出错误
     """
-    result = _close_project(project_path, save=save)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to close project"))
-    return result
+    return call_core(
+        _close_project,
+        project_path,
+        save=save,
+        wait_unlock=wait_unlock,
+        timeout_seconds=timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+    )
 
 
-def inspect(project_path: str = "") -> dict[str, Any]:
+def inspect(project_path: str = "") -> OperationResult:
     """检查 CST 运行环境的状态。
 
     Args:
@@ -88,10 +96,10 @@ def inspect(project_path: str = "") -> dict[str, Any]:
     Returns:
         包含环境状态信息的字典
     """
-    return _inspect(project_path)
+    return call_core(_inspect, project_path)
 
 
-def save_project(project_path: str) -> dict[str, Any]:
+def save_project(project_path: str) -> OperationResult:
     """保存当前的 CST 工程。
 
     Args:
@@ -100,17 +108,16 @@ def save_project(project_path: str) -> dict[str, Any]:
     Returns:
         包含执行信息的字典。
     """
-    result = _save_project(project_path)
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to save project"))
-    return result
+    return call_core(_save_project, project_path)
 
 
 def quit_cst(
     project_path: str = "",
     *,
+    dry_run: bool = False,
+    settle_seconds: float = 0.5,
     force_global_cleanup: bool = False,
-) -> dict[str, Any]:
+) -> OperationResult:
     """完全退出 CST 软件进程。
 
     Args:
@@ -122,28 +129,33 @@ def quit_cst(
     Raises:
         RuntimeError: 如果 CST 进程无法退出时抛出
     """
-    result = _quit_cst(
+    return call_core(
+        _quit_cst,
         project_path,
+        dry_run=dry_run,
+        settle_seconds=settle_seconds,
         force_global_cleanup=force_global_cleanup,
     )
-    if result.get("status") == "error":
-        raise RuntimeError(result.get("message", "Failed to quit CST"))
-    return result
 
 
-def list_open() -> list[str]:
+def reattach_project(project_path: str) -> OperationResult:
+    """重新附着到已打开的 CST 工程。"""
+    return call_core(_reattach_project, project_path)
+
+
+def list_open() -> OperationResult:
     """列出当前所有已经打开的 CST 工程路径。
 
     Returns:
         包含打开的工程文件路径的列表
     """
-    result = _list_open_projects()
-    if result.get("status") == "error":
-        return []
-    return result.get("projects", [])
+    result = call_core(_list_open_projects)
+    if result.get("status") == "success":
+        result.setdefault("items", result.get("open_projects", []))
+    return result
 
 
-def is_locked(project_path: str) -> bool:
+def is_locked(project_path: str) -> OperationResult:
     """检查指定的 CST 工程是否被锁定（正在运行或异常退出遗留锁文件）。
 
     Args:
@@ -154,4 +166,4 @@ def is_locked(project_path: str) -> bool:
     """
     import pathlib
     lock_file = pathlib.Path(project_path).with_suffix(".cst.lock")
-    return lock_file.exists()
+    return success_result(locked=lock_file.exists(), project_path=str(project_path))

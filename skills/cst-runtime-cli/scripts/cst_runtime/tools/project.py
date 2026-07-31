@@ -1002,11 +1002,11 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
-from ..core import project as _po
-from ..core import simulation as _sim
-from ..core import modeling as _md
-from ..core import identity as _pi
-from ..core.utils import project_path_from_args
+from ..lib import project as _po
+from ..lib import simulation as _sim
+from ..lib import modeling as _md
+from ..lib import identity as _pi
+from ._arguments import project_path_from_args
 from pathlib import Path
 import time
 
@@ -1219,9 +1219,7 @@ def tool_define_monitor(args: dict) -> dict:
 
 def tool_capture_3d_view(args: dict) -> dict:
     """Handler for capture-3d-view tool."""
-    from ..core.modeling import capture_3d_view
-    
-    return capture_3d_view(
+    return _md.capture_3d_view(
         project_path=args.get("project_path", ""),
         output_dir=args.get("output_dir", ""),
         filename_prefix=args.get("filename_prefix", "view"),
@@ -1236,10 +1234,8 @@ def tool_capture_3d_view(args: dict) -> dict:
 
 def tool_inspect_model_view(args: dict) -> dict:
     """Handler for inspect-model-view tool - capture and return image for agent analysis."""
-    from ..core.modeling import capture_3d_view
-    
     # Always return image data for this tool
-    return capture_3d_view(
+    return _md.capture_3d_view(
         project_path=args.get("project_path", ""),
         output_dir=args.get("output_dir", ""),
         filename_prefix=args.get("filename_prefix", "view"),

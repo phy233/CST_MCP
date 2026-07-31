@@ -9,7 +9,8 @@ from . import gateway
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _single_vba
-from .compatibility import get_model3d, get_tree_items
+from .compatibility import get_tree_items
+from .compatibility.parameters import list_parameter_values
 
 def _connect_new_design_environment():
     import cst.interface
@@ -70,7 +71,6 @@ def list_parameters(project_path: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
-        m3d = get_model3d(project)
         params: dict[str, Any] = {}
         # Try to load descriptions from Model/Parameters.json
         desc_map: dict[str, str] = {}
@@ -86,12 +86,7 @@ def list_parameters(project_path: str) -> dict[str, Any]:
                         desc_map[name] = descr
             except Exception:
                 pass
-        for index in range(int(m3d.GetNumberOfParameters())):
-            name = m3d.GetParameterName(index)
-            try:
-                value = m3d.RestoreDoubleParameter(name)
-            except Exception:
-                value = None
+        for name, value in list_parameter_values(project).items():
             desc = desc_map.get(name, "")
             params[name] = {
                 "value": round(value, 6) if isinstance(value, float) else value,
@@ -147,6 +142,37 @@ def list_entities(project_path: str, component: str = "") -> dict[str, Any]:
             str(exc),
             project_path=normalized_project,
             runtime_module="cst_runtime.modeler",
+        )
+
+
+def list_materials(project_path: str) -> dict[str, Any]:
+    """通过兼容树接口枚举工程材料。"""
+    normalized_project = _abs_project_path(project_path)
+    project, status = attach_expected_project(normalized_project)
+    if project is None:
+        return status
+    try:
+        materials: list[str] = []
+        for item in get_tree_items(project):
+            text = str(item)
+            if not text.startswith("Materials\\"):
+                continue
+            name = text.split("\\")[-1]
+            if name and name not in materials:
+                materials.append(name)
+        return {
+            "status": "success",
+            "project_path": normalized_project,
+            "items": materials,
+            "count": len(materials),
+            "runtime_module": "cst_runtime.core.project",
+        }
+    except Exception as exc:
+        return error_response(
+            "list_materials_failed",
+            str(exc),
+            project_path=normalized_project,
+            runtime_module="cst_runtime.core.project",
         )
 
 

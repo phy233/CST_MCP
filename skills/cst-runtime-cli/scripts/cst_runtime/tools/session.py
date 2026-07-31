@@ -200,9 +200,8 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
-from ..core import session as _sm
-from ..core import project as _po
-from ..core.utils import project_path_from_args
+from ..lib import session as _sm
+from ._arguments import project_path_from_args
 
 
 def tool_create_blank_project(args: dict) -> dict:
@@ -241,7 +240,7 @@ def tool_cst_session_reattach(args: dict) -> dict:
 
 
 def tool_save_project(args: dict) -> dict:
-    return _po.save_project(project_path_from_args(args))
+    return _sm.save_project(project_path_from_args(args))
 
 
 _register_tool_defs(TOOL_DEFS)

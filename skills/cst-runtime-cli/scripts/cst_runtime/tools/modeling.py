@@ -2039,8 +2039,8 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
-from ..core import modeling as _md
-from ..core.utils import project_path_from_args
+from ..lib import modeling as _md
+from ._arguments import project_path_from_args
 
 
 def tool_define_material_from_mtd(args: dict) -> dict:
