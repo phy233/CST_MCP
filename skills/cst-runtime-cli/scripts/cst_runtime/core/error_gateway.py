@@ -154,9 +154,11 @@ def resolve_cst_temp_directory(
         [
             "Public Sub Main()",
             "Dim cstRtProbeFile As Integer",
+            "Dim cstRtTempPath As String",
+            'cstRtTempPath = GetProjectPathName("Temp")',
             "cstRtProbeFile = FreeFile",
             f'Open "{_vba_string(str(probe_path))}" For Output As #cstRtProbeFile',
-            'Print #cstRtProbeFile, GetProjectPathName("Temp")',
+            "Print #cstRtProbeFile, cstRtTempPath",
             "Close #cstRtProbeFile",
             "End Sub",
         ]

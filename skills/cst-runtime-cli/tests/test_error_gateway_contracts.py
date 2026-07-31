@@ -327,7 +327,9 @@ def test_cst_temp_probe_matches_history_directory_expression(tmp_path: Path) -> 
     )
 
     assert resolved == tmp_path.resolve()
-    assert 'GetProjectPathName("Temp")' in project.schematic.macro
+    assert 'cstRtTempPath = GetProjectPathName("Temp")' in project.schematic.macro
+    assert "Print #cstRtProbeFile, cstRtTempPath" in project.schematic.macro
+    assert 'Print #cstRtProbeFile, GetProjectPathName("Temp")' not in project.schematic.macro
     assert 'GetProjectPathName("Temp") & "\\probe.status"' in wrapped
 
 
