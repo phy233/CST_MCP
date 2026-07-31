@@ -4,7 +4,7 @@ This module provides parameter sweep functionality similar to MATLAB's crossProc
 It allows scanning multiple parameters and building lookup tables (LUT).
 
 Usage:
-    from cst_runtime.lib.sweep import ParameterSweep
+    from cst_runtime.workflows.sweep import ParameterSweep
 
     # Create a parameter sweep
     sweep = ParameterSweep(
@@ -33,11 +33,22 @@ from typing import Any, Callable, Sequence
 import numpy as np
 import pandas as pd
 
-from .parameters import list_params, set_param, param_exists
-from .solver import start, wait, rebuild, delete_results
-from .results import get_sparam, get_sparam_at_freq
+from ..lib.parameters import get_param, param_exists, set_param
+from ..lib.results import get_sparam, get_sparam_at_freq
+from ..lib.solver import delete_results, rebuild, start, wait
 
 logger = logging.getLogger(__name__)
+
+
+def _json_safe(value: Any) -> Any:
+    """递归转换 NumPy 标量等非标准 JSON 值。"""
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
 
 
 @dataclass
@@ -50,6 +61,30 @@ class SweepResult:
     successful_steps: int
     failed_steps: int
     exported_files: list[Path] = field(default_factory=list)
+    errors: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为 JSON 可序列化字典。"""
+        records = (
+            self.lut.astype(object)
+            .where(pd.notna(self.lut), None)
+            .to_dict(orient="records")
+        )
+        return {
+            "status": (
+                "success"
+                if self.failed_steps == 0 and not self.errors
+                else "partial"
+            ),
+            "output_dir": str(self.output_dir),
+            "sweep_time": self.sweep_time,
+            "total_steps": self.total_steps,
+            "successful_steps": self.successful_steps,
+            "failed_steps": self.failed_steps,
+            "records": _json_safe(records),
+            "exported_files": [str(path) for path in self.exported_files],
+            "errors": _json_safe(self.errors),
+        }
 
 
 class ParameterSweep:
@@ -85,6 +120,8 @@ class ParameterSweep:
         target_freq_ghz: float,
         result_paths: list[str] | None = None,
         callback: Callable[[int, dict[str, float], dict[str, Any]], None] | None = None,
+        continue_on_error: bool = True,
+        restore_parameters: bool = True,
     ) -> None:
         if len(parameters) != len(ranges):
             raise ValueError("Number of parameters must match number of ranges")
@@ -97,6 +134,8 @@ class ParameterSweep:
             "1D Results\\S-Parameters\\S1,1"
         ]
         self.callback = callback
+        self.continue_on_error = continue_on_error
+        self.restore_parameters = restore_parameters
 
         # Calculate total steps
         self.total_steps = 1
@@ -152,7 +191,12 @@ class ParameterSweep:
         wait(self.project_path)
 
         # Extract results
-        results = {"params": params, "sparams": {}}
+        results = {
+            "params": params,
+            "sparams": {},
+            "exported_files": [],
+            "errors": [],
+        }
 
         for result_path in self.result_paths:
             try:
@@ -165,13 +209,18 @@ class ParameterSweep:
                 results["sparams"][result_path] = sparam_result
 
                 # Save full S-parameter data to file
-                self._save_sparam_data(
+                exported_path = self._save_sparam_data(
                     result_path, params, sparam_dir
                 )
+                if exported_path is not None:
+                    results["exported_files"].append(exported_path)
 
             except Exception as e:
                 logger.warning(f"Failed to read {result_path}: {e}")
                 results["sparams"][result_path] = {"error": str(e)}
+                results["errors"].append(
+                    {"result_path": result_path, "message": str(e)}
+                )
 
         return results
 
@@ -180,7 +229,7 @@ class ParameterSweep:
         result_path: str,
         params: dict[str, float],
         sparam_dir: Path,
-    ) -> None:
+    ) -> Path | None:
         """Save full S-parameter data to file.
 
         Args:
@@ -204,9 +253,11 @@ class ParameterSweep:
                 df = pd.DataFrame(ydata)
                 df.to_csv(filepath, index=False)
                 logger.debug(f"Saved S-parameter data to {filepath}")
+                return filepath
 
         except Exception as e:
             logger.warning(f"Failed to save S-parameter data: {e}")
+        return None
 
     def run(
         self,
@@ -227,105 +278,116 @@ class ParameterSweep:
         Raises:
             RuntimeError: If sweep fails
         """
-        # Setup output directory
-        if output_dir is None:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            output_dir = Path.cwd() / f"sweep_results_{timestamp}"
-        else:
-            output_dir = Path(output_dir)
-
-        output_dir.mkdir(parents=True, exist_ok=True)
-        sparam_dir = output_dir / "S_Parameters"
+        result_dir = (
+            Path.cwd() / f"sweep_results_{time.strftime('%Y%m%d_%H%M%S')}"
+            if output_dir is None
+            else Path(output_dir)
+        )
+        result_dir.mkdir(parents=True, exist_ok=True)
+        sparam_dir = result_dir / "S_Parameters"
         sparam_dir.mkdir(exist_ok=True)
 
-        # Validate parameters
         self._validate_parameters()
-
-        # Generate parameter grid
+        original_values = {
+            name: get_param(self.project_path, name) for name in self.parameters
+        }
         grid = self._generate_grid()
-        logger.info(f"Starting parameter sweep: {self.total_steps} steps")
+        logger.info("开始参数扫描，共 %s 步", self.total_steps)
 
-        # Initialize results
-        lut_rows = []
+        lut_rows: list[dict[str, Any]] = []
+        errors: list[dict[str, Any]] = []
         successful_steps = 0
         failed_steps = 0
+        exported_files: list[Path] = []
         start_time = time.time()
 
-        # Run sweep
-        for step, params in enumerate(grid, 1):
-            try:
-                results = self._run_single_step(params, sparam_dir, step)
-
-                # Build LUT row
-                row = dict(params)
-                for result_path, sparam_result in results["sparams"].items():
-                    if "error" not in sparam_result:
-                        # Extract magnitude and phase
+        try:
+            for step, params in enumerate(grid, 1):
+                try:
+                    results = self._run_single_step(params, sparam_dir, step)
+                    exported_files.extend(results.get("exported_files", []))
+                    for error in results.get("errors", []):
+                        errors.append(
+                            {
+                                "step": step,
+                                "parameters": dict(params),
+                                **error,
+                            }
+                        )
+                    row: dict[str, Any] = dict(params)
+                    for result_path, sparam_result in results["sparams"].items():
+                        if "error" in sparam_result:
+                            continue
                         safe_name = result_path.split("\\")[-1]
                         row[f"{safe_name}_mag"] = sparam_result.get("magnitude", 0)
                         row[f"{safe_name}_mag_db"] = sparam_result.get("magnitude_db", 0)
                         row[f"{safe_name}_phase_deg"] = sparam_result.get("phase_deg", 0)
                         row[f"{safe_name}_real"] = sparam_result.get("real", 0)
                         row[f"{safe_name}_imag"] = sparam_result.get("imag", 0)
+                    lut_rows.append(row)
+                    successful_steps += 1
+                    if self.callback:
+                        self.callback(step, params, results)
+                except Exception as exc:
+                    failed_steps += 1
+                    errors.append(
+                        {"step": step, "parameters": dict(params), "message": str(exc)}
+                    )
+                    row = dict(params)
+                    for result_path in self.result_paths:
+                        safe_name = result_path.split("\\")[-1]
+                        for suffix in ("mag", "mag_db", "phase_deg", "real", "imag"):
+                            row[f"{safe_name}_{suffix}"] = np.nan
+                    lut_rows.append(row)
+                    if not self.continue_on_error:
+                        raise
+        finally:
+            if self.restore_parameters:
+                restore_errors: list[str] = []
+                for name, value in original_values.items():
+                    try:
+                        set_param(self.project_path, name, value)
+                    except Exception as exc:
+                        restore_errors.append(f"{name}: {exc}")
+                try:
+                    rebuild(self.project_path)
+                except Exception as exc:
+                    restore_errors.append(f"rebuild: {exc}")
+                if restore_errors:
+                    errors.append(
+                        {
+                            "step": None,
+                            "parameters": original_values,
+                            "message": "参数恢复失败: " + "; ".join(restore_errors),
+                        }
+                    )
 
-                lut_rows.append(row)
-                successful_steps += 1
-
-                # Call callback if provided
-                if self.callback:
-                    self.callback(step, params, results)
-
-                logger.info(
-                    f"Step {step}/{self.total_steps} completed: "
-                    f"{', '.join(f'{k}={v:.4f}' for k, v in params.items())}"
-                )
-
-            except Exception as e:
-                logger.error(f"Step {step}/{self.total_steps} failed: {e}")
-                failed_steps += 1
-
-                # Add failed row with NaN values
-                row = dict(params)
-                for result_path in self.result_paths:
-                    safe_name = result_path.split("\\")[-1]
-                    row[f"{safe_name}_mag"] = np.nan
-                    row[f"{safe_name}_mag_db"] = np.nan
-                    row[f"{safe_name}_phase_deg"] = np.nan
-                    row[f"{safe_name}_real"] = np.nan
-                    row[f"{safe_name}_imag"] = np.nan
-                lut_rows.append(row)
-
-        # Create LUT DataFrame
         lut = pd.DataFrame(lut_rows)
-        sweep_time = time.time() - start_time
-
-        # Save results
         if save_csv:
-            csv_path = output_dir / "lut.csv"
+            csv_path = result_dir / "lut.csv"
             lut.to_csv(csv_path, index=False)
-            logger.info(f"Saved LUT to {csv_path}")
-
+            exported_files.append(csv_path)
         if save_lut:
-            npz_path = output_dir / "lut.npz"
-            lut_dict = {col: lut[col].values for col in lut.columns}
-            np.savez(npz_path, **lut_dict)
-            logger.info(f"Saved LUT to {npz_path}")
+            npz_path = result_dir / "lut.npz"
+            np.savez(npz_path, **{column: lut[column].values for column in lut.columns})
+            exported_files.append(npz_path)
 
-        # Create result
         result = SweepResult(
             lut=lut,
-            output_dir=output_dir,
-            sweep_time=sweep_time,
+            output_dir=result_dir,
+            sweep_time=time.time() - start_time,
             total_steps=self.total_steps,
             successful_steps=successful_steps,
             failed_steps=failed_steps,
+            exported_files=exported_files,
+            errors=errors,
         )
-
         logger.info(
-            f"Sweep completed: {successful_steps}/{self.total_steps} successful, "
-            f"{failed_steps} failed, time: {sweep_time:.1f}s"
+            "参数扫描完成：成功 %s/%s，失败 %s",
+            successful_steps,
+            self.total_steps,
+            failed_steps,
         )
-
         return result
 
 
@@ -335,6 +397,8 @@ def quick_sweep(
     target_freq_ghz: float,
     result_path: str = "1D Results\\S-Parameters\\S1,1",
     output_dir: str | Path | None = None,
+    continue_on_error: bool = True,
+    restore_parameters: bool = True,
 ) -> SweepResult:
     """Quick parameter sweep with simple interface.
 
@@ -349,7 +413,7 @@ def quick_sweep(
         SweepResult with LUT
 
     Example:
-        from cst_runtime.lib.sweep import quick_sweep
+        from cst_runtime.workflows.sweep import quick_sweep
 
         results = quick_sweep(
             project_path="C:\\model.cst",
@@ -367,74 +431,8 @@ def quick_sweep(
         ranges=param_ranges,
         target_freq_ghz=target_freq_ghz,
         result_paths=[result_path],
+        continue_on_error=continue_on_error,
+        restore_parameters=restore_parameters,
     )
 
     return sweep.run(output_dir=output_dir)
-
-
-def load_lut(filepath: str | Path) -> pd.DataFrame:
-    """Load a saved LUT file.
-
-    Args:
-        filepath: Path to .csv or .npz file
-
-    Returns:
-        DataFrame with LUT data
-
-    Raises:
-        ValueError: If file format is not supported
-    """
-    filepath = Path(filepath)
-
-    if filepath.suffix == ".csv":
-        return pd.read_csv(filepath)
-    elif filepath.suffix == ".npz":
-        data = np.load(filepath)
-        return pd.DataFrame({k: data[k] for k in data.files})
-    else:
-        raise ValueError(f"Unsupported file format: {filepath.suffix}")
-
-
-def interpolate_lut(
-    lut: pd.DataFrame,
-    param_columns: list[str],
-    value_column: str,
-    target_params: dict[str, float],
-) -> float:
-    """Interpolate a value from a LUT.
-
-    Args:
-        lut: LUT DataFrame
-        param_columns: Parameter column names
-        value_column: Value column name
-        target_params: Target parameter values
-
-    Returns:
-        Interpolated value
-
-    Example:
-        lut = load_lut("C:\\results\\lut.csv")
-        value = interpolate_lut(
-            lut,
-            param_columns=["lx", "ly1"],
-            value_column="S1,1_mag_db",
-            target_params={"lx": 5.0, "ly1": 6.0},
-        )
-    """
-    from scipy.interpolate import RegularGridInterpolator
-
-    # Extract parameter values
-    param_values = [lut[col].unique() for col in param_columns]
-
-    # Reshape value grid
-    shape = [len(vals) for vals in param_values]
-    value_grid = lut[value_column].values.reshape(shape)
-
-    # Create interpolator
-    interpolator = RegularGridInterpolator(
-        param_values, value_grid, method="linear"
-    )
-
-    # Interpolate
-    target_point = [target_params[col] for col in param_columns]
-    return float(interpolator(target_point))
