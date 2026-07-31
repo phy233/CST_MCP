@@ -17,15 +17,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..core import audit, identity as project_identity, workspace, utils
-from ..tools import build_tools, build_args_templates, build_direct_arg_specs, build_json_schemas
-from ..tools.simulation import tool_run_experiment
-from ..tools.audit import tool_record_stage, tool_update_status, tool_stage_evidence
-from ..tools.workspace import tool_init_workspace, tool_init_task, tool_prepare_run, tool_get_run_context, tool_install_cst_libraries, tool_health_check
-from ..tools.session import tool_create_blank_project, tool_cst_session_close, tool_cst_session_inspect, tool_cst_session_open, tool_cst_session_quit, tool_cst_session_reattach, tool_save_project
-from ..tools.farfield import tool_inspect_farfield_monitors, tool_export_farfield_grid, tool_export_farfield_cut, tool_calculate_farfield_neighborhood_flatness
-from ..tools.results import tool_open_results_project, tool_list_subprojects, tool_get_version_info, tool_list_result_items, tool_list_run_ids, tool_get_parameter_combination, tool_get_1d_result, tool_get_2d_result, tool_export_run_results, tool_generate_report, tool_plot_exported_file
-from ..tools.project import tool_inspect_project, tool_prepare_experiment, tool_list_materials, tool_list_parameters, tool_list_entities, tool_change_parameter, tool_define_parameters, tool_start_simulation_async, tool_is_simulation_running, tool_wait_simulation, tool_stop_simulation, tool_pause_simulation, tool_resume_simulation, tool_set_solver_acceleration, tool_set_fdsolver_extrude_open_bc, tool_set_mesh_fpbavoid_nonreg_unite, tool_set_mesh_minimum_step_number, tool_list_open_projects, tool_verify_project_identity, tool_infer_run_dir, tool_wait_project_unlocked, tool_define_frequency_range, tool_change_solver_type, tool_define_background, tool_define_boundary, tool_define_mesh, tool_define_solver, tool_define_port, tool_define_monitor, tool_capture_3d_view, tool_inspect_model_view
-from ..tools.modeling import tool_define_material_from_mtd, tool_define_brick, tool_define_cylinder, tool_define_cone, tool_define_rectangle, tool_boolean_subtract, tool_boolean_add, tool_boolean_intersect, tool_boolean_insert, tool_delete_entity, tool_create_component, tool_change_material, tool_rename_entity, tool_set_entity_color, tool_define_units, tool_set_farfield_monitor, tool_set_efield_monitor, tool_set_field_monitor, tool_set_probe, tool_delete_probe, tool_delete_monitor, tool_set_background_with_space, tool_set_farfield_plot_cuts, tool_show_bounding_box, tool_activate_post_process, tool_create_mesh_group, tool_define_polygon_3d, tool_define_analytical_curve, tool_define_extrude_curve, tool_transform_shape, tool_transform_curve, tool_create_horn_segment, tool_create_loft_sweep, tool_create_hollow_sweep, tool_add_to_history, tool_pick_face, tool_define_loft, tool_export_e_field, tool_export_surface_current, tool_export_voltage
+from ..api.atomic import atomic_handler_map
+from ..tools import build_tools, build_args_templates, build_direct_arg_specs
 from .pipelines.registry import PIPELINES
 from .pipelines.impl import (
     pipeline_inspect_project,
@@ -853,138 +846,29 @@ def _with_audit(tool_name: str, tool_args: dict[str, Any], result: dict[str, Any
     return {**result, "audit": audit_paths}
 
 
-def _lazy_tool(mod_name: str, func_name: str) -> Callable:
-    """Return a wrapper that imports and calls the tool function on first invocation."""
-    import importlib
-    from functools import wraps
-    @wraps(lambda: None)
-    def wrapper(args: dict):
-        mod = importlib.import_module(f"..tools.{mod_name}", __package__)
-        fn = getattr(mod, f"tool_{func_name}")
-        return fn(args)
-    return wrapper
-
-
-# Build handler map from all tool_* functions defined above
-_HANDLER_MAP: dict[str, Callable] = {
-    "tool_run_experiment": tool_run_experiment,
-    "tool_record_stage": tool_record_stage,
-    "tool_update_status": tool_update_status,
-    "tool_stage_evidence": tool_stage_evidence,
-    "tool_init_workspace": tool_init_workspace,
-    "tool_init_task": tool_init_task,
-    "tool_prepare_run": tool_prepare_run,
-    "tool_get_run_context": tool_get_run_context,
-    "tool_install_cst_libraries": tool_install_cst_libraries,
-    "tool_health_check": tool_health_check,
-    "tool_create_blank_project": tool_create_blank_project,
-    "tool_cst_session_close": tool_cst_session_close,
-    "tool_cst_session_inspect": tool_cst_session_inspect,
-    "tool_cst_session_open": tool_cst_session_open,
-    "tool_cst_session_quit": tool_cst_session_quit,
-    "tool_cst_session_reattach": tool_cst_session_reattach,
-    "tool_save_project": tool_save_project,
-    "tool_inspect_farfield_monitors": tool_inspect_farfield_monitors,
-    "tool_export_farfield_grid": tool_export_farfield_grid,
-    "tool_export_farfield_cut": tool_export_farfield_cut,
-    "tool_calculate_farfield_neighborhood_flatness": tool_calculate_farfield_neighborhood_flatness,
-    "tool_open_results_project": tool_open_results_project,
-    "tool_list_subprojects": tool_list_subprojects,
-    "tool_get_version_info": tool_get_version_info,
-    "tool_list_result_items": tool_list_result_items,
-    "tool_list_run_ids": tool_list_run_ids,
-    "tool_get_parameter_combination": tool_get_parameter_combination,
-    "tool_get_1d_result": tool_get_1d_result,
-    "tool_get_2d_result": tool_get_2d_result,
-    "tool_export_run_results": tool_export_run_results,
-    "tool_generate_report": tool_generate_report,
-    "tool_plot_exported_file": tool_plot_exported_file,
-    "tool_inspect_project": tool_inspect_project,
-    "tool_prepare_experiment": tool_prepare_experiment,
-    "tool_list_materials": tool_list_materials,
-    "tool_list_parameters": tool_list_parameters,
-    "tool_list_entities": tool_list_entities,
-    "tool_change_parameter": tool_change_parameter,
-    "tool_define_parameters": tool_define_parameters,
-    "tool_start_simulation_async": tool_start_simulation_async,
-    "tool_is_simulation_running": tool_is_simulation_running,
-    "tool_wait_simulation": tool_wait_simulation,
-    "tool_stop_simulation": tool_stop_simulation,
-    "tool_pause_simulation": tool_pause_simulation,
-    "tool_resume_simulation": tool_resume_simulation,
-    "tool_set_solver_acceleration": tool_set_solver_acceleration,
-    "tool_set_fdsolver_extrude_open_bc": tool_set_fdsolver_extrude_open_bc,
-    "tool_set_mesh_fpbavoid_nonreg_unite": tool_set_mesh_fpbavoid_nonreg_unite,
-    "tool_set_mesh_minimum_step_number": tool_set_mesh_minimum_step_number,
-    "tool_list_open_projects": tool_list_open_projects,
-    "tool_verify_project_identity": tool_verify_project_identity,
-    "tool_infer_run_dir": tool_infer_run_dir,
-    "tool_wait_project_unlocked": tool_wait_project_unlocked,
-    "tool_define_frequency_range": tool_define_frequency_range,
-    "tool_change_solver_type": tool_change_solver_type,
-    "tool_define_background": tool_define_background,
-    "tool_define_boundary": tool_define_boundary,
-    "tool_define_mesh": tool_define_mesh,
-    "tool_define_solver": tool_define_solver,
-    "tool_define_port": tool_define_port,
-    "tool_define_monitor": tool_define_monitor,
-    "tool_capture_3d_view": tool_capture_3d_view,
-    "tool_inspect_model_view": tool_inspect_model_view,
-    "tool_define_material_from_mtd": tool_define_material_from_mtd,
-    "tool_define_brick": tool_define_brick,
-    "tool_define_cylinder": tool_define_cylinder,
-    "tool_define_cone": tool_define_cone,
-    "tool_define_rectangle": tool_define_rectangle,
-    "tool_boolean_subtract": tool_boolean_subtract,
-    "tool_boolean_add": tool_boolean_add,
-    "tool_boolean_intersect": tool_boolean_intersect,
-    "tool_boolean_insert": tool_boolean_insert,
-    "tool_delete_entity": tool_delete_entity,
-    "tool_create_component": tool_create_component,
-    "tool_change_material": tool_change_material,
-    "tool_rename_entity": tool_rename_entity,
-    "tool_set_entity_color": tool_set_entity_color,
-    "tool_define_units": tool_define_units,
-    "tool_set_farfield_monitor": tool_set_farfield_monitor,
-    "tool_set_efield_monitor": tool_set_efield_monitor,
-    "tool_set_field_monitor": tool_set_field_monitor,
-    "tool_set_probe": tool_set_probe,
-    "tool_delete_probe": tool_delete_probe,
-    "tool_delete_monitor": tool_delete_monitor,
-    "tool_set_background_with_space": tool_set_background_with_space,
-    "tool_set_farfield_plot_cuts": tool_set_farfield_plot_cuts,
-    "tool_show_bounding_box": tool_show_bounding_box,
-    "tool_activate_post_process": tool_activate_post_process,
-    "tool_create_mesh_group": tool_create_mesh_group,
-    "tool_define_polygon_3d": tool_define_polygon_3d,
-    "tool_define_analytical_curve": tool_define_analytical_curve,
-    "tool_define_extrude_curve": tool_define_extrude_curve,
-    "tool_transform_shape": tool_transform_shape,
-    "tool_transform_curve": tool_transform_curve,
-    "tool_create_horn_segment": tool_create_horn_segment,
-    "tool_create_loft_sweep": tool_create_loft_sweep,
-    "tool_create_hollow_sweep": tool_create_hollow_sweep,
-    "tool_add_to_history": tool_add_to_history,
-    "tool_pick_face": tool_pick_face,
-    "tool_define_loft": tool_define_loft,
-    "tool_export_e_field": tool_export_e_field,
-    "tool_export_surface_current": tool_export_surface_current,
-    "tool_export_voltage": tool_export_voltage,
-}
-_HANDLER_MAP["tool_create_study"] = _lazy_tool("optimization", "create_study")
-_HANDLER_MAP["tool_ask_study"] = _lazy_tool("optimization", "ask_study")
-_HANDLER_MAP["tool_tell_study"] = _lazy_tool("optimization", "tell_study")
-_HANDLER_MAP["tool_best_study"] = _lazy_tool("optimization", "best_study")
-_HANDLER_MAP["tool_design_probes"] = _lazy_tool("doe", "design_probes")
-_HANDLER_MAP["tool_analyze_probes"] = _lazy_tool("doe", "analyze_probes")
-_HANDLER_MAP["tool_add_trials"] = _lazy_tool("optimization", "add_trials")
-_HANDLER_MAP["tool_param_importances"] = _lazy_tool("optimization", "param_importances")
-_HANDLER_MAP["tool_terminate_check"] = _lazy_tool("optimization", "terminate_check")
-_HANDLER_MAP["tool_run_probe_phase"] = _lazy_tool("optimization", "run_probe_phase")
-_HANDLER_MAP["tool_run_optimization_step"] = _lazy_tool("optimization", "run_optimization_step")
+_HANDLER_MAP = atomic_handler_map()
 assert len(_HANDLER_MAP) > 100, f"Handler map too small: {len(_HANDLER_MAP)}"
 _TOOLS: dict[str, dict[str, Any]] = build_tools(_HANDLER_MAP)
 TOOLS = _TOOLS
+
+
+def _ensure_api_tools() -> None:
+    """把统一 API 中的 workflow 操作加入 CLI 命令表。"""
+    from ..api import tools
+
+    for name, spec in tools().items():
+        if name in TOOLS:
+            continue
+        record = {
+            "category": "workflow",
+            "risk": spec.risk,
+            "description": spec.description,
+            "function": lambda args, _name=name: __import__(
+                "cst_runtime.api", fromlist=["invoke_tool"]
+            ).invoke_tool(_name, args),
+        }
+        record.update(_tool_governance(name, record))
+        TOOLS[name] = record
 
 
 def _public_tool_record(name: str, record: dict[str, Any]) -> dict[str, Any]:
@@ -1028,7 +912,13 @@ def _pipeline_runbook(pipeline_name: str) -> dict[str, Any]:
 def _tool_args_template(tool_name: str) -> dict[str, Any] | None:
     template = build_args_templates().get(tool_name)
     if template is None:
-        return None
+        from ..api import tools
+        from ..tools import _schema_to_template
+
+        spec = tools().get(tool_name)
+        if spec is None:
+            return None
+        template = _schema_to_template(spec.input_schema)
     result = json.loads(json.dumps(template, ensure_ascii=False))
     if _tool_requires_check_solid(tool_name):
         result.setdefault("model_intent_path", "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\stages\\model_intent.json")
@@ -1046,9 +936,11 @@ def _invoke_tool(tool_name: str, tool_args: dict[str, Any]) -> dict[str, Any]:
             "available_tools": sorted(TOOLS),
         }
     try:
+        from ..api import invoke_tool
+
         captured_stdout = io.StringIO()
         with contextlib.redirect_stdout(captured_stdout):
-            result = record["function"](tool_args)
+            result = invoke_tool(tool_name, tool_args)
         result = _attach_captured_stdout(result, captured_stdout.getvalue())
     except ValueError as exc:
         message = str(exc)
@@ -1072,6 +964,7 @@ def _invoke_tool(tool_name: str, tool_args: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
+    _ensure_api_tools()
     parser = JsonArgumentParser(
         description="CLI adapter for cst_runtime.",
         epilog=TOP_LEVEL_HELP,
@@ -1217,14 +1110,16 @@ def main() -> int:
                     "available_tools": sorted(TOOLS),
                 }
             )
-        schemas = build_json_schemas()
+        from ..api import tools
+
+        spec = tools().get(args.tool)
         return _json_response(
             {
                 "status": "success",
                 "adapter": "cst_runtime_cli",
                 "tool": _public_tool_record(args.tool, record),
                 "args_template": _tool_args_template(args.tool),
-                "json_schema": schemas.get(args.tool),
+                "json_schema": spec.input_schema if spec is not None else None,
                 "runbook": _tool_runbook(args.tool),
                 "input_style": "Preferred: generate args-template, edit JSON, invoke with --args-file. Direct flags are available for common fields only. Stdin args merge first; --args-file/--args-json/direct flags override earlier values.",
                 "direct_flags": sorted("--" + field.replace("_", "-") for field in DIRECT_ARG_SPECS.get(args.tool, {})),
