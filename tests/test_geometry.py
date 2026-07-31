@@ -7,7 +7,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_SCRIPTS_PATH = PROJECT_ROOT / "skills" / "cst-runtime-cli" / "scripts"
 sys.path.insert(0, str(RUNTIME_SCRIPTS_PATH))
 
-from cst_runtime.core.proxy import call_cst, CSTWorkerProxy
+from mcp_server.proxy import CSTWorkerProxy, get_proxy
+
+
+def call_cst(module_name: str, func_name: str, **kwargs):
+    """通过当前白名单工具名调用 worker。"""
+    return get_proxy().call_tool(func_name.replace("_", "-"), kwargs)
 
 def main():
     print("=== 开始几何建模直接指令测试 ===")

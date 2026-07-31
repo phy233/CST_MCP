@@ -8,7 +8,12 @@ RUNTIME_SCRIPTS_PATH = PROJECT_ROOT / "skills" / "cst-runtime-cli" / "scripts"
 sys.path.insert(0, str(RUNTIME_SCRIPTS_PATH))
 
 # 导入我们刚刚写的代理层
-from cst_runtime.core.proxy import call_cst, CSTWorkerProxy
+from mcp_server.proxy import CSTWorkerProxy, get_proxy
+
+
+def call_cst(module_name: str, func_name: str, **kwargs):
+    """通过当前白名单工具名调用 worker。"""
+    return get_proxy().call_tool(func_name.replace("_", "-"), kwargs)
 
 def main():
     print("=== [1] 开始通过跨进程代理启动 CST ===")

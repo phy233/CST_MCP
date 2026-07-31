@@ -6,7 +6,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_SCRIPTS_PATH = PROJECT_ROOT / "skills" / "cst-runtime-cli" / "scripts"
 sys.path.insert(0, str(RUNTIME_SCRIPTS_PATH))
 
-from cst_runtime.core.proxy import CSTWorkerProxy
+from mcp_server.proxy import CSTWorkerProxy
 
 def main():
     print("=== 开始现有工程操作测试 ===")
@@ -19,7 +19,7 @@ def main():
     proxy = CSTWorkerProxy.get_instance()
     
     def call_cst(module_name: str, func_name: str, **kwargs):
-        return proxy.call(module_name, func_name, **kwargs)
+        return proxy.call_tool(func_name.replace("_", "-"), kwargs)
 
     # 2. 打开已经存在的工程 (而不是 create_blank_project)
     print("\n2. 正在通过 IPC 打开现有工程 (open_project)...")
