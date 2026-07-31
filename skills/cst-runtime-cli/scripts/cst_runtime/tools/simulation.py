@@ -66,11 +66,11 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
-from ..core.utils import project_path_from_args
+from ..lib.experiments import run_experiment
+from ._arguments import project_path_from_args
 
 
 def tool_run_experiment(args: dict) -> dict:
-    from ..cli.pipelines.impl import pipeline_run_experiment as _run
     ff_names = args.get("farfield_names")
     if isinstance(ff_names, str):
         import json as _json
@@ -78,7 +78,7 @@ def tool_run_experiment(args: dict) -> dict:
             ff_names = _json.loads(ff_names)
         except Exception:
             ff_names = None
-    return _run(
+    return run_experiment(
         project_path=str(args.get("project_path", "")),
         farfield_names=ff_names if isinstance(ff_names, list) else None,
         farfield_plot_mode=str(args.get("farfield_plot_mode", "Realized Gain")),

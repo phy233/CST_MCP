@@ -37,6 +37,21 @@ from ..lib.parameters import get_param, param_exists, set_param
 from ..lib.results import get_sparam, get_sparam_at_freq
 from ..lib.solver import delete_results, rebuild, start, wait
 
+
+def _raise_if_error(result: Any) -> Any:
+    """检查统一结果，同时兼容第三方测试替身的旧返回值。"""
+    if isinstance(result, dict) and result.get("status") == "error":
+        raise RuntimeError(result.get("message", "工作流原子操作失败"))
+    return result
+
+
+def _result_value(result: Any, field: str) -> Any:
+    """从统一结果取值；普通标量仅作为旧扩展兼容。"""
+    _raise_if_error(result)
+    if isinstance(result, dict) and "status" in result:
+        return result[field]
+    return result
+
 logger = logging.getLogger(__name__)
 
 
@@ -145,7 +160,9 @@ class ParameterSweep:
     def _validate_parameters(self) -> None:
         """Validate that all parameters exist in the project."""
         for param in self.parameters:
-            if not param_exists(self.project_path, param):
+            exists_result = param_exists(self.project_path, param)
+            exists = _result_value(exists_result, "exists")
+            if not bool(exists):
                 raise ValueError(f"Parameter '{param}' does not exist in project")
 
     def _generate_grid(self) -> list[dict[str, float]]:
@@ -180,15 +197,15 @@ class ParameterSweep:
 
         # Set parameters
         for name, value in params.items():
-            set_param(self.project_path, name, value)
+            _raise_if_error(set_param(self.project_path, name, value))
 
         # Delete old results and rebuild
-        delete_results(self.project_path)
-        rebuild(self.project_path)
+        _raise_if_error(delete_results(self.project_path))
+        _raise_if_error(rebuild(self.project_path))
 
         # Run simulation
-        start(self.project_path)
-        wait(self.project_path)
+        _raise_if_error(start(self.project_path))
+        _raise_if_error(wait(self.project_path))
 
         # Extract results
         results = {
@@ -206,6 +223,7 @@ class ParameterSweep:
                     result_path,
                     self.target_freq_ghz,
                 )
+                _raise_if_error(sparam_result)
                 results["sparams"][result_path] = sparam_result
 
                 # Save full S-parameter data to file
@@ -240,6 +258,7 @@ class ParameterSweep:
         try:
             # Read full S-parameter data
             sparam_data = get_sparam(self.project_path, result_path)
+            _raise_if_error(sparam_data)
 
             # Create filename from result path and parameters
             safe_name = result_path.replace("\\", "_").replace(" ", "_")
@@ -289,7 +308,8 @@ class ParameterSweep:
 
         self._validate_parameters()
         original_values = {
-            name: get_param(self.project_path, name) for name in self.parameters
+            name: _result_value(get_param(self.project_path, name), "value")
+            for name in self.parameters
         }
         grid = self._generate_grid()
         logger.info("开始参数扫描，共 %s 步", self.total_steps)
@@ -346,11 +366,11 @@ class ParameterSweep:
                 restore_errors: list[str] = []
                 for name, value in original_values.items():
                     try:
-                        set_param(self.project_path, name, value)
+                        _raise_if_error(set_param(self.project_path, name, value))
                     except Exception as exc:
                         restore_errors.append(f"{name}: {exc}")
                 try:
-                    rebuild(self.project_path)
+                    _raise_if_error(rebuild(self.project_path))
                 except Exception as exc:
                     restore_errors.append(f"rebuild: {exc}")
                 if restore_errors:

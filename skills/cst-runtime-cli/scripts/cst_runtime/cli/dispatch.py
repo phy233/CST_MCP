@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from ..core import audit, identity as project_identity, workspace, utils
+from ..lib import audit, identity as project_identity, workspace
 from ..api.atomic import atomic_handler_map
 from ..tools import build_tools, build_args_templates, build_direct_arg_specs
 from .pipelines.registry import PIPELINES
@@ -473,7 +473,16 @@ def _tool_requires_workspace(tool_name: str) -> bool:
     return tool_name not in WORKSPACE_OPTIONAL_TOOLS
 
 
-def _missing_imports_for_tool(tool_name: str) -> list[str]:
+def _missing_imports_for_tool(
+    tool_name: str,
+    tool_args: dict[str, Any] | None = None,
+) -> list[str]:
+    arguments = tool_args or {}
+    if bool(arguments.get("dry_run", False)):
+        return []
+    # 截图入口会先完成路径、缩放和预设校验，底层再报告真实依赖错误。
+    if tool_name in {"capture-3d-view", "inspect-model-view"}:
+        return []
     modules: list[str] = []
     if tool_name in CST_INTERFACE_TOOLS or tool_name in CST_FARFIELD_TOOLS:
         modules.append("cst.interface")
@@ -791,8 +800,7 @@ def _archive_args_file(src_path: str, tool_name: str, tool_args: dict[str, Any])
     run_dir = None
     candidate = tool_args.get("project_path") or tool_args.get("data_dir")
     if candidate:
-        from ..core import identity
-        rd = identity.infer_run_dir_from_project(str(candidate))
+        rd = project_identity.infer_run_dir_from_project(str(candidate))
         if rd:
             run_dir = rd
     if run_dir is None:
@@ -1244,7 +1252,7 @@ def main() -> int:
             return _json_response(_with_audit(tool_name, tool_args, gate_error))
 
     if tool_name in TOOLS:
-        missing_modules = _missing_imports_for_tool(tool_name)
+        missing_modules = _missing_imports_for_tool(tool_name, tool_args)
         if missing_modules:
             return _json_response(_production_dependency_error(tool_name, missing_modules))
 

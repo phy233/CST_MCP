@@ -13,6 +13,14 @@ from ..lib import batch
 from ..lib.geometry import brick, delete_entity, translate
 
 
+def _raise_if_failed(result: Any) -> None:
+    """兼容旧自定义 builder/mock 的 None 成功约定。"""
+    if result is None:
+        return
+    if isinstance(result, dict) and result.get("status") == "error":
+        raise RuntimeError(result.get("message", "阵列原子操作失败"))
+
+
 @dataclass(frozen=True)
 class ArrayElement:
     """阵列中的一个实例。"""
@@ -140,7 +148,7 @@ def _build_brick(
     ox, oy, oz = (float(value) for value in origin)
     if sx <= 0 or sy <= 0 or sz <= 0:
         raise ValueError("brick-v1 的 size 必须全部大于 0")
-    brick(
+    created = brick(
         project_path,
         component=component,
         name=name,
@@ -149,6 +157,13 @@ def _build_brick(
         y_range=(oy, oy + sy),
         z_range=(oz, oz + sz),
     )
+    if isinstance(created, dict) and created.get("status") == "error":
+        return BuildResult(
+            component=component,
+            reference_names=[],
+            status="error",
+            message=created.get("message", "创建参考单元失败"),
+        )
     return BuildResult(component=component, reference_names=[name])
 
 
@@ -247,7 +262,7 @@ def build_array(
                     instances_created += 1
                     continue
                 for name in built.reference_names:
-                    translate(
+                    translated = translate(
                         project_path,
                         name=f"{built.component}:{name}",
                         vector=(element.x, element.y, element.z),
@@ -255,11 +270,15 @@ def build_array(
                         repetitions=1,
                         destination=built.component,
                     )
+                    _raise_if_failed(translated)
                 instances_created += 1
 
             if not keep_reference:
                 for name in built.reference_names:
-                    delete_entity(project_path, name=name, component=built.component)
+                    deleted = delete_entity(
+                        project_path, name=name, component=built.component
+                    )
+                    _raise_if_failed(deleted)
 
         flush_result = batch.flush(project_path)
         if flush_result.get("status") == "error":

@@ -7,10 +7,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ...core.errors import error_response
-from ...core.objective import compute_objective
-from ...core.utils import safe_log_db as _safe_log_db
-from ...core.project import _infer_category
+from ...lib.contracts import error_result as error_response
+from ...lib._pipeline_support import compute_objective
+from ...lib._pipeline_support import safe_log_db as _safe_log_db
+from ...lib._pipeline_support import infer_category as _infer_category
 
 
 def _parse_s11_json(file_path: str) -> dict[str, Any] | None:
@@ -66,7 +66,7 @@ def _read_parameters_from_file(project_path: str) -> tuple[dict[str, Any], int]:
     import json
     import re
     from pathlib import Path
-    from ...core.utils import abs_project_path
+    from ...lib._pipeline_support import abs_project_path
 
     def _is_plain_number(expr: str) -> bool:
         stripped = expr.strip()
@@ -110,7 +110,7 @@ def _read_parameters_from_file(project_path: str) -> tuple[dict[str, Any], int]:
 
 def _read_entities_from_pir(project_path: str) -> tuple[list[dict[str, str]], int, dict[str, Any]]:
     """Read entities via core.project_info (offline). Returns (entities, count, extra_info)."""
-    from ...core.project_info import read_project_info
+    from ...lib._pipeline_support import read_project_info
     result = read_project_info(project_path)
     if result.get("status") == "error":
         return [], 0, {"pir_error": result.get("message", "unknown error")}
@@ -127,7 +127,7 @@ def _read_entities_from_pir(project_path: str) -> tuple[list[dict[str, str]], in
 def _read_solver_from_ads(project_path: str) -> dict[str, Any]:
     """Read solver type and port count from Model/3D/Model.ads on disk."""
     from pathlib import Path
-    from ...core.utils import abs_project_path
+    from ...lib._pipeline_support import abs_project_path
 
     normalized = abs_project_path(project_path)
     ads_path = Path(normalized).with_suffix("") / "Model" / "3D" / "Model.ads"
@@ -156,7 +156,7 @@ def _read_solver_from_ads(project_path: str) -> dict[str, Any]:
 def _read_frequency_and_version_from_docstore(project_path: str) -> dict[str, Any]:
     """Read frequency range and CST version from simulationproperties.docstore."""
     from pathlib import Path
-    from ...core.utils import abs_project_path
+    from ...lib._pipeline_support import abs_project_path
 
     normalized = abs_project_path(project_path)
     doc_path = Path(normalized).with_suffix("") / "Model" / "simulationproperties.docstore"
@@ -205,7 +205,7 @@ def _read_entities_from_fct(project_path: str) -> tuple[list[dict[str, str]], in
     """Read solid entity names from Model/3D/Model.fct on disk."""
     import re
     from pathlib import Path
-    from ...core.utils import abs_project_path
+    from ...lib._pipeline_support import abs_project_path
 
     normalized = abs_project_path(project_path)
     fct_path = Path(normalized).with_suffix("") / "Model" / "3D" / "Model.fct"
@@ -241,7 +241,7 @@ def _read_farfield_monitors_from_dsn(project_path: str) -> tuple[list[str], int]
     """Read farfield monitors from Model/3D/Model.dsn on disk."""
     import re
     from pathlib import Path
-    from ...core.utils import abs_project_path
+    from ...lib._pipeline_support import abs_project_path
 
     normalized = abs_project_path(project_path)
     dsn_path = Path(normalized).with_suffix("") / "Model" / "3D" / "Model.dsn"
@@ -276,7 +276,7 @@ def _read_farfield_monitors_from_dsn(project_path: str) -> tuple[list[str], int]
 
 
 def pipeline_inspect_project(project_path: str) -> dict[str, Any]:
-    from ...core.utils import abs_project_path
+    from ...lib._pipeline_support import abs_project_path
 
     normalized = abs_project_path(project_path)
     from pathlib import Path
@@ -361,8 +361,8 @@ def pipeline_prepare_experiment(
     names: list[str] | None = None,
     values: list[float] | None = None,
 ) -> dict[str, Any]:
-    from ...core.session import open_project as sm_open, close_project as sm_close
-    from ...core.project import change_parameter, list_parameters, save_project
+    from ...lib.session import open_project as sm_open, close_project as sm_close
+    from ...lib.project import change_parameter, list_parameters, save_project
 
     resolved_names: list[str] = []
     resolved_values: list[float] = []
@@ -444,9 +444,9 @@ def pipeline_run_experiment(
     timeout_seconds: int = 3600,
     poll_interval_seconds: float = 10.0,
 ) -> dict[str, Any]:
-    from ...core.session import open_project as sm_open, close_project as sm_close
-    from ...core.simulation import start_simulation_async, is_simulation_running
-    from ...core.results import export_run_results
+    from ...lib.session import open_project as sm_open, close_project as sm_close
+    from ...lib.simulation import start_simulation_async, is_simulation_running
+    from ...lib.results import export_run_results
 
     # Record pre-existing exported file count to detect if solver produced new results.
     # Checks the exports/ directory before and after export:
@@ -585,6 +585,10 @@ def pipeline_run_experiment(
     return output
 
 
+# CLI pipeline 与工具共用同一个 lib 业务实现，避免形成两套可调用行为。
+from ...lib.experiments import run_experiment as pipeline_run_experiment
+
+
 # ── run-probe-phase ──
 
 def pipeline_run_probe_phase(
@@ -598,8 +602,8 @@ def pipeline_run_probe_phase(
 ) -> dict[str, Any]:
     import shutil
     from pathlib import Path
-    from ...core import doe as _doe
-    from ...core import optimizer as _opt
+    from ...lib import doe as _doe
+    from ...lib import optimization as _opt
 
     p = Path(project_path).expanduser().resolve()
     if not p.is_file():
@@ -716,11 +720,11 @@ def pipeline_run_optimization_step(
     objective: dict | None = None,
     sampler: str | None = None,
 ) -> dict[str, Any]:
-    from ...core import optimizer as _opt
+    from ...lib import optimization as _opt
 
     # 0. Switch sampler if requested
     if sampler:
-        from ...core.optimizer import switch_sampler as _switch_sampler
+        from ...lib.optimization import switch_sampler as _switch_sampler
         switch_result = _switch_sampler(study_storage, study_name, sampler)
         if switch_result.get("status") != "success":
             return error_response("switch_sampler_failed",
