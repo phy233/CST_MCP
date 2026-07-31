@@ -512,15 +512,15 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
     ws_checks: list[dict[str, Any]] = []
 
     # 1a. Python version
-    py_ok = sys.version_info >= (3, 12)
+    py_ok = sys.version_info[:2] == (3, 9)
     ws_checks.append(_r("python_version", "pass" if py_ok else "error",
-        version=sys.version, required=">=3.12",
-        user_action="Install Python 3.12+" if not py_ok else ""))
+        version=sys.version, required="==3.9",
+        user_action="使用 CST 兼容的 Python 3.9 worker 启动 cst-runtime" if not py_ok else ""))
 
-    # 1b. uv
+    # 1b. uv is only used by the separate modern-Python MCP environment.
     uv_path = shutil.which("uv")
-    ws_checks.append(_r("uv", "pass" if uv_path else "warning",
-        path=uv_path, user_action="Install uv from https://astral.sh/uv" if not uv_path else ""))
+    ws_checks.append(_r("uv_optional", "pass",
+        path=uv_path, required=False))
 
     # 1c. Workspace
     ws_ok = ws_info["workspace_initialized"]
@@ -565,16 +565,15 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
     rt_dir = (_ws_root / ".cst_runtime") if _ws_root else None
     rt_deployed = bool(rt_dir and (rt_dir / "cst_runtime").is_dir())
     rt_importable = False
-    if rt_deployed:
-        try:
-            __import__("cst_runtime")
-            rt_importable = True
-        except Exception:
-            pass
+    try:
+        __import__("cst_runtime")
+        rt_importable = True
+    except Exception:
+        pass
     ws_checks.append(_r("cst_runtime_package", "pass" if rt_importable else "error",
         deployed=rt_deployed, importable=rt_importable,
-        path=str(rt_dir) if rt_dir else "",
-        user_action="" if rt_importable else "Run bootstrap.py or uv pip install -e .cst_runtime/"))
+        path=str(scripts_root),
+        user_action="" if rt_importable else "Configure runtime.source_path or redeploy with Python 3.9 bootstrap.py"))
 
     ws_status = "pass"
     for c in ws_checks:
@@ -653,18 +652,19 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
     phases["cst"] = {"status": cst_status_agg, "checks": cst_checks, "auto_fixed": cst_fixed}
 
     # ── Phase 3: Integration (diagnostic only) ──
-    venv_ok = (ws_root / ".venv").is_dir()
     cst_runtime_ok = rt_importable
     status_checks_ok = all(c["status"] != "error" for c in ws_checks + cst_checks)
-    integration_status = "pass" if (venv_ok and cst_runtime_ok) else "degraded" if status_checks_ok else "skipped"
+    integration_status = "pass" if (cst_runtime_ok and status_checks_ok) else "skipped"
     integration_msg = []
-    if not venv_ok:
-        integration_msg.append("no .venv (run bootstrap.py to deploy)")
     if not cst_runtime_ok:
-        integration_msg.append("cst_runtime not importable (run bootstrap.py to deploy)")
+        integration_msg.append("cst_runtime not importable (configure runtime.source_path or redeploy with Python 3.9)")
     phases["integration"] = {
         "status": integration_status,
-        "check": {"venv": venv_ok, "cst_runtime_importable": cst_runtime_ok},
+        "check": {
+            "python_39": py_ok,
+            "cst_runtime_importable": cst_runtime_ok,
+            "runtime_source": str(scripts_root),
+        },
         "message": "; ".join(integration_msg) if integration_msg else "ready",
     }
 

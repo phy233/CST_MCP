@@ -106,24 +106,22 @@ TOML 定义参考：`devkit/tools/vba_defs/`（10 个参考实现）。
 
 ## 快速开始
 
-前置条件：CST Studio Suite 2026、Python 3.13+、uv。完整环境初始化见 `skills/cst-runtime-cli/references/setup_guide.md`。
+本仓库有两套必须隔离的安装流程，详细步骤见 [INSTALL.md](INSTALL.md)：
+
+1. `cst-runtime` 仅部署并运行在能导入 CST 库的 **Python 3.9** worker 中；不要用 `uv` 或现代 Python 安装它。
+2. `cst-mcp` 安装在 **Python 3.12+** 的现代虚拟环境中；它只通过配置的 worker executable 和 stdin/stdout JSONL 与 runtime 通信。
+
+先完成 `INSTALL.md` 中的 worker 配置后，再由 MCP 客户端调用工具。不要在 MCP 的 `.venv` 中执行 `python -m cst_runtime`。
 
 ```powershell
-# 部署到工作区（一次性）
-python bootstrap.py --skill-path <skill-root>\scripts
-uv run python -m cst_runtime health-check --auto-fix
+# 安装现代 Python 环境中的 MCP 服务
+uv sync --extra dev
 
-# 查看所有可用工具
-uv run python -m cst_runtime list-tools
+# 使用配置的 Python 3.9 worker 部署 runtime（仅在需要工作区副本时）
+& $env:CST_WORKER_PYTHON .\bootstrap.py --skill-path <skill-root>\scripts
 
-# 了解工程
-uv run python -m cst_runtime inspect-project --project-path <project.cst>
-
-# 自行编排工作流
-uv run python -m cst_runtime change-parameter --project-path <p.cst> --name g --value 25.0
-uv run python -m cst_runtime prepare-experiment --args-file <args.json>
-uv run python -m cst_runtime run-experiment --args-file <args.json>
-uv run python -m cst_runtime export-run-results --args-file <args.json>
+# 启动 MCP 服务；它会自动启动 Python 3.9 worker
+uv run cst-mcp
 ```
 
 ---
@@ -151,8 +149,10 @@ uv run python -m cst_runtime export-run-results --args-file <args.json>
 ```powershell
 git clone https://github.com/anomalyco/cst-runtime-cli.git
 cd cst-runtime-cli
-python skills/cst-runtime-cli/scripts/bootstrap.py --skill-path skills/cst-runtime-cli/scripts
-uv run python -m cst_runtime list-tools
+# 必须是 CST 兼容的 Python 3.9，不是 uv 创建的现代 .venv
+& $env:CST_WORKER_PYTHON skills/cst-runtime-cli/scripts/bootstrap.py --skill-path skills/cst-runtime-cli/scripts
+$env:PYTHONPATH = "$PWD\\.cst_runtime"
+& $env:CST_WORKER_PYTHON -m cst_runtime list-tools
 ```
 
 ### 方式 C：Python 包

@@ -92,6 +92,40 @@ class CSTWorkerProxy:
                 code="worker_python_not_found",
                 context={"worker_python": str(worker_python)},
             )
+        try:
+            version = subprocess.run(
+                [str(worker_python), "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise CSTTransportError(
+                f"探测 Python worker 版本超时：{worker_python}",
+                code="worker_version_probe_timeout",
+                context={"worker_python": str(worker_python)},
+            ) from exc
+        except OSError as exc:
+            raise CSTTransportError(
+                f"无法探测 Python worker 版本：{worker_python}：{exc}",
+                code="worker_version_probe_failed",
+                context={"worker_python": str(worker_python)},
+            ) from exc
+        worker_version = version.stdout.strip()
+        if version.returncode != 0 or worker_version != "3.9":
+            raise CSTTransportError(
+                "CST worker 必须使用 Python 3.9；"
+                f"当前 worker 为 {worker_version or '未知版本'}：{worker_python}。"
+                "请在 .cst_config.json 的 runtime.worker_python 中配置 CST 兼容解释器。",
+                code="worker_python_version_mismatch",
+                context={
+                    "worker_python": str(worker_python),
+                    "worker_version": worker_version or None,
+                },
+            )
         self._responses = queue.Queue()
         try:
             self.process = subprocess.Popen(

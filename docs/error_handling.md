@@ -145,14 +145,14 @@ python -m pytest -q `
   skills/cst-runtime-cli/tests/core/test_project.py
 ```
 
-根目录 MCP/Proxy 无 CST 测试要求 Python 3.12+；测试时可让临时 Worker 使用同一解释器：
+根目录 MCP/Proxy 无 CST 测试要求 Python 3.12+，但测试 Worker 仍必须指向 Python 3.9：
 
 ```powershell
-$env:CST_WORKER_PYTHON = (Get-Command python).Source
+$env:CST_WORKER_PYTHON = "C:\path\to\python3.9.exe"
 python -m pytest -q
 ```
 
-真实 CST 2022 Worker 仍必须配置为 CST 兼容的 Python 3.9，不能沿用上面的无 CST 测试设置。
+真实 CST 2022 Worker 还必须能导入对应版本的 CST Python 库。
 
 测试覆盖异常类、JSON 序列化、`OK/ERROR/missing/malformed/timeout`、延迟状态写入、
 ERROR 后 COM 抛错、stale 状态拒绝、两阶段 Buffer、Worker traceback 隐藏、Proxy/MCP

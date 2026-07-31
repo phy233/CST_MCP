@@ -5,6 +5,8 @@ description: CST Studio Suite 正式生产入口。覆盖 session 管理、几�
 
 # CST Runtime CLI Skill
 
+> 运行边界：本 Skill 的所有 CLI 命令均必须由 CST 兼容的 Python 3.9 worker 执行。下文的 `uv run python -m cst_runtime` 是历史写法，不可用于生产；应替换为 `& $env:CST_WORKER_PYTHON -m cst_runtime`，并确保 `PYTHONPATH` 指向 runtime source。`cst-mcp` 则安装在独立的 Python 3.12+ 环境中，只通过 JSONL 调用 worker。
+
 ## 核心流程参考（agent 快速入口）
 
 从零开始完成 CST 优化任务的标准三步流程：
@@ -60,16 +62,15 @@ uv run python -m cst_runtime cst-session-quit
 `cst_runtime` 是 skill 自带的包（`scripts/cst_runtime/`），首次使用需部署到工作区。
 
 ```text
-1. agent 准备 python + uv → 缺则下载静默装
+1. agent 准备 CST 兼容的 Python 3.9 worker
 2. agent Read skill/scripts/bootstrap.py → Write 为 bootstrap.py
-3. uv run python bootstrap.py --skill-path <skill-root>\scripts
+3. `& $env:CST_WORKER_PYTHON bootstrap.py --skill-path <skill-root>\scripts`
 4. 输出 status=ready → 删除 bootstrap.py
-5. uv run python -m cst_runtime init-workspace --workspace <path>
+5. 配置 `runtime.source_path` 与 `runtime.worker_python`，由 `cst-mcp` 启动 worker
 ```
 
-`bootstrap.py` 只做两件事：
+`bootstrap.py` 只做一件事：
 - 复制 `cst_runtime/` + `references/` → `.cst_runtime/`
-- `uv sync` → 将 `cst-runtime` 作为 local dependency 安装到 `.venv`
 
 **后续 `init-workspace` 自动完成：** 创建 task/refs/docs 目录 + 扫描 CST 路径并注册到 `pyproject.toml`。不再需要单独 `install-cst-libraries` 步骤。
 
@@ -77,15 +78,15 @@ uv run python -m cst_runtime cst-session-quit
 
 复制失败（PermissionError）输出 `status=need_fallback`：
 - agent Read skill 下 `cst_runtime/` 全部 .py → Write 到 `.cst_runtime/cst_runtime/`
-- 重跑 `uv run python bootstrap.py`（不带 --skill-path，跳过 copy）
+- 使用 Python 3.9 重跑 `bootstrap.py`（不带 --skill-path，跳过 copy）
 
 ### 生产入口
 
 ```text
-uv run python -m cst_runtime <tool> [args]
+& $env:CST_WORKER_PYTHON -m cst_runtime <tool> [args]
 ```
 
-`cst-runtime` 以 `[tool.uv.sources]` local dependency 方式安装到 `.venv`，无需路径式入口。
+`cst-runtime` 不安装到 MCP 的 `.venv`；MCP 通过 `runtime.worker_python` 启动它，并以 stdin/stdout JSONL 通信。
 
 - 所有生产任务使用标准 `tasks/task_xxx_slug/runs/run_xxx/{projects,exports,logs,stages,analysis}` 结构。
 - 参考工程一律视为只读蓝本，操作前必须先 `prepare-run` 创建工作副本。
@@ -94,7 +95,7 @@ uv run python -m cst_runtime <tool> [args]
 
 如果后续遇到 `ImportError`，说明 `.cst_runtime/` 中的包可能过期。重新运行 `bootstrap.py --skill-path <skill-root>\scripts` 即可重新部署最新模块。
 
-> 为什么隔离：系统 Python 可能有冲突版本的 CST 库或没有 CST 库。`uv run` 使用工作目录下隔离的 `.venv`，其中只有 `pyproject.toml` 声明的精确依赖，与系统环境完全无关。
+> 为什么隔离：CST 库要求 Python 3.9，而 MCP 依赖现代 Python。两者分别运行在独立进程中，不能互相安装或 import。
 
 ## Skill 包结构
 
@@ -123,9 +124,9 @@ uv run python -m cst_runtime <tool> [args]
 
 ## CLI 调用原则
 
-- 入口统一为 `uv run python -m cst_runtime`。首次部署使用 `bootstrap.py`（见部署引导章节），部署完成后全部命令走统一入口。
+- 入口统一为配置的 Python 3.9 worker；首次部署使用 `bootstrap.py`（见部署引导章节）。`cst-mcp` 使用 Python 3.12+，不得直接 import runtime。
 - **禁止读取 `cst_runtime/` 下的 Python 源码文件**——工具的参数、行为、用法全部通过 `describe-tool` CLI 命令自描述获取。读源码得到的信息可能过时或不完整。
-- **禁止将 `cst_runtime/` 模块目录复制到工作区或测试区**——那是 skill 内部模块，工作区只需 `.venv` 和 `pyproject.toml`。所有命令走 skill 入口。
+- **禁止手工复制 `cst_runtime/` 模块目录**——需要工作区副本时只能运行 `bootstrap.py` 部署到 `.cst_runtime/`，并把该目录配置为 `runtime.source_path`；不得把 runtime 安装进 MCP 的 `.venv`。
 - 简单发现命令可直接调用。
 - 其他 agent 第一次使用时必须先跑 `health-check`；不要靠猜工具名或参数名。
 - 低上下文 agent 不应自己发明管道；先跑 `list-pipelines`，再对目标链路跑 `describe-pipeline --pipeline <name>`。

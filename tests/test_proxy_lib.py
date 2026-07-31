@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import queue
+import subprocess
 import threading
 from types import SimpleNamespace
 
@@ -127,6 +128,11 @@ def test_proxy_wraps_worker_process_start_failure(monkeypatch, tmp_path) -> None
     def fail_to_start(*_args, **_kwargs):
         raise OSError("launch denied")
 
+    monkeypatch.setattr(
+        proxy_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="3.9\n"),
+    )
     monkeypatch.setattr(proxy_module.subprocess, "Popen", fail_to_start)
 
     with pytest.raises(proxy_module.CSTTransportError) as exc_info:
@@ -134,3 +140,66 @@ def test_proxy_wraps_worker_process_start_failure(monkeypatch, tmp_path) -> None
 
     assert exc_info.value.code == "worker_process_start_failed"
     assert exc_info.value.context["worker_python"] == str(worker_python)
+
+
+def test_proxy_wraps_worker_version_probe_failure(monkeypatch, tmp_path) -> None:
+    from mcp_server import proxy as proxy_module
+
+    worker_python = tmp_path / "python.exe"
+    worker_python.write_text("placeholder", encoding="utf-8")
+    proxy = object.__new__(proxy_module.CSTWorkerProxy)
+    proxy.config = SimpleNamespace(worker_python=worker_python)
+
+    def fail_to_probe(*_args, **_kwargs):
+        raise OSError("probe denied")
+
+    monkeypatch.setattr(proxy_module.subprocess, "run", fail_to_probe)
+
+    with pytest.raises(proxy_module.CSTTransportError) as exc_info:
+        proxy._start_worker()
+
+    assert exc_info.value.code == "worker_version_probe_failed"
+    assert exc_info.value.context["worker_python"] == str(worker_python)
+
+
+def test_proxy_wraps_worker_version_probe_timeout(monkeypatch, tmp_path) -> None:
+    from mcp_server import proxy as proxy_module
+
+    worker_python = tmp_path / "python.exe"
+    worker_python.write_text("placeholder", encoding="utf-8")
+    proxy = object.__new__(proxy_module.CSTWorkerProxy)
+    proxy.config = SimpleNamespace(worker_python=worker_python)
+
+    def time_out(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired([str(worker_python), "-c", "..."], 10)
+
+    monkeypatch.setattr(proxy_module.subprocess, "run", time_out)
+
+    with pytest.raises(proxy_module.CSTTransportError) as exc_info:
+        proxy._start_worker()
+
+    assert exc_info.value.code == "worker_version_probe_timeout"
+    assert exc_info.value.context["worker_python"] == str(worker_python)
+
+
+def test_proxy_rejects_non_python_39_worker(monkeypatch, tmp_path) -> None:
+    from mcp_server import proxy as proxy_module
+
+    worker_python = tmp_path / "python.exe"
+    worker_python.write_text("placeholder", encoding="utf-8")
+    proxy = object.__new__(proxy_module.CSTWorkerProxy)
+    proxy.config = SimpleNamespace(worker_python=worker_python)
+    monkeypatch.setattr(
+        proxy_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="3.12\n"),
+    )
+
+    with pytest.raises(proxy_module.CSTTransportError) as exc_info:
+        proxy._start_worker()
+
+    assert exc_info.value.code == "worker_python_version_mismatch"
+    assert exc_info.value.context == {
+        "worker_python": str(worker_python),
+        "worker_version": "3.12",
+    }
