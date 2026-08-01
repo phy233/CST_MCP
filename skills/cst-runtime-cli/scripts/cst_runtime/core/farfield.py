@@ -14,7 +14,14 @@ from .error_gateway import submit_vba_history
 from .session import get_attached_project, open_project, close_project
 from .utils import abs_project_path, serialize_value
 from .modeling import _single_vba
-from .compatibility import get_model3d, get_tree_items, select_tree_item, get_farfield_calculator
+from .compatibility import (
+    get_farfield_calculator,
+    get_model3d,
+    get_tree_items,
+    profile_for,
+    read_legacy_farfield_list,
+    select_tree_item,
+)
 from ..analysis.farfield import (
     _extract_farfield_frequency_ghz,
     _build_farfield_angle_values,
@@ -312,28 +319,39 @@ def _read_farfield_scalar_grid_via_calculator(
         return error_response("invalid_angle_range", str(exc), runtime_module="cst_runtime.farfield")
 
     try:
-        calculator = get_farfield_calculator(project)
-        calculator.Reset()
-        calculator.SetScaleLinear(False)
-        calculator.DBUnit("0")
-
         tree_path = f"Farfields\\{farfield_name}"
-        select_tree_item(project, tree_path)
-        for phi_value in phi_values:
-            for theta_value in theta_values:
-                calculator.AddListEvaluationPoint(
-                    theta_value,
-                    phi_value,
-                    1.0,
-                    "spherical",
-                    "frequency",
-                    frequency_ghz,
-                )
-        calculator.CalculateList(tree_path, "farfield Eonly")
-
-        scalar_values = [float(value) for value in calculator.GetList(result_type, "Spherical Abs")]
-        point_theta = [float(value) for value in calculator.GetList(result_type, "Point_T")]
-        point_phi = [float(value) for value in calculator.GetList(result_type, "Point_P")]
+        profile = profile_for(project)
+        if profile.is_2022:
+            scalar_values, point_theta, point_phi = read_legacy_farfield_list(
+                project,
+                tree_path=tree_path,
+                plot_mode=result_type,
+                frequency_ghz=float(frequency_ghz),
+                theta_values=theta_values,
+                phi_values=phi_values,
+            )
+            source = "FarfieldPlot"
+        else:
+            calculator = get_farfield_calculator(project)
+            calculator.Reset()
+            calculator.SetScaleLinear(False)
+            calculator.DBUnit("0")
+            select_tree_item(project, tree_path)
+            for phi_value in phi_values:
+                for theta_value in theta_values:
+                    calculator.AddListEvaluationPoint(
+                        theta_value,
+                        phi_value,
+                        1.0,
+                        "spherical",
+                        "frequency",
+                        frequency_ghz,
+                    )
+            calculator.CalculateList(tree_path, "farfield Eonly")
+            scalar_values = [float(value) for value in calculator.GetList(result_type, "Spherical Abs")]
+            point_theta = [float(value) for value in calculator.GetList(result_type, "Point_T")]
+            point_phi = [float(value) for value in calculator.GetList(result_type, "Point_P")]
+            source = "FarfieldCalculator"
 
         expected_points = len(theta_values) * len(phi_values)
         if len(scalar_values) != expected_points:
@@ -358,7 +376,7 @@ def _read_farfield_scalar_grid_via_calculator(
 
         return {
             "status": "success",
-            "source": "FarfieldCalculator",
+            "source": source,
             "quantity": result_type,
             "unit": unit,
             "tree_path": tree_path,
@@ -377,6 +395,7 @@ def _read_farfield_scalar_grid_via_calculator(
             "peak_theta_deg": float(point_theta[peak_idx]),
             "peak_phi_deg": float(point_phi[peak_idx]),
             "boresight_value": None if boresight_value is None else float(boresight_value),
+            "compatibility": profile.metadata(path=profile.label),
             "runtime_module": "cst_runtime.farfield",
         }
     except Exception as exc:

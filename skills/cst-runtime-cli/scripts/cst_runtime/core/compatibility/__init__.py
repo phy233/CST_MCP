@@ -23,7 +23,12 @@ from .session import (
 )
 from .parameters import supports_parameter_api
 from .parameters import list_parameter_values
-from .farfield import supports_farfield_calculator, get_farfield_calculator
+from .farfield import (
+    supports_farfield_calculator,
+    get_farfield_calculator,
+    legacy_farfield_query_vba,
+    read_legacy_farfield_list,
+)
 from .tree import get_tree_items, result_item_exists, select_tree_item
 from .results import (
     supports_2d_results,
@@ -56,6 +61,8 @@ __all__ = [
     "list_parameter_values",
     "supports_farfield_calculator",
     "get_farfield_calculator",
+    "legacy_farfield_query_vba",
+    "read_legacy_farfield_list",
     "get_tree_items",
     "result_item_exists",
     "select_tree_item",
