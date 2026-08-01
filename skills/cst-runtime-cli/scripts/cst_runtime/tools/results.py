@@ -134,7 +134,7 @@ TOOL_DEFS = {
             },
             "run_id": {
                 "type": "integer",
-                "description": "run_id=0 (default) is alias for latest result; specify >0 for specific runs",
+                "description": "run_id=0（默认）选择最新结果；非参数化仿真中 0 也可能是唯一真实 Run ID",
                 "examples": [
                     1
                 ]
@@ -249,7 +249,7 @@ TOOL_DEFS = {
             },
             "run_id": {
                 "type": "integer",
-                "description": "run_id=0 returns the latest combination; specify >0 for specific runs",
+                "description": "run_id=0 返回最新参数组合；非参数化仿真中 0 也可能是唯一真实 Run ID",
                 "examples": [
                     1
                 ]

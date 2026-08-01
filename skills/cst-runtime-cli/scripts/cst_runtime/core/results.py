@@ -60,6 +60,37 @@ def _get_result_module(project: Any, module_type: str) -> tuple[Any, str]:
     return project.get_3d(), "3d"
 
 
+def _canonical_run_ids(run_ids: Any) -> list[int]:
+    """规范化 Run ID；仅在存在其他编号时把 0 视为最新结果别名。"""
+    normalized = sorted({int(run_id) for run_id in run_ids})
+    if not normalized:
+        raise RuntimeError("结果节点没有可用的 Run ID")
+    nonzero = [run_id for run_id in normalized if run_id != 0]
+    return nonzero or [0]
+
+
+def _latest_available_run_id(run_ids: Any) -> int:
+    """选择最新可用结果；非参数化仿真的唯一真实 ID 可以是 0。"""
+    return _canonical_run_ids(run_ids)[-1]
+
+
+def _resolve_run_id(
+    result_module: Any,
+    requested_run_id: int,
+    *,
+    treepath: str = "",
+) -> int:
+    """解析 run_id=0；它既可能是别名，也可能是非参数化结果的真实 ID。"""
+    requested = int(requested_run_id)
+    if requested != 0:
+        return requested
+    if treepath:
+        run_ids = result_module.get_run_ids(treepath, skip_nonparametric=False)
+    else:
+        run_ids = result_module.get_all_run_ids(max_mesh_passes_only=True)
+    return _latest_available_run_id(run_ids)
+
+
 def get_version_info() -> dict[str, Any]:
     try:
         import cst.results
@@ -208,11 +239,13 @@ def get_parameter_combination(
     try:
         project, context = _load_project(project_path, allow_interactive, subproject_treepath)
         result_module, normalized_module = _get_result_module(project, module_type)
-        params = result_module.get_parameter_combination(int(run_id))
+        resolved_run_id = _resolve_run_id(result_module, run_id)
+        params = result_module.get_parameter_combination(resolved_run_id)
         return {
             "status": "success",
             "project_path": context["fullpath"],
-            "run_id": int(run_id),
+            "requested_run_id": int(run_id),
+            "run_id": resolved_run_id,
             "module_type": normalized_module,
             "active_subproject": context["active_subproject"],
             "parameters": _serialize_value(params),
@@ -241,58 +274,15 @@ def get_1d_result(
     try:
         project, context = _load_project(project_path, allow_interactive, subproject_treepath)
         result_module, normalized_module = _get_result_module(project, module_type)
-
-        result_item = result_module.get_result_item(
-            treepath,
-            run_id=int(run_id),
+        return _get_1d_result_from_module(
+            result_module=result_module,
+            context=context,
+            normalized_module=normalized_module,
+            treepath=treepath,
+            run_id=run_id,
             load_impedances=load_impedances,
+            export_path=export_path,
         )
-
-        xdata = result_item.get_xdata()
-        ydata = result_item.get_ydata()
-        if export_path:
-            export_file = Path(export_path).expanduser()
-            if export_file.suffix.lower() != ".json":
-                return error_response(
-                    "invalid_export_extension",
-                    "get_1d_result export_path only supports .json",
-                    export_path=str(export_file),
-                    runtime_module="cst_runtime.results",
-                )
-            export_file.parent.mkdir(parents=True, exist_ok=True)
-            export_file = export_file.resolve()
-        else:
-            export_file = (
-                Path(context["fullpath"]).parent.parent / "exports" / f"s11_run{run_id}.json"
-            ).resolve()
-            export_file.parent.mkdir(parents=True, exist_ok=True)
-
-        payload = {
-            "treepath": result_item.treepath,
-            "title": result_item.title,
-            "xlabel": result_item.xlabel,
-            "ylabel": result_item.ylabel,
-            "length": result_item.length,
-            "run_id": result_item.run_id,
-            "parameter_combination": _serialize_value(result_item.get_parameter_combination()),
-            "xdata": _serialize_value(xdata),
-            "ydata": _serialize_value(ydata),
-        }
-        export_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-        result = {
-            "status": "success",
-            "mode": "local_export_only",
-            "project_path": context["fullpath"],
-            "module_type": normalized_module,
-            "active_subproject": context["active_subproject"],
-            "treepath": result_item.treepath,
-            "run_id": result_item.run_id,
-            "point_count": len(xdata),
-            "export_path": str(export_file),
-            "runtime_module": "cst_runtime.results",
-        }
-        return result
     except Exception as exc:
         return error_response(
             "get_1d_result_failed",
@@ -302,6 +292,96 @@ def get_1d_result(
             run_id=run_id,
             runtime_module="cst_runtime.results",
         )
+
+
+def _get_1d_result_from_module(
+    *,
+    result_module: Any,
+    context: dict[str, Any],
+    normalized_module: str,
+    treepath: str,
+    run_id: int,
+    load_impedances: bool,
+    export_path: str = "",
+) -> dict[str, Any]:
+    """使用已加载的结果模块读取并导出 1D 结果，避免重复打开结果工程。"""
+    if export_path:
+        export_file = Path(export_path).expanduser()
+        if export_file.suffix.lower() != ".json":
+            return error_response(
+                "invalid_export_extension",
+                "get_1d_result export_path only supports .json",
+                export_path=str(export_file),
+                runtime_module="cst_runtime.results",
+            )
+
+    requested_run_id = int(run_id)
+    resolved_run_id = _resolve_run_id(
+        result_module,
+        requested_run_id,
+        treepath=treepath,
+    )
+    result_item = result_module.get_result_item(
+        treepath,
+        run_id=resolved_run_id,
+        load_impedances=load_impedances,
+    )
+    xdata = result_item.get_xdata()
+    ydata = result_item.get_ydata()
+
+    # 参数组合只是辅助元数据。CST 2022 对非参数化 Run 0 会在这里误报
+    # “run id does not exist: 0”，但曲线数据本身已经成功读取。
+    parameter_combination: Any = {}
+    parameter_combination_warning: str | None = None
+    try:
+        parameter_combination = _serialize_value(result_item.get_parameter_combination())
+    except Exception as exc:
+        parameter_combination_warning = str(exc)
+
+    if export_path:
+        export_file.parent.mkdir(parents=True, exist_ok=True)
+        export_file = export_file.resolve()
+    else:
+        export_file = (
+            Path(context["fullpath"]).parent.parent
+            / "exports"
+            / f"s11_run{resolved_run_id}.json"
+        ).resolve()
+        export_file.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "treepath": result_item.treepath,
+        "title": result_item.title,
+        "xlabel": result_item.xlabel,
+        "ylabel": result_item.ylabel,
+        "length": result_item.length,
+        "requested_run_id": requested_run_id,
+        "run_id": result_item.run_id,
+        "parameter_combination": parameter_combination,
+        "parameter_combination_available": parameter_combination_warning is None,
+        "xdata": _serialize_value(xdata),
+        "ydata": _serialize_value(ydata),
+    }
+    if parameter_combination_warning:
+        payload["parameter_combination_warning"] = parameter_combination_warning
+    export_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    result = {
+        "status": "success",
+        "mode": "local_export_only",
+        "project_path": context["fullpath"],
+        "module_type": normalized_module,
+        "active_subproject": context.get("active_subproject"),
+        "treepath": result_item.treepath,
+        "requested_run_id": requested_run_id,
+        "run_id": result_item.run_id,
+        "point_count": len(xdata),
+        "export_path": str(export_file),
+        "runtime_module": "cst_runtime.results",
+    }
+    if parameter_combination_warning:
+        result["parameter_combination_warning"] = parameter_combination_warning
+    return result
 
 
 def get_2d_result(
@@ -487,6 +567,20 @@ def _extract_farfield_freq(name: str) -> str:
     return ""
 
 
+def _discover_farfield_names_from_result_module(result_module: Any) -> list[str]:
+    """从已加载的离线结果树发现远场结果，避免为查询树节点启动 GUI。"""
+    discovered: list[str] = []
+    for item in list_all_result_items(result_module):
+        tree_path = str(item)
+        low = tree_path.lower()
+        if "farfields" not in low or "\\farfield" not in low or "cut" in low:
+            continue
+        short_name = tree_path.rsplit("\\", 1)[-1]
+        if short_name.strip() and short_name not in discovered:
+            discovered.append(short_name)
+    return discovered
+
+
 def export_run_results(
     project_path: str,
     farfield_names: list[str] | None = None,
@@ -504,24 +598,20 @@ def export_run_results(
         exports_dir.mkdir(parents=True, exist_ok=True)
         exported: list[str] = []
 
-        # Read latest run_id from CST results first
+        # 工程关闭后采用离线结果读取，避免让交互模式重新关联或拉起 CST 界面。
         latest_run_id: int | None = None
-        proj2, ctx2 = _load_project(str(p), allow_interactive=True)
+        proj2, ctx2 = _load_project(str(p), allow_interactive=False)
         m3d2 = proj2.get_3d()
         all_rids = m3d2.get_all_run_ids(max_mesh_passes_only=True)
         if all_rids:
-            sorted_rids = sorted(all_rids)
-            latest_run_id = sorted_rids[-1] if sorted_rids[-1] != 0 else (sorted_rids[-2] if len(sorted_rids) > 1 else 0)
+            latest_run_id = _latest_available_run_id(all_rids)
 
-        # Auto-discover farfield monitors if none provided
+        # 直接复用离线结果树发现远场结果，不再为一次树查询启动 GUI 工程。
         if not farfield_names:
             try:
-                from .farfield import discover_farfield_monitors
-                disc_result = discover_farfield_monitors(str(p))
-                if disc_result.get("status") == "success":
-                    discovered = disc_result.get("farfield_names", [])
-                    if discovered:
-                        farfield_names = discovered
+                discovered = _discover_farfield_names_from_result_module(m3d2)
+                if discovered:
+                    farfield_names = discovered
             except Exception:
                 pass
 
@@ -545,18 +635,17 @@ def export_run_results(
             if run_id is not None:
                 rids = [run_id]
             else:
-                # run_id 0 in CST is an alias for the latest result, skip it
-                # to avoid duplicate export when multiple run_ids exist
-                rids = sorted(all_rids or [0])
-                if len(rids) > 1:
-                    rids = [r for r in rids if r != 0]
+                # 非参数化结果可能只有真实 ID 0；存在其他编号时才排除别名 0。
+                rids = _canonical_run_ids(all_rids)
 
             for rid in rids:
-                r = get_1d_result(
-                    project_path=str(p),
+                r = _get_1d_result_from_module(
+                    result_module=m3d2,
+                    context=ctx2,
+                    normalized_module="3d",
                     treepath="1D Results\\S-Parameters\\S1,1",
                     run_id=rid,
-                    allow_interactive=True,
+                    load_impedances=True,
                 )
                 if r.get("status") == "success":
                     exported.append(r["export_path"])
@@ -564,7 +653,7 @@ def export_run_results(
             tree_items = get_colormap_items(m3d2)
             for ti in tree_items:
                 try:
-                    r2 = get_2d_result(project_path=str(p), treepath=ti, allow_interactive=True)
+                    r2 = get_2d_result(project_path=str(p), treepath=ti, allow_interactive=False)
                     if r2.get("status") == "success":
                         exported.append(r2["export_path"])
                 except Exception:
