@@ -111,6 +111,15 @@ Set mws = app.OpenFile("C:\project.cst")  ' 打开已有工程
 | `GetSelectedTreeItem() → string` | 当前选中节点路径 |
 | `GetNextSelectedTreeItem() → string` | 下一个选中节点 |
 
+#### CST 2022 兼容用法
+
+除下列两项外，本节列出的参数读写、`Rebuild`、`RunSolver`、`SelectTreeItem` 等全局方法在 CST 2022 中的名称和参数顺序与 2026 一致。
+
+| 2026 新用法 | CST 2022 旧用法 | 说明 |
+|---|---|---|
+| `AddToHistoryNoModelChange(caption, contents)` | `AddToHistory(caption, contents)` | 2022 没有“不标记模型变更”的变体；旧方法会写入历史树，并可能使结果失效。 |
+| `GetProjectPathName(type)` | `GetProjectPath(type)` | 方法名不同，参数 `type` 的语义相同。 |
+
 ---
 
 ## 2. 参数管理（核心）
@@ -229,6 +238,31 @@ With Units
     .SetUnit "Temperature", "K"
 End With
 ```
+
+#### CST 2022 兼容用法
+
+2022 不支持通用的 `SetUnit(dimension, unit)` 和 `GetUnit(dimension)`。必须按单位类别调用独立方法；同时 2022 只在该对象页中记录了长度、时间、频率和温度四类单位。
+
+```vba
+With Units
+    .Geometry "mm"          ' 替代 .SetUnit "Length", "mm"
+    .Frequency "GHz"        ' 替代 .SetUnit "Frequency", "GHz"
+    .Time "ns"              ' 替代 .SetUnit "Time", "ns"
+    .TemperatureUnit "K"    ' 替代 .SetUnit "Temperature", "K"
+End With
+
+' 读取时也按类别调用：
+Dim lengthUnit As String
+lengthUnit = Units.GetGeometryUnit
+```
+
+| 2026 新用法 | CST 2022 旧用法 |
+|---|---|
+| `GetUnit("Length")` | `GetGeometryUnit()` |
+| `GetUnit("Time")` | `GetTimeUnit()` |
+| `GetUnit("Frequency")` | `GetFrequencyUnit()` |
+| `GetGeometrySIToUnit()` | `GetGeometrySIToUnit()`（相同） |
+| `GetTimeUnitToSI()` / `GetFrequencyUnitToSI()` | 同名方法（相同） |
 
 ---
 
@@ -417,6 +451,48 @@ End With
 | `Zposition` | double | Z 位置 |
 | `Value` | string | 表达式（如 `"(x^2 + y^2) < 6"`） |
 
+### CST 2022 兼容用法
+
+本节的 2026 基本实体接口与 2022 差异较大。2022 的范围参数文档类型为 `double`，可直接传入数值或可求值的参数表达式；不要把 2026 专用的 `Xwidth`、`Useindividualcolor` 等属性直接用于 2022。
+
+| 对象 | 2026 新用法 | CST 2022 旧用法 |
+|---|---|---|
+| `Brick` | `Xwidth` / `Ywidth` / `Zwidth` | 无对应属性；使用 `Xrange(xmin, xmax)`、`Yrange(...)`、`Zrange(...)`。 |
+| `Cylinder` | `Xradius` / `Yradius` | `Outerradius(radius)`；中空圆柱另用 `Innerradius(radius)`。 |
+| `Cone` | `Xradius` / `Yradius`、`XradiusTop` / `YradiusTop` | `Bottomradius(radius)`、`Topradius(radius)`。 |
+| `Sphere` | `Xradius` / `Yradius` / `Zradius`，分别设置中心坐标 | `CenterRadius(radius)`、`TopRadius(radius)`、`BottomRadius(radius)` 与 `Center(x, y, z)`。 |
+| `ECylinder` | `XradiusTop` / `YradiusTop` | 2022 只有 `Xradius`、`Yradius`、`Zradius`，没有顶部半轴属性。 |
+| `Wire` | 坐标序列属性 `Xcoordinate` / `Ycoordinate` / `Zcoordinate` | 用 `Point1`、`Point2` 或 `Curve` 定义导线；`Radius` 在 2022 已存在。 |
+| `AnalyticalFace` | `Zposition`、`Value` | `LawX`、`LawY`、`LawZ`、`ParameterRangeU`、`ParameterRangeV`。 |
+
+```vba
+' CST 2022：圆柱
+With Cylinder
+    .Reset
+    .Name "cylinder1"
+    .Component "component1"
+    .Material "PEC"
+    .Axis "z"
+    .Outerradius 1
+    .Innerradius 0
+    .Zrange -5, 5
+    .Create
+End With
+
+' CST 2022：圆锥
+With Cone
+    .Reset
+    .Name "cone1"
+    .Component "component1"
+    .Material "PEC"
+    .Axis "z"
+    .Bottomradius 2
+    .Topradius 0
+    .Zrange 0, 4
+    .Create
+End With
+```
+
 ---
 
 ## 5. 曲线建模
@@ -547,6 +623,34 @@ End With
 | `Curve` | bool | 曲线面标识（`"curve_name"`） |
 | `CurvePlaneNormal` | string | 曲线法线 `"x"` / `"y"` / `"z"` |
 | `CurvePlanePosition` | string | 曲线所在平面位置 |
+
+### CST 2022 兼容用法
+
+2022 的二维曲线位于当前工作平面，接口以 `Curve` 名称和逐点调用为主；没有 2026 的 `Type`、`CurvePlaneNormal`、`CurvePlanePosition`、批量 `Xpoint/Ypoint/Zpoint` 等属性。
+
+| 对象 | 2026 新用法 | CST 2022 旧用法 |
+|---|---|---|
+| `Arc` | `Type`、`Radius`、`ArcAngle`、`StartAngle` | `Orientation`、`Xcenter`、`Ycenter`、`X1`、`Y1`、`X2`、`Y2`；需要按圆心角创建时加 `Angle` 和 `UseAngle True`。 |
+| `Circle` | `Type`、`Zcenter` | `Radius`、`Xcenter`、`Ycenter`、`Segments`；无 `Type`/`Zcenter`。 |
+| `Ellipse` | `Type`、`Zcenter` | `XRadius`、`YRadius`、`Xcenter`、`Ycenter`、`Segments`。 |
+| `Rectangle` | `Type`、`Zrange`、`Xwidth` / `Ywidth` | 仅 `Xrange(xmin, xmax)` 与 `Yrange(ymin, ymax)`。 |
+| `Line` | `Xpoint1` / `Ypoint1` / `Zpoint1` 等 | `X1`、`Y1`、`X2`、`Y2`；无 Z 坐标和 `Type`。 |
+| `Polygon` / `Spline` | `Type`、`Closed`、批量坐标 | 以 `Point(x,y)` 起点，再多次调用 `LineTo(x,y)` 或 `RLine(x,y)`。 |
+| `AnalyticalCurve` | `CurveExpression`、`ParameterName`、`Minvalue` / `Maxvalue` | `LawX`、`LawY`、`LawZ` 与 `ParameterRange(tmin, tmax)`。 |
+| `Polygon3D` | 单次传入字符串坐标序列及 `Closed` | 每个点调用一次 `Point(x, y, z)`；无 `Closed` 属性。 |
+
+```vba
+' CST 2022：三维多边形曲线
+With Polygon3D
+    .Reset
+    .Name "poly3d1"
+    .Curve "curve1"
+    .Point 0, 0, 0
+    .Point 1, 2, 0
+    .Point 2, 0, 0
+    .Create
+End With
+```
 
 ---
 
@@ -1515,7 +1619,44 @@ With FarfieldPlot
 End With
 ```
 
+#### CST 2022 兼容用法
+
+2022 的 `FarfieldPlot` 具有相同的 `Reset`、`Plottype`、`Vary`、`Step`、`SetPlotMode`、`Plot`、统计查询以及 ASCII 导出功能，但部分命名和范围设置不同：
+
+| 2026 新用法 | CST 2022 旧用法 |
+|---|---|
+| `SetUserOrigin(x, y, z)` | `Userorigin(x, y, z)` |
+| `SetAzimuthRange(min, max)` | `SetPhiStart(min)` 与 `SetPhiEnd(max)` |
+| 方位/俯仰范围的其他新设置 | 使用 `SetThetaStart`、`SetThetaEnd`、`SetPhiStart`、`SetPhiEnd`。 |
+| `ShowTransparency(flag)` | `SetFarfieldTransparent(flag)`；结构透明度用 `SetStructureTransparent(flag)`。 |
+| `SetUnit(unit)` | `DBUnit(unitCode)` |
+| `SetCoordinateSystem(cs)` | `SetCoordinateSystemType(coordSys)`；自动选择时用 `SetAutomaticCoordinateSystem(flag)`。 |
+| `SetScale(...)` | 组合使用 `SetScaleLinear(flag)`、`SetLogRange(range)`、`SetLogNorm(norm)`。 |
+| `SetSymmetricAzimuthAngle(...)` | `SymmetricRange(flag)`。 |
+
 ### 19.2 FarfieldCalculator（COM 方式，非 VBA With/Reset 模式）
+
+#### CST 2022 兼容说明
+
+CST 2022 的 VBA 帮助中没有 `FarfieldCalculator` 对象，因此不能使用本节的 `SetResultID`、`AddCartesianFieldComponent`、`Calc` 等 2026 接口。计算单点或一组远场值时，使用 `FarfieldPlot` 的旧接口：
+
+```vba
+' CST 2022：计算单个远场点
+Dim gain As Double
+SelectTreeItem "Farfields\farfield (f=10) [1]"
+FarfieldPlot.SetPlotMode "realized gain"
+FarfieldPlot.SetScaleLinear False
+gain = FarfieldPlot.CalculatePoint(90, 0, "spherical abs", "")
+
+' CST 2022：批量点计算
+FarfieldPlot.Reset
+FarfieldPlot.AddListEvaluationPoint 90, 0, 0, "spherical", "frequency", 10
+FarfieldPlot.CalculateList ""
+Dim gains As Variant
+gains = FarfieldPlot.GetList("spherical abs")
+```
+
+> `CalculatePoint`/`GetList` 的场分量由四类标识符拼接，例如矢量绝对值使用 `"spherical abs"`；`CalculateList` 的参数必须为空字符串，计算对象取当前树中选中的远场结果。
 
 **文件：** `special_vbapostproc\special_vbapostproc_farfieldcalculator_object.htm`
 
@@ -1588,6 +1729,18 @@ End With
 
 **注意：** ASCIExport 必须在 `SelectTreeItem` 选中结果树节点之后调用。
 
+#### CST 2022 兼容用法
+
+`ASCIIExport` 在 2022 中的导出入口仍是 `Execute()`，但采样步进的参数个数不同。2022 没有本节列出的 `Direct`、`Frequency`、`ThetaStep`、`PhiStep`、`CoordinateSystem`、`PhaseCenter`、`UsePhaseCenterAsOrigin` 接口；需要这些功能时，请改用结果对象或 `FarfieldPlot` 的 2022 接口。
+
+| 2026 新用法 | CST 2022 旧用法 |
+|---|---|
+| `Step(n)` | `Step(steps, stepwidth)` |
+| `StepX(n)` / `StepY(n)` / `StepZ(n)` | `StepX(steps, stepwidth)` / `StepY(...)` / `StepZ(...)` |
+| `SetSampleRange(double min, double max)` | `SetSampleRange(int min, int max)` |
+| `SetFileType(type)`、`SetCsvSeparator(sep)`、`ExportCoordinatesInMeter(flag)`、`SetSubvolume(...)` | 方法同名，参数顺序相同。 |
+| 无 | 2022 额外提供 `SetPointFile(filename)`。 |
+
 ---
 
 ## 20. ResultTree & 结果读取
@@ -1626,6 +1779,26 @@ latestID = resultIDs(UBound(resultIDs))
 ' 获取结果对象
 Dim s11 As Object
 Set s11 = ResultTree.GetResultFromTreeItem("1D Results\S-Parameters\S1,1", latestID)
+```
+
+### CST 2022 兼容用法
+
+2022 的 `ResultTree` 使用遍历和文件/结果 ID 查询接口，不支持 2026 的 `GetTreeItem`、`GetTreeItemType`、`GetResultByID`、`GetResultsFromTreeTab` 等接口。
+
+| 2026 新用法 | CST 2022 旧用法 |
+|---|---|
+| `GetTreeItem(path, filter)` | `GetTreeResults(rootPath, filterType, infoType, treePaths, resultTypes, fileNames, resultInformation)` |
+| `GetTreeItemType(path)` | `GetResultTypeFromItemName(path)` |
+| `GetResultByID(id)` | 无按 ID 直接读取接口；先用 `GetResultIDsFromTreeItem(path)`，再调用 `GetResultFromTreeItem(path, id)`。 |
+| `GetNumberOfChildren(tab, path)` / `GetBranchName(tab, path)` | 用 `GetFirstChildName(path)` 和循环 `GetNextItemName(currentPath)` 遍历。 |
+| `WaitForTreeItem(path)` | 无对应方法；调用前以 `DoesTreeItemExist(path)` 轮询检查。 |
+
+```vba
+' CST 2022：取得指定树节点最新结果
+Dim ids As Variant, id As String, s11 As Object
+ids = ResultTree.GetResultIDsFromTreeItem("1D Results\S-Parameters\S1,1")
+id = ids(UBound(ids))
+Set s11 = ResultTree.GetResultFromTreeItem("1D Results\S-Parameters\S1,1", id)
 ```
 
 ---
@@ -1715,6 +1888,10 @@ Next
 | `PostProcess1D.GetArray(string name) → variant` | 获取数组 |
 | `PostProcess1D.SetCombine(enum {"Add","Subtract","Multiply","Divide","Convolution","Correlation","Concatenation"})` | 组合方式 |
 
+#### CST 2022 兼容说明
+
+2022 的 `PostProcess1D` 不是 `Calc()`/`GetArray()` 的计算器。请改用 `.ApplyTo(target)`、`.AddOperation(operation)` 配置后调用 `.Run()`；例如阻抗重整化使用 `.SetRenormImpedance(port, mode, impedance)`。
+
 ### 21.5 CombineResults
 
 **文件：** `special_vbapostproc\special_vbapostproc_combineresults_object.htm`
@@ -1729,6 +1906,18 @@ Next
 | `CombineResults.PlotAll()` | 全绘图 |
 | `CombineResults.SetConstraint(enum {"Equality","GreaterThan","LessThan"})` | 约束 |
 | `CombineResults.SetParameter(enum param)` | param ∈ `{"Expression","Stime","Etime","T1","T2","Const0","Samples","fmin","fmax","N","CalcSteps"}` |
+
+#### CST 2022 兼容说明
+
+2022 的 `CombineResults` 使用激励组合工作流，不支持 `AddDataset`、`Calc`、`CalcAll`、`GetResult`、`PlotAll`、`SetConstraint` 或 `SetParameter`。旧用法是先用 `SetExcitationValues` 或 `SetAllExcitations` 设置激励，再调用 `Run()`：
+
+```vba
+With CombineResults
+    .Reset
+    .SetExcitationValues "Port", "1", 1, 1, 0
+    .Run
+End With
+```
 
 ---
 
@@ -1869,6 +2058,8 @@ Next
 ## 参考
 
 所有内容提取自 `C:\Program Files\CST Studio Suite 2026\Online Help\mergedProjects\VBA_3D\` 官方 HTML 文档。
+
+本文中标为“CST 2022 兼容用法/说明”的内容，逐页对照自本机 CST 2022 官方帮助：`D:\Program Files (x86)\CST Studio Suite 2022\Online Help\mergedProjects\VBA_3D\`。其中写明“无对应方法”的项目，表示该对象页未记载可一对一替代的 2022 VBA 接口；这类功能不能仅替换方法名，需改用该说明给出的旧工作流，或在 2022 中取消该功能。
 
 常用子目录速查：
 - `common_vbabasicsolids/` — Brick, Cylinder, Cone, Sphere, Torus, Wire, ECylinder, AnalyticalFace
