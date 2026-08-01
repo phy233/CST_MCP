@@ -3,6 +3,34 @@ from __future__ import annotations
 from cst_runtime.core.compatibility import base
 
 
+def test_extract_year_prefers_native_cst_release_over_wrapper_date():
+    version_info = {
+        "cst.results": {
+            "Version": "2021-06-30",
+            "File": "D:/CST Studio Suite 2022/python_cst_libraries/cst/results.py",
+        },
+        "_cst_results": {
+            "Version": "2022.5 Release from 2022-06-03",
+            "File": "D:/CST Studio Suite 2022/_cst_results.pyd",
+        },
+    }
+
+    assert base._extract_year(version_info) == (
+        2022,
+        "2022.5 Release from 2022-06-03",
+    )
+
+
+def test_extract_year_does_not_treat_plain_date_as_product_version():
+    assert base._extract_year("2021-06-30") is None
+
+
+def test_extract_year_supports_cst_installation_path():
+    path = "D:/Program Files/CST Studio Suite 2022/AMD64/python_cst_libraries"
+
+    assert base._extract_year(path) == (2022, path)
+
+
 def test_profile_can_be_detected_from_explicit_runtime_version(monkeypatch):
     monkeypatch.setenv("CST_RUNTIME_CST_VERSION", "2022.0")
     base.reset_profile_cache()

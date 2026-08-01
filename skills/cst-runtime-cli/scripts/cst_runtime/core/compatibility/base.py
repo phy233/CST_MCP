@@ -51,8 +51,38 @@ class CompatibilityProfile:
 _PROFILE_CACHE: CompatibilityProfile | None = None
 
 
+def _iter_version_texts(value: Any) -> Iterable[str]:
+    """按原始顺序遍历版本返回结构中的标量文本。"""
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _iter_version_texts(item)
+        return
+    if isinstance(value, (tuple, list)):
+        for item in value:
+            yield from _iter_version_texts(item)
+        return
+    yield str(value or "")
+
+
+def _extract_product_year(value: Any) -> tuple[int, str] | None:
+    """优先提取明确标注为 CST 产品版本的年份。"""
+    texts = tuple(_iter_version_texts(value))
+    for pattern in (
+        r"(?<!\d)(20\d{2})(?:\.[0-9.]+)?\s+Release\b",
+        r"\bCST(?:\s+Studio\s+Suite)?\s+(20\d{2})\b",
+    ):
+        for text in texts:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                return int(match.group(1)), text
+    return None
+
+
 def _extract_year(value: Any) -> tuple[int, str] | None:
-    """从 CST 返回的字符串、元组或字典中提取四位版本年份。"""
+    """从 CST 返回值提取版本年份，同时排除普通构建日期。"""
+    product_year = _extract_product_year(value)
+    if product_year:
+        return product_year
     if isinstance(value, dict):
         for key in ("version", "Version", "major", "Major", "release", "Release"):
             if key in value:
@@ -71,7 +101,10 @@ def _extract_year(value: Any) -> tuple[int, str] | None:
                 return parsed
         return None
     text = str(value or "")
-    match = re.search(r"(?<!\d)(20\d{2})(?:[.\s_-][0-9.]+)?", text)
+    match = re.search(
+        r"(?<!\d)(20\d{2})(?!-[0-9]{2}-[0-9]{2})(?:[.\s_][0-9.]+)?",
+        text,
+    )
     if not match:
         return None
     return int(match.group(1)), text
