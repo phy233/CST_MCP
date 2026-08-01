@@ -9,10 +9,16 @@ from typing import Any
 
 from . import gateway
 from .errors import error_response
-from .compatibility import delete_project_results, get_project_solver_type
+from .compatibility import (
+    delete_project_results,
+    detect_compatibility_profile,
+    get_project_solver_type,
+    unsupported_feature,
+)
+from .compatibility.modeling import solver_acceleration_vba
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
-from .modeling import _add_vba_history, _single_vba
+from .modeling import _single_vba, _submit_versioned_vba
 
 
 def start_simulation(project_path: str) -> dict[str, Any]:
@@ -168,36 +174,22 @@ def set_solver_acceleration(
     hardware_accel: bool = True,
     max_gpus: int = 4,
 ) -> dict[str, Any]:
-    normalized_project = _abs_project_path(project_path)
-    project, status = attach_expected_project(normalized_project)
-    if project is None:
-        return status
-
-    def _b(v: bool) -> str:
-        return "True" if v else "False"
-
-    vba = [
-        "With Solver",
-        f'     .UseParallelization "{_b(use_parallelization)}"',
-        f'     .MaximumNumberOfThreads "{max_threads}"',
-        f'     .MaximumNumberOfCPUDevices "{max_cpu_devices}"',
-        f'     .RemoteCalculation "{_b(remote_calc)}"',
-        f'     .UseDistributedComputing "{_b(use_distributed)}"',
-        f'     .MaxNumberOfDistributedComputingPorts "{max_distributed_ports}"',
-        f'     .DistributeMatrixCalculation "{_b(distribute_matrix)}"',
-        f'     .MPIParallelization "{_b(mpi_parallel)}"',
-        f'     .AutomaticMPI "{_b(auto_mpi)}"',
-        f'     .HardwareAcceleration "{_b(hardware_accel)}"',
-        f'     .MaximumNumberOfGPUs "{max_gpus}"',
-        "End With",
-    ]
-    try:
-        res = _add_vba_history(normalized_project, "Set Solver Acceleration", vba, project=project)
-        if res.get("status") == "error":
-            return res
-        return {"status": "success", "project_path": normalized_project, "runtime_module": "cst_runtime.simulation"}
-    except Exception as exc:
-        return error_response("set_solver_acceleration_failed", str(exc), project_path=normalized_project, runtime_module="cst_runtime.simulation")
+    return _submit_versioned_vba(
+        project_path,
+        "Set Solver Acceleration",
+        solver_acceleration_vba,
+        use_parallelization=use_parallelization,
+        max_threads=max_threads,
+        max_cpu_devices=max_cpu_devices,
+        remote_calc=remote_calc,
+        use_distributed=use_distributed,
+        max_distributed_ports=max_distributed_ports,
+        distribute_matrix=distribute_matrix,
+        mpi_parallel=mpi_parallel,
+        auto_mpi=auto_mpi,
+        hardware_accel=hardware_accel,
+        max_gpus=max_gpus,
+    )
 
 
 def set_fdsolver_extrude_open_bc(project_path: str, enable: bool = True) -> dict[str, Any]:
@@ -205,6 +197,19 @@ def set_fdsolver_extrude_open_bc(project_path: str, enable: bool = True) -> dict
 
 
 def set_mesh_fpbavoid_nonreg_unite(project_path: str, enable: bool = True) -> dict[str, Any]:
+    profile = detect_compatibility_profile()
+    if profile.is_2022:
+        return unsupported_feature(
+            "mesh.fpbavoid_nonreg_unite",
+            required_capability="mesh.fpbavoid_nonreg_unite",
+            unsupported_arguments=["enable"],
+            next_action="CST 2022 无等价设置；请移除此调用或升级 CST。",
+        ).to_response(project_path=_abs_project_path(project_path))
+    if not profile.is_2026_or_later:
+        return unsupported_feature(
+            "mesh.fpbavoid_nonreg_unite",
+            required_capability="known_cst_version",
+        ).to_response(project_path=_abs_project_path(project_path))
     return _single_vba_pops(project_path, "set Mesh.FPBAAvoidNonRegUnite", f'Mesh.FPBAAvoidNonRegUnite {"True" if enable else "False"}')
 
 

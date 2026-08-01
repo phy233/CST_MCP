@@ -6,7 +6,19 @@ from typing import Any
 
 from . import buffer
 from .error_gateway import submit_vba_history
-from .errors import error_response, success_response
+from .errors import CSTRuntimeError, error_response, success_response
+from .compatibility import detect_compatibility_profile
+from .compatibility.modeling import (
+    background_vba,
+    extrude_curve_vba,
+    mesh_vba,
+    monitor_vba,
+    polygon3d_vba,
+    port_vba,
+    solver_vba,
+    transform_vba,
+    units_vba,
+)
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 
@@ -50,6 +62,24 @@ def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str],
 
 def _single_vba(project_path: str, history_name: str, vba: str, project: Any = None) -> dict[str, Any]:
     return _add_vba_history(project_path, history_name, [vba], project=project)
+
+
+def _submit_versioned_vba(
+    project_path: str,
+    history_name: str,
+    builder: Any,
+    **arguments: Any,
+) -> dict[str, Any]:
+    """生成已确认版本的 VBA，并把兼容路径写入成功响应。"""
+    try:
+        profile = detect_compatibility_profile()
+        generated = builder(profile=profile, **arguments)
+        result = _add_vba_history(project_path, history_name, list(generated.lines))
+        if result.get("status") != "error":
+            result["compatibility"] = generated.metadata(profile)
+        return result
+    except CSTRuntimeError as exc:
+        return exc.to_response(project_path=_abs_project_path(project_path))
 
 
 def begin_batch(project_path: str, summary: str = "Batch Execution") -> dict[str, Any]:
@@ -397,13 +427,12 @@ def change_solver_type(project_path: str, solver_type: str) -> dict[str, Any]:
 
 
 def define_background(project_path: str, background_type: str = "Normal") -> dict[str, Any]:
-    vba = [
-        "With Background",
-        '.ResetBackground',
-        f'.Type "{background_type}"',
-        "End With",
-    ]
-    return _add_vba_history(project_path, "define background", vba)
+    return _submit_versioned_vba(
+        project_path,
+        "define background",
+        background_vba,
+        background_type=background_type,
+    )
 
 
 def define_boundary(project_path: str, face_type: str = "expanded open", symmetry_type: str = "none") -> dict[str, Any]:
@@ -435,83 +464,20 @@ def define_mesh(
     equilibrate_value: float = 1.5,
     use_gpu: bool = True,
 ) -> dict[str, Any]:
-    vba = [
-        'With Mesh',
-        '     .MeshType "PBA"',
-        '     .SetCreator "High Frequency"',
-        "End With",
-        "With MeshSettings",
-        '     .SetMeshType "Hex"',
-        '     .Set "Version", 1%',
-        f'     .Set "StepsPerWaveNear", "{steps_per_wave_near}"',
-        f'     .Set "StepsPerWaveFar", "{steps_per_wave_far}"',
-        '     .Set "WavelengthRefinementSameAsNear", "1"',
-        f'     .Set "StepsPerBoxNear", "{steps_per_box_near}"',
-        f'     .Set "StepsPerBoxFar", "{steps_per_box_far}"',
-        '     .Set "MaxStepNear", "0"',
-        '     .Set "MaxStepFar", "0"',
-        '     .Set "ModelBoxDescrNear", "maxedge"',
-        '     .Set "ModelBoxDescrFar", "maxedge"',
-        '     .Set "UseMaxStepAbsolute", "0"',
-        '     .Set "GeometryRefinementSameAsNear", "0"',
-        '     .Set "UseRatioLimitGeometry", "1"',
-        f'     .Set "RatioLimitGeometry", "{ratio_limit_geometry}"',
-        '     .Set "MinStepGeometryX", "0"',
-        '     .Set "MinStepGeometryY", "0"',
-        '     .Set "MinStepGeometryZ", "0"',
-        '     .Set "UseSameMinStepGeometryXYZ", "1"',
-        "End With",
-        "With MeshSettings",
-        '     .SetMeshType "Hex"',
-        '     .Set "PlaneMergeVersion", "2"',
-        "End With",
-        "With MeshSettings",
-        '     .SetMeshType "Hex"',
-        '     .Set "FaceRefinementOn", "0"',
-        '     .Set "FaceRefinementPolicy", "2"',
-        '     .Set "FaceRefinementRatio", "2"',
-        '     .Set "FaceRefinementStep", "0"',
-        '     .Set "FaceRefinementNSteps", "2"',
-        '     .Set "EllipseRefinementOn", "0"',
-        '     .Set "EllipseRefinementPolicy", "2"',
-        '     .Set "EllipseRefinementRatio", "2"',
-        '     .Set "EllipseRefinementStep", "0"',
-        '     .Set "EllipseRefinementNSteps", "2"',
-        '     .Set "FaceRefinementBufferLines", "3"',
-        '     .Set "EdgeRefinementOn", "1"',
-        '     .Set "EdgeRefinementPolicy", "1"',
-        f'     .Set "EdgeRefinementRatio", "{edge_refinement_ratio}"',
-        '     .Set "EdgeRefinementStep", "0"',
-        f'     .Set "EdgeRefinementBufferLines", "{edge_refinement_buffer_lines}"',
-        '     .Set "RefineEdgeMaterialGlobal", "0"',
-        '     .Set "RefineAxialEdgeGlobal", "0"',
-        '     .Set "BufferLinesNear", "3"',
-        '     .Set "UseDielectrics", "1"',
-        '     .Set "EquilibrateOn", "1"',
-        f'     .Set "Equilibrate", "{equilibrate_value}"',
-        '     .Set "IgnoreThinPanelMaterial", "0"',
-        "End With",
-        "With MeshSettings",
-        '     .SetMeshType "Hex"',
-        '     .Set "SnapToAxialEdges", "1"',
-        '     .Set "SnapToPlanes", "1"',
-        '     .Set "SnapToSpheres", "1"',
-        '     .Set "SnapToEllipses", "1"',
-        '     .Set "SnapToCylinders", "1"',
-        '     .Set "SnapToCylinderCenters", "1"',
-        '     .Set "SnapToEllipseCenters", "1"',
-        "End With",
-        "With Mesh",
-        '     .ConnectivityCheck "True"',
-        '     .UsePecEdgeModel "True"',
-        '     .PointAccEnhancement "0"',
-        '     .TSTVersion "0"',
-        '     .PBAVersion "2023042623"',
-        '     .SetCADProcessingMethod "MultiThread22", "-1"',
-        f'     .SetGPUForMatrixCalculationDisabled "{ "0" if use_gpu else "1" }"',
-        "End With",
-    ]
-    return _add_vba_history(project_path, "Define Mesh", vba)
+    return _submit_versioned_vba(
+        project_path,
+        "Define Mesh",
+        mesh_vba,
+        steps_per_wave_near=steps_per_wave_near,
+        steps_per_wave_far=steps_per_wave_far,
+        steps_per_box_near=steps_per_box_near,
+        steps_per_box_far=steps_per_box_far,
+        edge_refinement_ratio=edge_refinement_ratio,
+        edge_refinement_buffer_lines=edge_refinement_buffer_lines,
+        ratio_limit_geometry=ratio_limit_geometry,
+        equilibrate_value=equilibrate_value,
+        use_gpu=use_gpu,
+    )
 
 
 def define_solver(
@@ -530,30 +496,24 @@ def define_solver(
     superimpose_plw: bool = False,
     use_sensitivity: bool = False,
 ) -> dict[str, Any]:
-    def _b(v: bool) -> str:
-        return "True" if v else "False"
-
-    vba = [
-        'Mesh.SetCreator "High Frequency"',
-        "With Solver",
-        '     .Method "Hexahedral"',
-        '     .CalculationType "TD-S"',
-        f'     .StimulationPort "{stimulation_port}"',
-        f'     .StimulationMode "{stimulation_mode}"',
-        f'     .SteadyStateLimit "{steady_state_limit}"',
-        f'     .MeshAdaption "{_b(mesh_adaption)}"',
-        f'     .AutoNormImpedance "{_b(auto_norm_impedance)}"',
-        f'     .NormingImpedance "{norming_impedance}"',
-        f'     .CalculateModesOnly "{_b(calculate_modes_only)}"',
-        f'     .SParaSymmetry "{_b(s_para_symmetry)}"',
-        f'     .StoreTDResultsInCache  "{_b(store_td_results)}"',
-        f'     .RunDiscretizerOnly "{_b(run_discretizer_only)}"',
-        f'     .FullDeembedding "{_b(full_deembedding)}"',
-        f'     .SuperimposePLWExcitation "{_b(superimpose_plw)}"',
-        f'     .UseSensitivityAnalysis "{_b(use_sensitivity)}"',
-        "End With",
-    ]
-    return _add_vba_history(project_path, "Define Solver", vba)
+    return _submit_versioned_vba(
+        project_path,
+        "Define Solver",
+        solver_vba,
+        stimulation_port=stimulation_port,
+        stimulation_mode=stimulation_mode,
+        steady_state_limit=steady_state_limit,
+        mesh_adaption=mesh_adaption,
+        auto_norm_impedance=auto_norm_impedance,
+        norming_impedance=norming_impedance,
+        calculate_modes_only=calculate_modes_only,
+        s_para_symmetry=s_para_symmetry,
+        store_td_results=store_td_results,
+        run_discretizer_only=run_discretizer_only,
+        full_deembedding=full_deembedding,
+        superimpose_plw=superimpose_plw,
+        use_sensitivity=use_sensitivity,
+    )
 
 
 def define_port(
@@ -567,64 +527,31 @@ def define_port(
     z_max: float,
     orientation: str,
 ) -> dict[str, Any]:
-    vba = [
-        "With Port",
-        "    .Reset",
-        f'    .PortNumber "{port_number}"',
-        '    .Label ""',
-        '    .Folder ""',
-        '    .NumberOfModes "1"',
-        '    .AdjustPolarization "False"',
-        '    .PolarizationAngle "0.0"',
-        '    .ReferencePlaneDistance "0"',
-        '    .TextSize "50"',
-        '    .TextMaxLimit "1"',
-        '    .Coordinates "Free"',
-        f'    .Orientation "{orientation}"',
-        '    .PortOnBound "False"',
-        '    .ClipPickedPortToBound "False"',
-        f"    .Xrange {x_min}, {x_max}",
-        f"    .Yrange {y_min}, {y_max}",
-        f"    .Zrange {z_min}, {z_max}",
-        '    .XrangeAdd "0.0", "0.0"',
-        '    .YrangeAdd "0.0", "0.0"',
-        '    .ZrangeAdd "0.0", "0.0"',
-        '    .SingleEnded "False"',
-        '    .WaveguideMonitor "False"',
-        "    .Create",
-        "End With",
-    ]
-    return _add_vba_history(project_path, f"Define Port:{port_number}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Port:{port_number}",
+        port_vba,
+        port_number=port_number,
+        ranges=(x_min, x_max, y_min, y_max, z_min, z_max),
+        orientation=orientation,
+    )
 
 
 def define_monitor(project_path: str, start_freq: float, end_freq: float, step: float) -> dict[str, Any]:
-    vba = [
-        "With Monitor",
-        ".Reset",
-        f'.SetName "farfield (f={start_freq})_1"',
-        ".Dimension",
-        ".SetDimensionType \"Farfield\"",
-        ".SetDomain \"Frequency\"",
-        f".SetDomainRange {start_freq}, {end_freq}",
-        f".SetStep {step}",
-        "      .SetPlane 0",
-        "      .SetDistance 0",
-        ".SetSubVolumeEnabledFlag 1",
-        ".SetSubVolume  -105, 105, -105, 105, 0, 445",
-        "      .SetSubVolumePadding 0",
-        "      .SetExitPortID 0",
-        ".SetBoundingBoxFlag 0",
-        ".SetNearfieldSamplingFlag 1",
-        ".SetCreateFieldsFlag 1",
-        "      .SetCreateExcitationFieldFlag 0",
-        "      .SetCreateVolumeCurrentFlag 0",
-        "      .SetCreateSurfaceCurrentFlag 0",
-        "      .SetCreateLoadFieldFlag 0",
-        ".SetVertexposition 0",
-        ".Create",
-        "End With",
-    ]
-    return _add_vba_history(project_path, f"Define Monitor:{start_freq}-{end_freq}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Monitor:{start_freq}-{end_freq}",
+        monitor_vba,
+        field_type="Farfield",
+        start=start_freq,
+        end=end_freq,
+        step=step,
+        name=f"farfield (f={start_freq})_1",
+        subvolume=(-105, 105, -105, 105, 0, 445),
+        use_subvolume=True,
+        enable_nearfield=True,
+        modern_setter_style=True,
+    )
 
 
 def rename_entity(project_path: str, old_name: str, new_name: str) -> dict[str, Any]:
@@ -661,21 +588,21 @@ def define_units(
     conductance: str = "S",
     capacitance: str = "pF",
 ) -> dict[str, Any]:
-    vba = [
-        "With Units",
-        f'    .SetUnit "Length", "{length}"',
-        f'    .SetUnit "Frequency", "{frequency}"',
-        f'    .SetUnit "Voltage", "{voltage}"',
-        f'    .SetUnit "Resistance", "{resistance}"',
-        f'    .SetUnit "Inductance", "{inductance}"',
-        f'    .SetUnit "Temperature", "{temperature}"',
-        f'    .SetUnit "Time", "{time}"',
-        f'    .SetUnit "Current", "{current}"',
-        f'    .SetUnit "Conductance", "{conductance}"',
-        f'    .SetUnit "Capacitance", "{capacitance}"',
-        "End With",
-    ]
-    return _add_vba_history(project_path, "Define Units", vba)
+    return _submit_versioned_vba(
+        project_path,
+        "Define Units",
+        units_vba,
+        length=length,
+        frequency=frequency,
+        voltage=voltage,
+        resistance=resistance,
+        inductance=inductance,
+        temperature=temperature,
+        time=time,
+        current=current,
+        conductance=conductance,
+        capacitance=capacitance,
+    )
 
 
 def set_farfield_monitor(
@@ -691,25 +618,25 @@ def set_farfield_monitor(
     subvolume_z_max: float = 445,
     enable_nearfield: bool = True,
 ) -> dict[str, Any]:
-    def _b(v: bool) -> str:
-        return "True" if v else "False"
-    vba = [
-        "With Monitor",
-        "    .Reset",
-        '    .Domain "Frequency"',
-        '    .FieldType "Farfield"',
-        '    .ExportFarfieldSource "False"',
-        '    .UseSubvolume "False"',
-        '    .Coordinates "Structure"',
-        f'    .SetSubvolume "{subvolume_x_min}", "{subvolume_x_max}", "{subvolume_y_min}", "{subvolume_y_max}", "{subvolume_z_min}", "{subvolume_z_max}"',
-        '    .SetSubvolumeOffset "10", "10", "10", "10", "10", "10"',
-        '    .SetSubvolumeInflateWithOffset "False"',
-        '    .SetSubvolumeOffsetType "FractionOfWavelength"',
-        f'    .EnableNearfieldCalculation "{_b(enable_nearfield)}"',
-        f'    .CreateUsingLinearStep "{start_freq}", "{end_freq}", "{step}"',
-        "End With",
-    ]
-    return _add_vba_history(project_path, "Set Farfield Monitor", vba)
+    return _submit_versioned_vba(
+        project_path,
+        "Set Farfield Monitor",
+        monitor_vba,
+        field_type="Farfield",
+        start=start_freq,
+        end=end_freq,
+        step=step,
+        subvolume=(
+            subvolume_x_min,
+            subvolume_x_max,
+            subvolume_y_min,
+            subvolume_y_max,
+            subvolume_z_min,
+            subvolume_z_max,
+        ),
+        use_subvolume=False,
+        enable_nearfield=enable_nearfield,
+    )
 
 
 def set_efield_monitor(
@@ -725,26 +652,37 @@ def set_efield_monitor(
     subvolume_z_min: float = 0,
     subvolume_z_max: float = 443,
 ) -> dict[str, Any]:
-    vba = [
-        "With Monitor",
-        "    .Reset",
-        '    .Domain "Frequency"',
-        '    .FieldType "Efield"',
-        f'    .Dimension "{dimension}"',
-        '    .UseSubvolume "False"',
-        '    .Coordinates "Structure"',
-        f'    .SetSubvolume "{subvolume_x_min}", "{subvolume_x_max}", "{subvolume_y_min}", "{subvolume_y_max}", "{subvolume_z_min}", "{subvolume_z_max}"',
-        '    .SetSubvolumeOffset "0.0", "0.0", "0.0", "0.0", "0.0", "0.0"',
-        '    .SetSubvolumeInflateWithOffset "False"',
-        f'    .CreateUsingLinearStep "{start_freq}", "{end_freq}", "{step}"',
-        "End With",
-    ]
-    return _add_vba_history(project_path, "Set Efield Monitor", vba)
+    return _submit_versioned_vba(
+        project_path,
+        "Set Efield Monitor",
+        monitor_vba,
+        field_type="Efield",
+        start=start_freq,
+        end=end_freq,
+        step=step,
+        dimension=dimension,
+        subvolume=(
+            subvolume_x_min,
+            subvolume_x_max,
+            subvolume_y_min,
+            subvolume_y_max,
+            subvolume_z_min,
+            subvolume_z_max,
+        ),
+        use_subvolume=False,
+    )
 
 
 def set_field_monitor(project_path: str, field_type: str, start_frequency: str, end_frequency: str, num_samples: str) -> dict[str, Any]:
-    vba = f'Monitor.Reset\nMonitor.Domain "Frequency"\nMonitor.FieldType "{field_type}field"\nMonitor.Dimension "Volume"\nMonitor.CreateUsingLinearSamples "{start_frequency}", "{end_frequency}", "{num_samples}"'
-    return _single_vba(project_path, f"Set{field_type}Monitor", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"Set{field_type}Monitor",
+        monitor_vba,
+        field_type=f"{field_type}field",
+        start=float(start_frequency),
+        end=float(end_frequency),
+        samples=int(num_samples),
+    )
 
 
 def set_probe(project_path: str, field_type: str, x_pos: str, y_pos: str, z_pos: str) -> dict[str, Any]:
@@ -771,19 +709,12 @@ def set_background_with_space(
     z_min_space: float = 50,
     z_max_space: float = 100,
 ) -> dict[str, Any]:
-    vba = [
-        "With Background",
-        "    .ResetBackground",
-        f'    .XminSpace "{x_min_space}"',
-        f'    .XmaxSpace "{x_max_space}"',
-        f'    .YminSpace "{y_min_space}"',
-        f'    .YmaxSpace "{y_max_space}"',
-        f'    .ZminSpace "{z_min_space}"',
-        f'    .ZmaxSpace "{z_max_space}"',
-        '    .ApplyInAllDirections "False"',
-        "End With",
-    ]
-    return _add_vba_history(project_path, "Set Background Space", vba)
+    return _submit_versioned_vba(
+        project_path,
+        "Set Background Space",
+        background_vba,
+        spaces=(x_min_space, x_max_space, y_min_space, y_max_space, z_min_space, z_max_space),
+    )
 
 
 def set_farfield_plot_cuts(project_path: str, lateral_cuts: list | None = None, polar_cuts: list | None = None) -> dict[str, Any]:
@@ -826,19 +757,14 @@ def create_mesh_group(project_path: str, group_name: str, items: list[str]) -> d
 
 
 def define_polygon_3d(project_path: str, name: str, curve: str, points: list[list]) -> dict[str, Any]:
-    vba = [
-        "With Polygon3D",
-        "    .Reset",
-        "    .Version 10",
-        f'    .Name "{name}"',
-        f'    .Curve "{curve}"',
-    ]
-    for pt in points:
-        if len(pt) >= 3:
-            vba.append(f'    .Point "{pt[0]}", "{pt[1]}", "{pt[2]}"')
-    vba.append("    .Create")
-    vba.append("End With")
-    return _add_vba_history(project_path, f"Define Polygon3D: {name}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Polygon3D: {name}",
+        polygon3d_vba,
+        name=name,
+        curve=curve,
+        points=points,
+    )
 
 
 def define_analytical_curve(project_path: str, name: str, curve: str, law_x: str, law_y: str, law_z: str, param_start: str, param_end: str) -> dict[str, Any]:
@@ -868,24 +794,28 @@ def define_extrude_curve(
     taper_angle: float = 0.0,
     delete_profile: bool = True,
 ) -> dict[str, Any]:
+    try:
+        profile = detect_compatibility_profile()
+        generated = extrude_curve_vba(
+            name=name,
+            component=component,
+            material=material,
+            curve=curve,
+            thickness=thickness,
+            twist_angle=twist_angle,
+            taper_angle=taper_angle,
+            delete_profile=delete_profile,
+            profile=profile,
+        )
+    except CSTRuntimeError as exc:
+        return exc.to_response(project_path=_abs_project_path(project_path))
     mat_result = _define_material(project_path, material)
     if mat_result.get("status") == "error":
         return mat_result
-    vba = [
-        "With ExtrudeCurve",
-        "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Component "{component}"',
-        f'    .Material "{material}"',
-        f'    .Thickness "{thickness}"',
-        f'    .Twistangle "{twist_angle}"',
-        f'    .Taperangle "{taper_angle}"',
-        f'    .DeleteProfile "{"True" if delete_profile else "False"}"',
-        f'    .Curve "{curve}"',
-        "    .Create",
-        "End With",
-    ]
-    return _add_vba_history(project_path, f"Define ExtrudeCurve: {name}", vba)
+    result = _add_vba_history(project_path, f"Define ExtrudeCurve: {name}", list(generated.lines))
+    if result.get("status") != "error":
+        result["compatibility"] = generated.metadata(profile)
+    return result
 
 
 def transform_shape(
@@ -907,45 +837,21 @@ def transform_shape(
     destination: str = "",
 ) -> dict[str, Any]:
     ttype = {"mirror": "Mirror", "rotate": "Rotate"}.get(transform_type.lower(), transform_type)
-    # mirror和其他功能的VBA代码块不一样
-    if transform_type.lower() == "mirror":
-        vba = [
-            "With Transform",
-            "    .Reset",
-            f'    .Name "{shape_name}"',
-            '    .Origin "Free"',
-            f'    .Center "{center_x}", "{center_y}", "{center_z}"',
-            f'    .PlaneNormal "{plane_normal_x}", "{plane_normal_y}", "{plane_normal_z}"',
-            '    .MultipleObjects "True"',
-            '    .GroupObjects "False"',
-            '    .Repetitions "1"',
-            '    .MultipleSelection "False"',
-            f'    .Destination "{destination}"',
-            '    .Material ""',
-            '    .AutoDestination "True"',
-            f'    .Transform "Shape", "{ttype}"',
-            "End With",
-        ]
-    else:
-        vba = [
-            "With Transform",
-            "    .Reset",
-            f'    .Name "{shape_name}"',
-            '    .Origin "Free"',
-            f'    .Center "{center_x}", "{center_y}", "{center_z}"',
-            f'    .PlaneNormal "{plane_normal_x}", "{plane_normal_y}", "{plane_normal_z}"',
-            f'    .Angle "{angle_x}", "{angle_y}", "{angle_z}"',
-            f'    .MultipleObjects "{"True" if multiple_objects else "False"}"',
-            f'    .GroupObjects "{"True" if group_objects else "False"}"',
-            f'    .Repetitions "{repetitions}"',
-            '    .MultipleSelection "False"',
-            f'    .Destination "{destination}"',
-            '    .Material ""',
-            '    .AutoDestination "True"',
-            f'    .Transform "Shape", "{ttype}"',
-            "End With",
-        ]
-    return _add_vba_history(project_path, f"transform shape: {shape_name}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"transform shape: {shape_name}",
+        transform_vba,
+        target_kind="Shape",
+        name=shape_name,
+        transform_type=ttype,
+        center=(center_x, center_y, center_z),
+        plane_normal=(plane_normal_x, plane_normal_y, plane_normal_z),
+        angle=(angle_x, angle_y, angle_z),
+        multiple_objects=multiple_objects,
+        group_objects=group_objects,
+        repetitions=repetitions,
+        destination=destination,
+    )
 
 
 def transform_curve(
@@ -960,22 +866,18 @@ def transform_curve(
     multiple_objects: bool = True,
     group_objects: bool = False,
 ) -> dict[str, Any]:
-    vba = [
-        "With Transform",
-        "    .Reset",
-        f'    .Name "{curve_name}"',
-        '    .Origin "Free"',
-        f'    .Center "{center_x}", "{center_y}", "{center_z}"',
-        f'    .PlaneNormal "{plane_normal_x}", "{plane_normal_y}", "{plane_normal_z}"',
-        f'    .MultipleObjects "{"True" if multiple_objects else "False"}"',
-        f'    .GroupObjects "{"True" if group_objects else "False"}"',
-        '    .Repetitions "1"',
-        '    .MultipleSelection "False"',
-        '    .Destination ""',
-        f'    .Transform "Curve", "Mirror"',
-        "End With",
-    ]
-    return _add_vba_history(project_path, f"transform curve: {curve_name}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"transform curve: {curve_name}",
+        transform_vba,
+        target_kind="Curve",
+        name=curve_name,
+        transform_type="Mirror",
+        center=(center_x, center_y, center_z),
+        plane_normal=(plane_normal_x, plane_normal_y, plane_normal_z),
+        multiple_objects=multiple_objects,
+        group_objects=group_objects,
+    )
 
 
 def create_horn_segment(project_path: str, segment_id: int, bottom_radius: float, top_radius: float, z_min: float, z_max: float) -> dict[str, Any]:
