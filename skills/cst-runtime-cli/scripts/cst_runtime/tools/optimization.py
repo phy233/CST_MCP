@@ -34,7 +34,7 @@ _register_tool_defs({
                 ]
             },
             "parameters": {
-                "type": "string",
+                "type": ["string", "object"],
                 "examples": [
                     "{\"R\": {\"type\": \"float\", \"min\": 0.1, \"max\": 0.5}}"
                 ]
@@ -72,7 +72,7 @@ _register_tool_defs({
             "constraints": {
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "object"
                 },
                 "examples": [
                     [
@@ -261,7 +261,7 @@ _register_tool_defs({
             "trials": {
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "object"
                 },
                 "examples": [
                     [

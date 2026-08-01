@@ -56,7 +56,9 @@ def _schema_to_template(schema: dict) -> dict:
         elif "examples" in prop and prop["examples"]:
             template[key] = prop["examples"][0]
         else:
-            ptype = prop.get("type", "string")
+            declared_type = prop.get("type", "string")
+            ptypes = declared_type if isinstance(declared_type, list) else [declared_type]
+            ptype = "string" if "string" in ptypes else ptypes[0]
             if ptype == "string":
                 kl = key.lower()
                 if "project_path" in kl or ("path" in kl and "project" in kl):
@@ -108,8 +110,9 @@ def build_direct_arg_specs() -> dict[str, dict]:
         scalar_fields: dict[str, str] = {}
         schema = defn.get("json_schema", {})
         for key, prop in schema.get("properties", {}).items():
-            ptype = prop.get("type", "string")
-            if ptype in ("string", "number", "integer", "boolean"):
+            declared_type = prop.get("type", "string")
+            ptypes = declared_type if isinstance(declared_type, list) else [declared_type]
+            if any(ptype in ("string", "number", "integer", "boolean") for ptype in ptypes):
                 example = ""
                 if "examples" in prop and prop["examples"]:
                     example = str(prop["examples"][0])

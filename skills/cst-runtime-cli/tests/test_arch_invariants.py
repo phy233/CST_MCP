@@ -115,7 +115,9 @@ class TestJsonSchemaInvariants:
         for name, defn in _load_all_defs().items():
             for key, prop in defn["json_schema"]["properties"].items():
                 ptype = prop.get("type", "string")
-                assert ptype in valid_types, \
+                # JSON Schema 允许用数组声明联合类型，例如数值或 CST 参数表达式字符串。
+                declared_types = ptype if isinstance(ptype, list) else [ptype]
+                assert declared_types and all(item in valid_types for item in declared_types), \
                     f"{name}.{key}: invalid type '{ptype}'"
 
     def test_array_properties_have_items(self):

@@ -309,61 +309,61 @@ TOOL_DEFS = {
                 ]
             },
             "x_min1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -10
                 ]
             },
             "x_max1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     10
                 ]
             },
             "y_min1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -10
                 ]
             },
             "y_max1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     10
                 ]
             },
             "z1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     0
                 ]
             },
             "x_min2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -35
                 ]
             },
             "x_max2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     35
                 ]
             },
             "y_min2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -35
                 ]
             },
             "y_max2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     35
                 ]
             },
             "z2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     50
                 ]
@@ -416,25 +416,25 @@ TOOL_DEFS = {
                 ]
             },
             "bottom_radius": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     8
                 ]
             },
             "top_radius": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     25
                 ]
             },
             "z_min": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     0
                 ]
             },
             "z_max": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     30
                 ]
@@ -484,61 +484,61 @@ TOOL_DEFS = {
                 ]
             },
             "x_min1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -10
                 ]
             },
             "x_max1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     10
                 ]
             },
             "y_min1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -10
                 ]
             },
             "y_max1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     10
                 ]
             },
             "z1": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     0
                 ]
             },
             "x_min2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -35
                 ]
             },
             "x_max2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     35
                 ]
             },
             "y_min2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     -35
                 ]
             },
             "y_max2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     35
                 ]
             },
             "z2": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     50
                 ]
@@ -707,37 +707,37 @@ TOOL_DEFS = {
                 ]
             },
             "x_min": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     -10
                 ]
             },
             "x_max": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     10
                 ]
             },
             "y_min": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     -10
                 ]
             },
             "y_max": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     10
                 ]
             },
             "z_min": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     0
                 ]
             },
             "z_max": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     20
                 ]
@@ -791,13 +791,13 @@ TOOL_DEFS = {
                 ]
             },
             "bottom_radius": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     5
                 ]
             },
             "top_radius": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     15
                 ]
@@ -809,25 +809,25 @@ TOOL_DEFS = {
                 ]
             },
             "z_min": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     0
                 ]
             },
             "z_max": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     30
                 ]
             },
             "x_center": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     0
                 ]
             },
             "y_center": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     0
                 ]
@@ -882,13 +882,13 @@ TOOL_DEFS = {
                 ]
             },
             "outer_radius": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     5
                 ]
             },
             "inner_radius": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     0
                 ]
@@ -900,25 +900,25 @@ TOOL_DEFS = {
                 ]
             },
             "z_min": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     0
                 ]
             },
             "z_max": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     20
                 ]
             },
             "x_center": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     0
                 ]
             },
             "y_center": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     0
                 ]
@@ -979,7 +979,7 @@ TOOL_DEFS = {
                 ]
             },
             "thickness": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     5
                 ]
@@ -1109,7 +1109,12 @@ TOOL_DEFS = {
             "points": {
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "array",
+                    "items": {
+                        "type": ["number", "string"]
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
                 },
                 "examples": [
                     [
@@ -1178,25 +1183,25 @@ TOOL_DEFS = {
                 ]
             },
             "x_min": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     -10
                 ]
             },
             "x_max": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     10
                 ]
             },
             "y_min": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     -5
                 ]
             },
             "y_max": {
-                "type": "integer",
+                "type": ["number", "string"],
                 "examples": [
                     5
                 ]
@@ -1612,7 +1617,7 @@ TOOL_DEFS = {
                 ]
             },
             "step": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     1
                 ]
@@ -1703,7 +1708,7 @@ TOOL_DEFS = {
                 ]
             },
             "step": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     1
                 ]

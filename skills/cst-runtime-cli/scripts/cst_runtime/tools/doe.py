@@ -78,7 +78,7 @@ _register_tool_defs({
             "probes": {
                 "type": "array",
                 "items": {
-                    "type": "string"
+                    "type": "object"
                 },
                 "examples": [
                     [

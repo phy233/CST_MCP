@@ -51,7 +51,7 @@ TOOL_DEFS = {
                 ]
             },
             "timeout_seconds": {
-                "type": "integer",
+                "type": "number",
                 "examples": [
                     30
                 ]

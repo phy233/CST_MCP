@@ -168,25 +168,25 @@ TOOL_DEFS = {
                 ]
             },
             "steps_per_wave_near": {
-                "type": "number",
+                "type": "integer",
                 "examples": [
                     5
                 ]
             },
             "steps_per_wave_far": {
-                "type": "number",
+                "type": "integer",
                 "examples": [
                     5
                 ]
             },
             "steps_per_box_near": {
-                "type": "number",
+                "type": "integer",
                 "examples": [
                     5
                 ]
             },
             "steps_per_box_far": {
-                "type": "number",
+                "type": "integer",
                 "examples": [
                     1
                 ]
@@ -656,7 +656,7 @@ TOOL_DEFS = {
                 ]
             },
             "num_steps": {
-                "type": "number",
+                "type": "integer",
                 "examples": [
                     5
                 ]
@@ -690,7 +690,7 @@ TOOL_DEFS = {
                 ]
             },
             "max_threads": {
-                "type": "number",
+                "type": "integer",
                 "examples": [
                     1024
                 ]
