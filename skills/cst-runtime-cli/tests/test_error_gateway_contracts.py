@@ -147,7 +147,13 @@ def test_wrapper_contains_runtime_error_channel(tmp_path: Path) -> None:
     assert "C:/" not in wrapped
     assert "If cstRtoperation123Armed Then" in wrapped
     assert "Then Kill cstRtoperation123ArmFile" in wrapped
-    assert "Err.Raise cstRtoperation123ErrorNumber" in wrapped
+    assert (
+        "If Not cstRtoperation123Armed Then "
+        "ReportError cstRtoperation123ErrorDescription"
+    ) in wrapped
+    assert "Err.Raise" not in wrapped
+    assert "Err.Source" not in wrapped
+    assert "Erl" not in wrapped
 
 
 def test_gateway_reports_ok_and_removes_status_file(tmp_path: Path) -> None:
@@ -196,6 +202,29 @@ def test_gateway_reports_runtime_error(tmp_path: Path) -> None:
     assert result["ok"] is False
     assert result["error_type"] == "vba_runtime_error"
     assert "vba_script" not in result["context"]
+
+
+def test_gateway_prefers_runtime_status_when_cst_returns_false(tmp_path: Path) -> None:
+    status_path = tmp_path / "cst-runtime-opfalse.status"
+
+    def write_error_and_return_false(_label, _script):
+        status_path.write_text(
+            "ERROR\n5\n\nCST 2022 ReportError\n0\n",
+            encoding="utf-8",
+        )
+        return False
+
+    result = submit_vba_history(
+        _FakeProject(write_error_and_return_false),
+        "ReportError",
+        ['ReportError "CST 2022 ReportError"'],
+        project_path="C:/model.cst",
+        operation_id="op-false",
+        _status_directory=tmp_path,
+    )
+
+    assert result["error_type"] == "vba_runtime_error"
+    assert result["message"] == "CST 2022 ReportError"
 
 
 def test_gateway_treats_missing_status_as_compile_or_host_error(tmp_path: Path) -> None:
@@ -277,7 +306,7 @@ def test_gateway_prefers_written_runtime_error_when_com_also_raises(tmp_path: Pa
     result = submit_vba_history(
         _FakeProject(write_then_raise),
         "Raise",
-        ["Err.Raise 5"],
+        ['ReportError "raised in VBA"'],
         project_path="C:/model.cst",
         operation_id="op-raise",
         _status_directory=tmp_path,

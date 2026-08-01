@@ -112,18 +112,20 @@ def test_case_2_missing_material(shared_isolated_cst_project: dict[str, Any]) ->
     assert result["error"]["phase"] == "execution"
 
 
-def test_case_3_explicit_err_raise(shared_isolated_cst_project: dict[str, Any]) -> None:
+def test_case_3_explicit_report_error(
+    shared_isolated_cst_project: dict[str, Any],
+) -> None:
     from cst_runtime.core.modeling import add_to_history
 
     result = add_to_history(
         _project_path(shared_isolated_cst_project),
-        'Err.Raise 513, "CSTRuntimeTest", "forced runtime error"',
-        "Gateway forced Err.Raise",
+        'ReportError "forced runtime error"',
+        "Gateway forced ReportError",
     )
 
     assert result["ok"] is False
     assert result["error_type"] == "vba_runtime_error"
-    assert result["error"]["source"] == "CSTRuntimeTest"
+    assert "forced runtime error" in result["message"]
 
 
 def test_case_4_vba_syntax_error(shared_isolated_cst_project: dict[str, Any]) -> None:

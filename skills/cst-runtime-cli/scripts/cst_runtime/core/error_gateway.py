@@ -162,10 +162,12 @@ def wrap_vba_with_status_channel(
     *,
     status_directory_expression: str | None = None,
 ) -> str:
-    """Wrap History VBA without persisting a machine-specific absolute path.
+    """包装 History VBA，同时避免持久化当前机器的绝对路径。
 
-    The arm file exists only for the initial submission. A later History rebuild
-    still executes the business VBA but does not recreate diagnostic files.
+    arm 文件只在首次提交时存在。以后重建 History 时仍会执行实际业务 VBA，
+    但不会再次创建诊断文件。包装代码只使用 CST 2022 文档确认支持的
+    ``ReportError`` 和 ``Err.Number/Description``，不使用旧解释器不支持的
+    ``Err.Raise``。
     """
     valid_filename_characters = frozenset(
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
@@ -197,9 +199,7 @@ def wrap_vba_with_status_channel(
             f"Dim {variable_prefix}Armed As Boolean",
             f"Dim {variable_prefix}FileNumber As Integer",
             f"Dim {variable_prefix}ErrorNumber As Long",
-            f"Dim {variable_prefix}ErrorSource As String",
             f"Dim {variable_prefix}ErrorDescription As String",
-            f"Dim {variable_prefix}ErrorLine As Long",
             f'{variable_prefix}StatusFile = {status_directory_expression} & "\\{status_file_name}"',
             f'{variable_prefix}ArmFile = {status_directory_expression} & "\\{arm_file_name}"',
             "On Error Resume Next",
@@ -217,22 +217,21 @@ def wrap_vba_with_status_channel(
             f"GoTo {done_label}",
             f"{error_label}:",
             f"{variable_prefix}ErrorNumber = Err.Number",
-            f"{variable_prefix}ErrorSource = Err.Source",
             f"{variable_prefix}ErrorDescription = Err.Description",
-            f"{variable_prefix}ErrorLine = Erl",
             "On Error Resume Next",
             f"If {variable_prefix}Armed Then",
             f"{variable_prefix}FileNumber = FreeFile",
             f"Open {variable_prefix}StatusFile For Output As #{variable_prefix}FileNumber",
             f'Print #{variable_prefix}FileNumber, "ERROR"',
             f"Print #{variable_prefix}FileNumber, CStr({variable_prefix}ErrorNumber)",
-            f"Print #{variable_prefix}FileNumber, {variable_prefix}ErrorSource",
+            f'Print #{variable_prefix}FileNumber, ""',
             f"Print #{variable_prefix}FileNumber, {variable_prefix}ErrorDescription",
-            f"Print #{variable_prefix}FileNumber, CStr({variable_prefix}ErrorLine)",
+            f'Print #{variable_prefix}FileNumber, "0"',
             f"Close #{variable_prefix}FileNumber",
             "End If",
             "On Error GoTo 0",
-            f"Err.Raise {variable_prefix}ErrorNumber, {variable_prefix}ErrorSource, {variable_prefix}ErrorDescription",
+            f"If Not {variable_prefix}Armed Then "
+            f"ReportError {variable_prefix}ErrorDescription",
             f"{done_label}:",
             "",
         ]
@@ -318,6 +317,15 @@ def submit_vba_history(
                 context=context,
             ) from exc
         if submission_result is False:
+            if resolved_status_path.exists():
+                try:
+                    wait_for_vba_status(
+                        resolved_status_path,
+                        timeout=min(max(status_timeout, 0.0), 0.25),
+                        poll_interval=poll_interval,
+                    )
+                except VBACompileOrHostError:
+                    pass
             raise CSTSubmissionError(
                 "CST rejected the History submission.",
                 feature=feature,
@@ -346,6 +354,10 @@ def submit_vba_history(
             and exc.context.get("status_state") in {"missing", "malformed", "timeout"}
         ):
             diagnostic_context["vba_script"] = original_script
+            diagnostic_context["gateway_vba_script"] = wrapped_script
+            diagnostic_context["status_directory_expression"] = (
+                status_directory_expression
+            )
         return exc.to_response(**diagnostic_context)
     except Exception as exc:
         return CSTSubmissionError(
