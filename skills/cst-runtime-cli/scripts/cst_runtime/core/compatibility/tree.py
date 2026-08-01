@@ -5,6 +5,109 @@ from .base import unsupported_feature
 from .execution import execute_text_query, vba_string
 
 
+_LEGACY_TREE_ROOTS = (
+    "Components",
+    "Materials",
+    "Ports",
+    "Monitors",
+    "Farfields",
+    "1D Results",
+    "2D/3D Results",
+    "Tables",
+)
+
+
+def _unique_nonempty(lines: list[str]) -> list[str]:
+    items: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        item = line.strip()
+        if item and item not in seen:
+            seen.add(item)
+            items.append(item)
+    return items
+
+
+def _legacy_navigation_tree_items(project: Any) -> list[str]:
+    """使用 CST 2022 ResultTree VBA 递归枚举常用导航树根节点。"""
+    root_upper_bound = len(_LEGACY_TREE_ROOTS) - 1
+    lines = [
+        f"Dim cstRtTreeRoots(0 To {root_upper_bound}) As String",
+        *(
+            f'cstRtTreeRoots({index}) = "{vba_string(root)}"'
+            for index, root in enumerate(_LEGACY_TREE_ROOTS)
+        ),
+        "Dim cstRtTreeQueue() As String",
+        "Dim cstRtTreeHead As Long",
+        "Dim cstRtTreeTail As Long",
+        "Dim cstRtTreeRootIndex As Long",
+        "Dim cstRtTreeParent As String",
+        "Dim cstRtTreeChild As String",
+        "ReDim cstRtTreeQueue(0 To 31)",
+        "cstRtTreeHead = 0",
+        "cstRtTreeTail = -1",
+        f"For cstRtTreeRootIndex = 0 To {root_upper_bound}",
+        "If ResultTree.DoesTreeItemExist(cstRtTreeRoots(cstRtTreeRootIndex)) Then",
+        "cstRtTreeTail = cstRtTreeTail + 1",
+        "If cstRtTreeTail > UBound(cstRtTreeQueue) Then ReDim Preserve cstRtTreeQueue(0 To cstRtTreeTail + 32)",
+        "cstRtTreeQueue(cstRtTreeTail) = cstRtTreeRoots(cstRtTreeRootIndex)",
+        "End If",
+        "Next cstRtTreeRootIndex",
+        "Do While cstRtTreeHead <= cstRtTreeTail",
+        "cstRtTreeParent = cstRtTreeQueue(cstRtTreeHead)",
+        "cstRtTreeChild = ResultTree.GetFirstChildName(cstRtTreeParent)",
+        'Do While cstRtTreeChild <> ""',
+        "Print #cstRtQueryFile, cstRtTreeChild",
+        "cstRtTreeTail = cstRtTreeTail + 1",
+        "If cstRtTreeTail > UBound(cstRtTreeQueue) Then ReDim Preserve cstRtTreeQueue(0 To cstRtTreeTail + 32)",
+        "cstRtTreeQueue(cstRtTreeTail) = cstRtTreeChild",
+        "cstRtTreeChild = ResultTree.GetNextItemName(cstRtTreeChild)",
+        "Loop",
+        "cstRtTreeHead = cstRtTreeHead + 1",
+        "Loop",
+    ]
+    return _unique_nonempty(execute_text_query(project, lines, timeout=5.0))
+
+
+def _legacy_filtered_result_items(project: Any, filter_type: str) -> list[str]:
+    """使用 CST 2022 ResultTree.GetTreeResults 枚举筛选后的结果节点。"""
+    normalized_filter = filter_type.strip() or "0D/1D"
+    if normalized_filter.casefold() == "all":
+        normalized_filter = "folder 0D/1D 2D/3D farfield colormap matrix"
+    if "recursive" not in normalized_filter.casefold().split():
+        normalized_filter += " recursive"
+    result_roots = ("1D Results", "2D/3D Results", "Farfields", "Tables")
+    root_upper_bound = len(result_roots) - 1
+    lines = [
+        f"Dim cstRtResultRoots(0 To {root_upper_bound}) As String",
+        *(
+            f'cstRtResultRoots({index}) = "{vba_string(root)}"'
+            for index, root in enumerate(result_roots)
+        ),
+        "Dim cstRtResultPaths As Variant",
+        "Dim cstRtResultTypes As Variant",
+        "Dim cstRtResultFiles As Variant",
+        "Dim cstRtResultInfo As Variant",
+        "Dim cstRtResultCount As Long",
+        "Dim cstRtResultRootIndex As Long",
+        "Dim cstRtResultIndex As Long",
+        f"For cstRtResultRootIndex = 0 To {root_upper_bound}",
+        "If ResultTree.DoesTreeItemExist(cstRtResultRoots(cstRtResultRootIndex)) Then",
+        (
+            "cstRtResultCount = ResultTree.GetTreeResults("
+            "cstRtResultRoots(cstRtResultRootIndex), "
+            f'"{vba_string(normalized_filter)}", "", '
+            "cstRtResultPaths, cstRtResultTypes, cstRtResultFiles, cstRtResultInfo)"
+        ),
+        "For cstRtResultIndex = 0 To cstRtResultCount - 1",
+        "Print #cstRtQueryFile, CStr(cstRtResultPaths(cstRtResultIndex))",
+        "Next cstRtResultIndex",
+        "End If",
+        "Next cstRtResultRootIndex",
+    ]
+    return _unique_nonempty(execute_text_query(project, lines, timeout=5.0))
+
+
 def get_tree_items(project: Any, filter: str | None = None) -> list[Any]:
     """
     Retrieves tree items using the most appropriate API available in the current CST version.
@@ -26,12 +129,9 @@ def get_tree_items(project: Any, filter: str | None = None) -> list[Any]:
                 pass
         return list(project.modeler.get_tree_items())
 
-    raise unsupported_feature(
-        "tree.list_items",
-        project=project,
-        required_capability="tree_items_api",
-        next_action="结果工程请改用 cst.results 的 0D/1D 或 colormap 过滤枚举。",
-    )
+    if filter:
+        return _legacy_filtered_result_items(project, filter)
+    return _legacy_navigation_tree_items(project)
 
 
 def select_tree_item(project: Any, tree_path: str) -> None:
@@ -62,7 +162,7 @@ def result_item_exists(project: Any, tree_path: str) -> bool:
     output = execute_text_query(
         project,
         [
-            f'If DoesTreeItemExist("{vba_string(tree_path)}") Then',
+            f'If ResultTree.DoesTreeItemExist("{vba_string(tree_path)}") Then',
             'Print #cstRtQueryFile, "1"',
             "Else",
             'Print #cstRtQueryFile, "0"',

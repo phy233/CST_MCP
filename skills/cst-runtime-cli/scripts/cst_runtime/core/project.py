@@ -9,7 +9,12 @@ from . import gateway
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _single_vba
-from .compatibility import compatibility_metadata, create_design_environment, get_tree_items
+from .compatibility import (
+    compatibility_metadata,
+    create_design_environment,
+    get_tree_items,
+    list_material_names,
+)
 from .compatibility.parameters import list_parameter_values, supports_parameter_api
 
 def _connect_new_design_environment():
@@ -153,14 +158,7 @@ def list_materials(project_path: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
-        materials: list[str] = []
-        for item in get_tree_items(project):
-            text = str(item)
-            if not text.startswith("Materials\\"):
-                continue
-            name = text.split("\\")[-1]
-            if name and name not in materials:
-                materials.append(name)
+        materials = list_material_names(project)
         return {
             "status": "success",
             "project_path": normalized_project,
