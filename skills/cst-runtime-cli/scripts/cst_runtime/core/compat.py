@@ -1,168 +1,72 @@
-"""CST 2022/2026 version compatibility layer.
+"""旧兼容导入路径。
 
-Provides safe wrappers for CST API calls that differ between versions.
-CST 2022 uses older API methods that may not exist in CST 2026, and vice versa.
+新实现统一位于 :mod:`cst_runtime.core.compatibility`；本模块只保留重导出，
+避免已有内部调用或第三方脚本立即失效。
 """
 from __future__ import annotations
 
-import warnings
-from typing import Any
-
-_CST_MAJOR: int = 0
-_CST_MINOR: int = 0
-_detected: bool = False
+from .compatibility import (
+    CompatibilityProfile,
+    connect_to_any_design_environment,
+    detect_compatibility_profile,
+    list_open_project_paths,
+    running_design_environment_pids,
+)
 
 
 def detect_version() -> tuple[int, int]:
-    """Detect connected CST version.
-
-    Returns:
-        Tuple of (major, minor) version numbers.
-        Returns (0, 0) if CST is not available.
-    """
-    global _CST_MAJOR, _CST_MINOR, _detected
-    if _detected:
-        return _CST_MAJOR, _CST_MINOR
-
-    try:
-        import cst.interface
-        de = cst.interface.DesignEnvironment()
-        ver = getattr(de, "version", "0.0.0")
-        if isinstance(ver, str):
-            parts = ver.split(".")
-            _CST_MAJOR = int(parts[0]) if parts else 0
-            _CST_MINOR = int(parts[1]) if len(parts) > 1 else 0
-        else:
-            _CST_MAJOR = int(ver) if ver else 0
-    except Exception:
-        pass
-
-    _detected = True
-    return _CST_MAJOR, _CST_MINOR
+    profile = detect_compatibility_profile()
+    return profile.major, 0
 
 
 def is_2022_or_later() -> bool:
-    """Check if CST version is 2022 or later."""
-    major, _ = detect_version()
-    return major >= 2022
+    return detect_compatibility_profile().major >= 2022
 
 
 def is_2026_or_later() -> bool:
-    """Check if CST version is 2026 or later."""
-    major, minor = detect_version()
-    return major >= 2026
+    return detect_compatibility_profile().major >= 2026
 
 
-def safe_connect_to_any():
-    """Connect to CST DesignEnvironment with version compatibility.
+safe_connect_to_any = connect_to_any_design_environment
+safe_running_design_environments = running_design_environment_pids
+safe_list_open_projects = list_open_project_paths
 
-    Tries multiple connection methods:
-    1. connect_to_any() - CST 2026
-    2. connect_to_any_or_new() - CST 2025
-    3. DesignEnvironment() constructor - CST 2022 fallback
 
-    Returns:
-        DesignEnvironment instance
+class _NoOpContextManager:
+    def __enter__(self) -> "_NoOpContextManager":
+        return self
 
-    Raises:
-        RuntimeError: If all connection methods fail
-    """
-    import cst.interface
-    de_cls = cst.interface.DesignEnvironment
+    def __exit__(self, *_args: object) -> None:
+        return None
 
-    # Try CST 2026 method
-    if hasattr(de_cls, "connect_to_any"):
+
+def safe_quiet_mode(environment: object) -> object:
+    getter = getattr(environment, "quiet_mode_enabled", None)
+    if callable(getter):
         try:
-            return de_cls.connect_to_any()
-        except Exception as e:
-            warnings.warn(f"connect_to_any() failed: {e}")
-
-    # Try CST 2025 method
-    if hasattr(de_cls, "connect_to_any_or_new"):
-        try:
-            return de_cls.connect_to_any_or_new()
-        except Exception as e:
-            warnings.warn(f"connect_to_any_or_new() failed: {e}")
-
-    # CST 2022 fallback: direct constructor
-    try:
-        return de_cls()
-    except Exception as e:
-        raise RuntimeError(f"Failed to connect to CST DesignEnvironment: {e}")
-
-
-def safe_running_design_environments() -> list[int]:
-    """Get list of running CST Design Environment process IDs.
-
-    Returns:
-        List of process IDs. Empty list if function not available.
-    """
-    try:
-        import cst.interface
-        if hasattr(cst.interface, "running_design_environments"):
-            return cst.interface.running_design_environments()
-    except Exception:
-        pass
-    return []
-
-
-def safe_list_open_projects(de) -> list[str]:
-    """List open projects with version compatibility.
-
-    Args:
-        de: DesignEnvironment instance
-
-    Returns:
-        List of open project paths. Empty list if function not available.
-    """
-    try:
-        if hasattr(de, "list_open_projects"):
-            return de.list_open_projects()
-    except Exception:
-        pass
-    return []
-
-
-def safe_quiet_mode(de):
-    """Enter quiet mode with version compatibility.
-
-    Args:
-        de: DesignEnvironment instance
-
-    Returns:
-        Context manager for quiet mode.
-        Returns no-op context manager if not supported.
-    """
-    try:
-        if hasattr(de, "quiet_mode_enabled"):
-            return de.quiet_mode_enabled()
-    except Exception:
-        pass
-
-    # No-op context manager fallback
-    class _NoOpContextManager:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
+            return getter()
+        except Exception:
             pass
-
     return _NoOpContextManager()
 
 
-def safe_get_version(de) -> str:
-    """Get CST version string with compatibility.
-
-    Args:
-        de: DesignEnvironment instance
-
-    Returns:
-        Version string (e.g., "2026.0.0") or "unknown"
-    """
+def safe_get_version(environment: object) -> str:
+    value = getattr(environment, "version", None)
     try:
-        ver = getattr(de, "version", None)
-        if ver is not None:
-            return str(ver)
+        value = value() if callable(value) else value
+        return str(value) if value is not None else "unknown"
     except Exception:
-        pass
-    return "unknown"
+        return "unknown"
+
+
+__all__ = [
+    "CompatibilityProfile",
+    "detect_version",
+    "is_2022_or_later",
+    "is_2026_or_later",
+    "safe_connect_to_any",
+    "safe_get_version",
+    "safe_list_open_projects",
+    "safe_quiet_mode",
+    "safe_running_design_environments",
+]

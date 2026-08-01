@@ -5,6 +5,17 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .compatibility import (
+    activate_project,
+    active_project,
+    connect_design_environment,
+    connect_to_any_design_environment,
+    design_environment_pid,
+    get_open_project,
+    has_active_project,
+    list_open_project_paths,
+    running_design_environment_pids,
+)
 from .errors import error_response
 
 
@@ -72,33 +83,25 @@ def wait_project_unlocked(
 
 def _connect_to_any():
     try:
-        import cst.interface
-
-        return cst.interface.DesignEnvironment.connect_to_any()
+        return connect_to_any_design_environment()
     except Exception as exc:
         return None, str(exc)
 
 
 def _discover_design_environment_pids() -> list[int]:
     try:
-        import cst.interface
-        return list(cst.interface.running_design_environments())
+        return running_design_environment_pids()
     except Exception:
         return []
 
 
 def _connected_design_environments() -> tuple[list[tuple[Any, int | None]], str]:
-    try:
-        import cst.interface
-    except Exception as exc:
-        return [], str(exc)
-
     environments: list[tuple[Any, int | None]] = []
     errors: list[str] = []
     seen: set[int] = set()
     for pid in _discover_design_environment_pids():
         try:
-            de = cst.interface.DesignEnvironment.connect(pid)
+            de = connect_design_environment(pid)
             environments.append((de, pid))
             seen.add(pid)
         except Exception as exc:
@@ -109,10 +112,7 @@ def _connected_design_environments() -> tuple[list[tuple[Any, int | None]], str]
         if isinstance(connected, tuple):
             errors.append(connected[1])
         else:
-            try:
-                pid = int(connected.pid())
-            except Exception:
-                pid = None
+            pid = design_environment_pid(connected)
             if pid is None or pid not in seen:
                 environments.append((connected, pid))
 
@@ -120,9 +120,9 @@ def _connected_design_environments() -> tuple[list[tuple[Any, int | None]], str]
 
 
 def _active_project_filename(de: Any) -> str:
-    active = de.active_project
-    if callable(active):
-        active = active()
+    active = active_project(de)
+    if active is None:
+        raise RuntimeError("CST 会话没有活动工程")
     return str(active.filename())
 
 
@@ -139,7 +139,7 @@ def list_open_projects() -> dict[str, Any]:
     failures: list[dict[str, Any]] = []
     for de, pid in environments:
         try:
-            paths = [str(path) for path in list(de.list_open_projects() or [])]
+            paths = list_open_project_paths(de)
         except Exception as exc:
             failures.append({"design_environment_pid": pid, "error": str(exc)})
             continue
@@ -185,7 +185,7 @@ def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, An
     target: tuple[Any, int | None, Any, list[Any]] | None = None
     for de, pid in environments:
         try:
-            open_projects = list(de.list_open_projects() or [])
+            open_projects = list_open_project_paths(de)
         except Exception as exc:
             failures.append({"design_environment_pid": pid, "error": str(exc)})
             continue
@@ -219,7 +219,7 @@ def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, An
         active_path = ""
     if active_path != expected:
         try:
-            de.active_project = de.get_open_project(target_project_path)
+            activate_project(de, get_open_project(de, str(target_project_path)))
             was_activated = True
         except Exception as exc:
             return None, error_response(
@@ -232,7 +232,7 @@ def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, An
             )
 
     try:
-        if not de.has_active_project():
+        if not has_active_project(de):
             return None, error_response(
                 "no_active_project",
                 "CST session has no active project",
@@ -241,9 +241,9 @@ def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, An
                 design_environment_pid=pid,
                 runtime_module="cst_runtime.core.identity",
             )
-        active = de.active_project
-        if callable(active):
-            active = active()
+        active = active_project(de)
+        if active is None:
+            raise RuntimeError("CST 会话没有活动工程")
         active_path = normalize_project_path(str(active.filename()))
         if active_path != expected:
             return None, error_response(

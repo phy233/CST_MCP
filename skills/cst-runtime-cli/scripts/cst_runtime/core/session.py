@@ -6,6 +6,7 @@ from typing import Any
 from . import gateway
 from . import process as process_cleanup
 from . import identity as project_identity
+from .compatibility import create_design_environment
 from .errors import error_response
 from .utils import abs_project_path as _abs_project_path
 
@@ -18,8 +19,7 @@ def get_attached_project(project_path: str) -> dict[str, Any] | None:
 
 
 def _connect_new_design_environment():
-    import cst.interface
-    return cst.interface.DesignEnvironment()
+    return create_design_environment()
 
 
 def inspect(project_path: str = "") -> dict[str, Any]:
@@ -38,9 +38,7 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
     project_dir = Path(normalized_project).parent
     project_dir.mkdir(parents=True, exist_ok=True)
     try:
-        import cst.interface
-
-        de = cst.interface.DesignEnvironment.new()
+        de = create_design_environment()
         # 目前仅创建 MWS(微波工作室)。若需拓展其他类型，可用：
         # de.new_cs() / new_ds() / new_ems() / new_fd3d() / new_mps() / new_pcbs() / new_ps()
         project = de.new_mws()

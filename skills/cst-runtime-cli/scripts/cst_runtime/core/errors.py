@@ -63,7 +63,7 @@ class UnsupportedFeatureError(CSTRuntimeError):
     """Raised when the active CST API does not provide a required capability."""
 
     error_type = "unsupported_feature"
-    phase = "validation"
+    phase = "compatibility"
 
 
 class CSTSubmissionError(CSTRuntimeError):
