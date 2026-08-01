@@ -58,7 +58,7 @@ def shared_isolated_cst_project(
         close_project(
             str(working),
             save=False,
-            kill_processes=True,
+            kill_processes=False,
         ).raise_for_error()
 
 
