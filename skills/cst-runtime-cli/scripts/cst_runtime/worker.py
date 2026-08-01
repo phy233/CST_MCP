@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Any
 
 
+def _emit_json_line(payload: dict[str, Any]) -> None:
+    """以仅含 ASCII 的 JSONL 输出响应，避免受 Windows 控制台编码影响。"""
+    print(json.dumps(payload, ensure_ascii=True, default=str), flush=True)
+
+
 def _load_local_config() -> dict[str, Any]:
     configured = os.environ.get("CST_MCP_CONFIG")
     candidates = [Path(configured)] if configured else []
@@ -77,7 +82,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any]:
 def main() -> int:
     """启动 worker 并通过标准输入输出处理 JSON 行。"""
     _configure_cst_path()
-    print(json.dumps({"status": "ready"}, ensure_ascii=False), flush=True)
+    _emit_json_line({"status": "ready"})
     for raw_line in sys.stdin:
         line = raw_line.strip()
         if not line:
@@ -90,7 +95,7 @@ def main() -> int:
                     "status": "success",
                     "shutdown": True,
                 }
-                print(json.dumps(response, ensure_ascii=False), flush=True)
+                _emit_json_line(response)
                 return 0
             response = handle_request(request)
         except json.JSONDecodeError as exc:
@@ -117,7 +122,7 @@ def main() -> int:
                     phase="worker",
                 ),
             }
-        print(json.dumps(response, ensure_ascii=False, default=str), flush=True)
+        _emit_json_line(response)
     return 0
 
 

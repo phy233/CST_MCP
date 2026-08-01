@@ -1,8 +1,11 @@
 """MCP 到 runtime worker 的协议测试。"""
 from __future__ import annotations
 
+import io
+import json
 import queue
 import subprocess
+import sys
 import threading
 from types import SimpleNamespace
 
@@ -32,6 +35,22 @@ def test_worker_rejects_unknown_operation() -> None:
         assert result["error_type"] == "unknown_tool"
     finally:
         proxy.shutdown()
+
+
+def test_worker_emits_non_gbk_character_as_ascii_json(monkeypatch) -> None:
+    """响应包含 GBK 无法编码的字符时，Worker 应使用 JSON 转义安全输出。"""
+    from cst_runtime.worker import _emit_json_line
+
+    raw_output = io.BytesIO()
+    gbk_stdout = io.TextIOWrapper(raw_output, encoding="gbk", errors="strict")
+    monkeypatch.setattr(sys, "stdout", gbk_stdout)
+
+    _emit_json_line({"message": "\ue045"})
+    gbk_stdout.flush()
+
+    encoded_line = raw_output.getvalue().decode("gbk")
+    assert "\\ue045" in encoded_line
+    assert json.loads(encoded_line) == {"message": "\ue045"}
 
 
 def test_proxy_restarts_after_worker_exit() -> None:
