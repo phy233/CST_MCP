@@ -126,12 +126,8 @@ def _gui_open_project(fullpath: str, session_type: str = "modeler") -> dict[str,
 
 def _gui_close_project(project: Any, fullpath: str, save: bool = False) -> dict[str, Any]:
     try:
-        if save and hasattr(project, "save"):
-            project.save()
-        project.close()
-        result = close_project(fullpath, save=False)
-        gateway.on_session_close(fullpath)
-        return result
+        # 统一交给会话层关闭工程及其所属 Design Environment，避免重复 close。
+        return close_project(fullpath, save=save)
     except Exception as exc:
         return error_response(
             "gui_close_project_failed",
@@ -602,10 +598,6 @@ def export_farfield_grid(
                 reset_result = {"status": "error", "message": "reset navigator selection failed (non-fatal)"}
             flow_log.append({"step": "reset_result_navigator_selection", "result": reset_result})
         if not reuse:
-            try:
-                project.close()
-            except Exception:
-                pass
             close_project(normalized_project, save=False, kill_processes=fresh_session)
             if fresh_session:
                 end_quit = process_cleanup.cleanup_cst_processes(dry_run=False, settle_seconds=0.5)
@@ -707,10 +699,6 @@ def export_farfield_cut(
     finally:
         temp_txt.unlink(missing_ok=True)
         if not reuse:
-            try:
-                project.close()
-            except Exception:
-                pass
             close_project(normalized_project, save=False, kill_processes=fresh_session)
             if fresh_session:
                 end_quit = process_cleanup.cleanup_cst_processes(dry_run=False, settle_seconds=0.5)

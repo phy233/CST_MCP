@@ -116,6 +116,28 @@ def test_export_farfield_grid_no_run_id(tmp_path):
     assert result["status"] == "error"
 
 
+def test_gui_close_project_delegates_to_session_close(monkeypatch):
+    """远场清理不能先直接关闭工程再让会话层重复关闭。"""
+    from cst_runtime.core import farfield
+
+    class FakeProject:
+        def close(self):
+            raise AssertionError("不应直接重复调用 project.close()")
+
+    calls = []
+
+    def fake_close_project(fullpath, save=False):
+        calls.append((fullpath, save))
+        return {"status": "success"}
+
+    monkeypatch.setattr(farfield, "close_project", fake_close_project)
+
+    result = farfield._gui_close_project(FakeProject(), "C:/test.cst", save=True)
+
+    assert result["status"] == "success"
+    assert calls == [("C:/test.cst", True)]
+
+
 def test_export_farfield_grid_valid_quantity_passes_gate():
     """T8: Realized Gain passes quantity guard — fails on file check."""
     from cst_runtime.core.farfield import export_farfield_grid

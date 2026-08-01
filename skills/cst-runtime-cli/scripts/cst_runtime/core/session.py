@@ -11,6 +11,7 @@ from .errors import error_response
 from .utils import abs_project_path as _abs_project_path
 
 _OPENED_PROJECTS: dict[str, Any] = {}
+_OPENED_DESIGN_ENVIRONMENTS: dict[str, Any] = {}
 
 
 def get_attached_project(project_path: str) -> dict[str, Any] | None:
@@ -37,12 +38,16 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
         )
     project_dir = Path(normalized_project).parent
     project_dir.mkdir(parents=True, exist_ok=True)
+    de = None
     try:
         de = create_design_environment()
         # 目前仅创建 MWS(微波工作室)。若需拓展其他类型，可用：
         # de.new_cs() / new_ds() / new_ems() / new_fd3d() / new_mps() / new_pcbs() / new_ps()
         project = de.new_mws()
         project.save(normalized_project)
+        _OPENED_PROJECTS[normalized_project] = project
+        _OPENED_DESIGN_ENVIRONMENTS[normalized_project] = de
+        gateway.on_session_open(normalized_project, "modeler")
         return {
             "status": "success",
             "project_path": normalized_project,
@@ -50,6 +55,12 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
             "runtime_module": "cst_runtime.core.session",
         }
     except Exception as exc:
+        # 创建失败时也要关闭刚启动的空白 Design Environment。
+        if de is not None:
+            try:
+                de.close()
+            except Exception:
+                pass
         return error_response(
             "create_blank_project_failed",
             str(exc),
@@ -93,23 +104,28 @@ def open_project(project_path: str) -> dict[str, Any]:
         }
         return result
 
+    de = None
     try:
+        # CST 2022 必须遵循官方顺序：先创建 DesignEnvironment，再由该对象打开工程。
+        # 若把 --project-file 传给 DesignEnvironment.new()，启动器可能转交到其他进程，
+        # 导致 Python 接口仍按原 PID 查找并报错“No DE found with pid”。
         de = _connect_new_design_environment()
-        
+
         # PROFILING
         import time
         from . import utils as core_utils
         is_profile = hasattr(core_utils, "_PROFILE_DATA")
         if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
             core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
-            
+
         project = de.open_project(normalized_project)
-        
+
         # PROFILING
         if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
             core_utils._PROFILE_DATA["t_com_end"] = time.perf_counter()
             
         _OPENED_PROJECTS[normalized_project] = project
+        _OPENED_DESIGN_ENVIRONMENTS[normalized_project] = de
         gateway.on_session_open(normalized_project, "modeler")
         return {
             "status": "success",
@@ -120,6 +136,12 @@ def open_project(project_path: str) -> dict[str, Any]:
             "runtime_module": "cst_runtime.core.session",
         }
     except Exception as exc:
+        # 打开工程失败时释放由本次调用创建的空白 CST 窗口。
+        if de is not None:
+            try:
+                de.close()
+            except Exception:
+                pass
         return error_response(
             "open_project_failed",
             str(exc),
@@ -176,7 +198,12 @@ def close_project(
     if save:
         effective_save, t3_warning = gateway.guard_before_close_save(normalized_project, save)
 
+    cached_project = _OPENED_PROJECTS.get(normalized_project)
+    owned_de = _OPENED_DESIGN_ENVIRONMENTS.pop(normalized_project, None)
     project, a_status = project_identity.attach_expected_project(normalized_project)
+    if project is None and cached_project is not None:
+        project = cached_project
+        a_status = {"status": "success", "attachment_source": "runtime_cache"}
     de_pid: int | None = a_status.get("design_environment_pid")
     _OPENED_PROJECTS.pop(normalized_project, None)
     gateway.on_session_close(normalized_project)
@@ -193,6 +220,11 @@ def close_project(
             if effective_save:
                 project.save()
             project.close()
+            environment_closed = False
+            if owned_de is not None:
+                # 仅关闭本 Worker 自己创建的环境，不触碰用户手动打开的其他 CST 会话。
+                owned_de.close()
+                environment_closed = True
             
             # PROFILING
             if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
@@ -202,6 +234,7 @@ def close_project(
                 "status": "success",
                 "project_path": normalized_project,
                 "saved": effective_save,
+                "environment_closed": environment_closed,
             }
             if t3_warning:
                 close_result["t3_warning"] = t3_warning
