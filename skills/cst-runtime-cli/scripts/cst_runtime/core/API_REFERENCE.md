@@ -1017,7 +1017,7 @@ result = define_brick(
 
 | 函数 | 签名 | 功能 | 稳定性 |
 |------|------|------|--------|
-| `add_to_history` | `(project_path, command, history_name="")` | 通过 CST 历史列表执行任意 VBA 命令 | 🟢 |
+| `add_to_history` | `(project_path, command, history_name="")` | 向 CST 历史列表同步提交任意 VBA 命令；返回成功不代表 VBA 已完成或执行成功 | 🟢 |
 | `pick_face` | `(project_path, component, name, face_id)` | 按 ID 拾取面（用于后续操作如放样） | 🟡 |
 
 #### 3D 可视化

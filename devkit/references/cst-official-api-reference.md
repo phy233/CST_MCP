@@ -282,7 +282,7 @@ prj.modeler.add_to_history("Op2", "...")
 prj.model3d.allow_history_commands()
 ```
 
-> **注意：** `project.modeler.add_to_history("name", "VBA")` 是执行所有建模、端口、网格、仿真控制操作的**唯一统一入口**。`execute_vba_code()` 在 CST 2026 已移除。
+> **注意：** `project.modeler.add_to_history("name", "VBA")` 是执行所有建模、端口、网格、仿真控制操作的**唯一统一入口**。它同步完成 COM 提交，但不会返回 VBA 的执行完成状态；返回 `True` 仅表示命令已送达 CST。`execute_vba_code()` 在 CST 2026 已移除。
 
 Model3D 的 C 扩展类 `_cst_interface.Model3D` 只定义了 4 个方法：
 

@@ -5,18 +5,18 @@
 ## 实验总结
 
 ### 1. 哪些 API 是同步的？
-- **`add_to_history()`**：**是同步的（阻塞执行）**。实验表明，当 VBA 内部存在耗时操作（如 `While Timer < t1 + 3`）时，Python 会被阻塞等待 3 秒后才返回。
+- **`add_to_history()` 的 COM 提交阶段**：调用方同步等待 VBA 字符串被送达 CST 的宏执行引擎；其返回值仅表示提交成功，不能用于判断宏是否已经执行完成或执行成功。
 - **`execute_vba_code()`**：**是同步的（阻塞执行）**。此方法存在于 `project.schematic` 等对象中，在执行耗时 VBA 时同样阻塞，并且强制要求 VBA 采用 `Public Sub Main()` 结构。
 
 ### 2. 哪些 API 是异步提交？
-在本次核心测试中，**未发现**基于后台异步提交不阻塞 Python 进程的 API。诸如 `add_to_history` 和 `execute_vba_code` 均在底层 COM 线程阻塞直到 VBA 运行结束。
+- **`add_to_history()` 的 VBA 执行阶段**：CST 在内部处理已提交的历史命令，Python 端不获得完成通知或执行结果。因此它应理解为“同步提交、异步执行结果”的单向接口，不能以返回 `True` 作为后续依赖操作的完成条件。
 
 ### 3. 哪些 API 能反馈执行成功或抛出异常？
 - **`execute_vba_code()`**：**能够反馈执行状态**。如果 VBA 存在语法错误或运行时异常，该接口会同步抛出 Python `RuntimeError`，从而被 `try...except` 捕获。
 - **部分项目级 API**：例如 `cst_env.open_project()`，传入不存在的路径时会准确抛出 `FileNotFoundError`。
 
 ### 4. 哪些 API 永远返回 True（或静默失败）？
-- **`add_to_history()`**：无论 VBA 执行成功、产生语法错误还是运行时异常，永远返回 `True` 且不会抛出 Python 异常。
+- **`add_to_history()`**：无论 VBA 后续执行成功、产生语法错误还是运行时异常，都可能返回 `True` 且不在 Python 端抛出异常；`True` 只代表命令字符串已提交给 CST。
 - **`full_history_rebuild()`**：即使历史树（History Tree）中包含了语法错误的块，执行该接口依然返回 `1` (True)，不抛出异常。
 - **`project.save()`**：当传入非法路径（如非法盘符）时，不抛出异常，仅静默返回 `None`。
 

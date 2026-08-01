@@ -13,8 +13,8 @@
 在上述**所有情况**下，`project.modeler.add_to_history("Name", vba_script)` 均**返回了 `True`，且未在 Python 端抛出任何异常**。
 
 ### 结论与隐患
-- 官方的 `add_to_history` 是一个**“只管杀不管埋”的纯异步/触发式单向接口**。
-- `True` 仅仅代表“字符串已成功送达 CST 宏执行引擎”，**绝不代表执行成功**。
+- 官方的 `add_to_history` 是一个**“同步提交、异步执行结果”**的单向接口：Python 同步等待字符串送达 CST 宏执行引擎，但不会获得 VBA 的完成通知或执行结果。
+- `True` 仅仅代表“字符串已成功送达 CST 宏执行引擎”，**绝不代表 VBA 已执行完成或执行成功**。
 - 这导致了一个严重隐患：Python 脚本会误以为指令执行成功（如 Batch Flush 显示 success），继续往后执行，而实际上 CST 内部模型已经崩溃或卡死。
 
 ## 2. API 对象的底层类型与隐藏接口 (Introspection)
