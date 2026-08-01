@@ -8,7 +8,7 @@ from typing import Any, Mapping
 _ERROR_PHASES = {
     "validation_error": "validation",
     "invalid_arguments": "validation",
-    "unsupported_feature": "validation",
+    "unsupported_feature": "compatibility",
     "transport_error": "transport",
     "worker_error": "worker",
     "cst_submission_error": "submission",

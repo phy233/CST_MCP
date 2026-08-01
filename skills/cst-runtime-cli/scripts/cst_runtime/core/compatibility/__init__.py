@@ -24,8 +24,14 @@ from .session import (
 from .parameters import supports_parameter_api
 from .parameters import list_parameter_values
 from .farfield import supports_farfield_calculator, get_farfield_calculator
-from .tree import get_tree_items, select_tree_item
-from .results import supports_2d_results, get_result2d_item, get_colormap_items
+from .tree import get_tree_items, result_item_exists, select_tree_item
+from .results import (
+    supports_2d_results,
+    get_result2d_item,
+    get_colormap_items,
+    list_all_result_items,
+)
+from .queries import delete_project_results, get_project_solver_type
 
 __all__ = [
     "get_model3d",
@@ -50,8 +56,12 @@ __all__ = [
     "supports_farfield_calculator",
     "get_farfield_calculator",
     "get_tree_items",
+    "result_item_exists",
     "select_tree_item",
     "supports_2d_results",
     "get_result2d_item",
     "get_colormap_items",
+    "list_all_result_items",
+    "delete_project_results",
+    "get_project_solver_type",
 ]

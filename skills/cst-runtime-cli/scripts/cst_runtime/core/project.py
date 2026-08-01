@@ -9,12 +9,11 @@ from . import gateway
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _single_vba
-from .compatibility import get_tree_items
-from .compatibility.parameters import list_parameter_values
+from .compatibility import compatibility_metadata, create_design_environment, get_tree_items
+from .compatibility.parameters import list_parameter_values, supports_parameter_api
 
 def _connect_new_design_environment():
-    import cst.interface
-    return cst.interface.DesignEnvironment()
+    return create_design_environment()
 
 
 def save_project(project_path: str) -> dict[str, Any]:
@@ -71,6 +70,7 @@ def list_parameters(project_path: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
+        transport = "python_api" if supports_parameter_api(project) else "immediate_vba"
         params: dict[str, Any] = {}
         # Try to load descriptions from Model/Parameters.json
         desc_map: dict[str, str] = {}
@@ -98,6 +98,7 @@ def list_parameters(project_path: str) -> dict[str, Any]:
             "project_path": normalized_project,
             "parameters": params,
             "count": len(params),
+            "compatibility": compatibility_metadata(project, transport=transport),
             "runtime_module": "cst_runtime.modeler",
         }
     except Exception as exc:

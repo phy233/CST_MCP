@@ -137,6 +137,7 @@ def test_wrapper_contains_runtime_error_channel(tmp_path: Path) -> None:
         "operation.status",
         "operation.arm",
         "operation-123",
+        status_directory_expression='GetProjectPathName("Temp")',
     )
 
     assert "On Error GoTo CSTRuntimeErroroperation123" in wrapped
@@ -235,7 +236,7 @@ def test_gateway_converts_temp_probe_exception_to_submission_error(monkeypatch) 
         raise CSTSubmissionError("temp probe failed")
 
     monkeypatch.setattr(
-        "cst_runtime.core.error_gateway.resolve_cst_temp_directory",
+        "cst_runtime.core.error_gateway.resolve_cst_temp_context",
         fail_probe,
     )
 
@@ -324,6 +325,7 @@ def test_cst_temp_probe_matches_history_directory_expression(tmp_path: Path) -> 
         "probe.status",
         "probe.arm",
         "probe",
+        status_directory_expression='GetProjectPathName("Temp")',
     )
 
     assert resolved == tmp_path.resolve()
@@ -331,6 +333,34 @@ def test_cst_temp_probe_matches_history_directory_expression(tmp_path: Path) -> 
     assert "Print #cstRtProbeFile, cstRtTempPath" in project.schematic.macro
     assert 'Print #cstRtProbeFile, GetProjectPathName("Temp")' not in project.schematic.macro
     assert 'GetProjectPathName("Temp") & "\\probe.status"' in wrapped
+
+
+def test_cst_2022_temp_probe_uses_legacy_expression(monkeypatch, tmp_path: Path) -> None:
+    class FakeSchematic:
+        def __init__(self):
+            self.macro = ""
+
+        def execute_vba_code(self, macro):
+            self.macro = macro
+            match = re.search(r'Open "([^"]+)" For Output', macro)
+            assert match is not None
+            Path(match.group(1)).write_text(str(tmp_path), encoding="utf-8")
+
+    project = _FakeProject(lambda _label, _script: True)
+    project.schematic = FakeSchematic()
+    monkeypatch.setattr(
+        "cst_runtime.core.error_gateway.profile_for",
+        lambda _project: __import__(
+            "cst_runtime.core.compatibility.base",
+            fromlist=["CompatibilityProfile"],
+        ).CompatibilityProfile(major=2022, version="2022", source="test"),
+    )
+
+    resolved = resolve_cst_temp_directory(project, "C:/legacy.cst")
+
+    assert resolved == tmp_path.resolve()
+    assert 'cstRtTempPath = GetProjectPath("Temp")' in project.schematic.macro
+    assert "GetProjectPathName" not in project.schematic.macro
 
 
 def test_cst_temp_probe_is_repeated_for_reopened_project(tmp_path: Path) -> None:

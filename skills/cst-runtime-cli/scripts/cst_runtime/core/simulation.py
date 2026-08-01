@@ -9,7 +9,7 @@ from typing import Any
 
 from . import gateway
 from .errors import error_response
-from .compatibility import get_model3d
+from .compatibility import delete_project_results, get_project_solver_type
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _add_vba_history, _single_vba
@@ -239,13 +239,18 @@ def rebuild_structure(project_path: str) -> dict[str, Any]:
 
 
 def delete_results(project_path: str) -> dict[str, Any]:
-    """删除工程结果，隐藏 model3d 具体访问。"""
+    """删除工程结果，自动选择 Python API 或旧版即时 VBA。"""
     project, status = attach_expected_project(project_path)
     if project is None:
         return status
     try:
-        get_model3d(project).DeleteResults()
-        return {"status": "success", "project_path": project_path, "deleted": True}
+        compatibility = delete_project_results(project)
+        return {
+            "status": "success",
+            "project_path": project_path,
+            "deleted": True,
+            "compatibility": compatibility,
+        }
     except Exception as exc:
         return error_response("delete_results_failed", str(exc), project_path=project_path)
 
@@ -256,7 +261,12 @@ def get_solver_type(project_path: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
-        solver_type = str(get_model3d(project).GetSolverType())
-        return {"status": "success", "project_path": project_path, "solver_type": solver_type}
+        solver_type, compatibility = get_project_solver_type(project)
+        return {
+            "status": "success",
+            "project_path": project_path,
+            "solver_type": solver_type,
+            "compatibility": compatibility,
+        }
     except Exception as exc:
         return error_response("get_solver_type_failed", str(exc), project_path=project_path)

@@ -7,9 +7,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .errors import error_response
+from .errors import UnsupportedFeatureError, error_response
 from .identity import attach_expected_project
-from .compatibility import get_model3d
+from .compatibility import result_item_exists as compatibility_result_item_exists
 
 
 def result_item_exists(project_path: str, treepath: str) -> dict[str, Any]:
@@ -18,8 +18,7 @@ def result_item_exists(project_path: str, treepath: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
-        result_tree = get_model3d(project).ResultTree
-        exists = bool(result_tree.DoesTreeItemExist(treepath))
+        exists = compatibility_result_item_exists(project, treepath)
         return {
             "status": "success",
             "project_path": project_path,
@@ -36,7 +35,7 @@ def result_item_exists(project_path: str, treepath: str) -> dict[str, Any]:
             runtime_module="cst_runtime.core.results",
         )
 from .utils import serialize_value as _serialize_value
-from .compatibility import get_result2d_item, get_colormap_items, supports_2d_results
+from .compatibility import get_result2d_item, get_colormap_items, list_all_result_items
 
 
 def _load_project(project_path: str, allow_interactive: bool = False, subproject_treepath: str = "") -> tuple[Any, dict[str, Any]]:
@@ -138,16 +137,7 @@ def list_result_items(
         result_module, normalized_module = _get_result_module(project, module_type)
         normalized_filter = (filter_type or "0D/1D").strip()
         if normalized_filter.lower() == "all":
-            all_items = result_module._get_all_result_items()
-            treepaths: list[str] = []
-            seen: set[str] = set()
-            for item in all_items:
-                treepath = getattr(item, "treepath", None)
-                if not treepath or treepath in seen:
-                    continue
-                seen.add(treepath)
-                treepaths.append(str(treepath))
-            items = treepaths
+            items = list_all_result_items(result_module)
         else:
             items = [str(item) for item in result_module.get_tree_items(filter=normalized_filter)]
         return {
@@ -160,6 +150,8 @@ def list_result_items(
             "items": items,
             "runtime_module": "cst_runtime.results",
         }
+    except UnsupportedFeatureError as exc:
+        return exc.to_response(project_path=str(project_path))
     except Exception as exc:
         return error_response(
             "list_result_items_failed",
@@ -195,6 +187,8 @@ def list_run_ids(
             "run_ids": _serialize_value(run_ids),
             "runtime_module": "cst_runtime.results",
         }
+    except UnsupportedFeatureError as exc:
+        return exc.to_response(project_path=str(project_path), treepath=treepath)
     except Exception as exc:
         return error_response(
             "list_run_ids_failed",
@@ -375,6 +369,8 @@ def get_2d_result(
             "include_data_ignored": bool(include_data),
             "runtime_module": "cst_runtime.results",
         }
+    except UnsupportedFeatureError as exc:
+        return exc.to_response(project_path=str(project_path), treepath=treepath)
     except Exception as exc:
         return error_response(
             "get_2d_result_failed",

@@ -1,5 +1,6 @@
 """CST 新旧版本参数对象兼容测试。"""
 from cst_runtime.core.compatibility.parameters import list_parameter_values
+from cst_runtime.core.compatibility import parameters
 
 
 class ParameterApi:
@@ -21,3 +22,13 @@ def test_uses_2026_model3d_parameter_api() -> None:
 def test_falls_back_to_2022_modeler_parameter_api() -> None:
     project = type("Project", (), {"modeler": ParameterApi()})()
     assert list_parameter_values(project) == {"length": 10.0, "width": 5.0}
+
+
+def test_falls_back_to_immediate_vba_when_python_api_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr(
+        parameters,
+        "execute_text_query",
+        lambda _project, _lines: ["length\t10\t10", "width\tlength/2\t5"],
+    )
+
+    assert list_parameter_values(object()) == {"length": 10.0, "width": "length/2"}
