@@ -19,6 +19,16 @@ from .compatibility.modeling import (
     transform_vba,
     units_vba,
 )
+from .compatibility.lib import (
+    activate_wcs_vba,
+    arc_vba,
+    boundary_per_face_vba,
+    deactivate_wcs_vba,
+    floquet_port_vba,
+    polygon_solid_vba,
+    translate_vba,
+    waveguide_port_vba,
+)
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 
@@ -994,6 +1004,164 @@ def create_hollow_sweep(
 def add_to_history(project_path: str, command: str, history_name: str = "") -> dict[str, Any]:
     name = history_name or f"VBA: {command[:40]}"
     return _single_vba(project_path, name, command)
+
+
+def set_boundary_per_face(
+    project_path: str,
+    xmin: str,
+    xmax: str,
+    ymin: str,
+    ymax: str,
+    zmin: str,
+    zmax: str,
+    periodic_angle: float = 0,
+) -> dict[str, Any]:
+    return _submit_versioned_vba(
+        project_path,
+        "Define Boundary Per Face",
+        boundary_per_face_vba,
+        faces=(xmin, xmax, ymin, ymax, zmin, zmax),
+        periodic_angle=periodic_angle,
+    )
+
+
+def translate_shape(
+    project_path: str,
+    name: str,
+    vector: tuple[float, float, float],
+    multiple_objects: bool = True,
+    repetitions: int = 1,
+    destination: str = "",
+) -> dict[str, Any]:
+    return _submit_versioned_vba(
+        project_path,
+        f"Translate: {name}",
+        translate_vba,
+        name=name,
+        vector=vector,
+        multiple_objects=multiple_objects,
+        repetitions=repetitions,
+        destination=destination,
+    )
+
+
+def activate_working_coordinate_system(
+    project_path: str,
+    name: str,
+    origin: tuple[float, float, float],
+    normal: tuple[float, float, float],
+    uvector: tuple[float, float, float],
+) -> dict[str, Any]:
+    return _submit_versioned_vba(
+        project_path,
+        f"Activate WCS: {name}",
+        activate_wcs_vba,
+        name=name,
+        origin=origin,
+        normal=normal,
+        uvector=uvector,
+    )
+
+
+def deactivate_working_coordinate_system(project_path: str) -> dict[str, Any]:
+    return _submit_versioned_vba(
+        project_path,
+        "Deactivate WCS",
+        deactivate_wcs_vba,
+    )
+
+
+def define_arc_curve(
+    project_path: str,
+    name: str,
+    curve: str,
+    center: tuple[float, float, float],
+    radius: float,
+    start_angle: float,
+    end_angle: float,
+    segments: int = 0,
+) -> dict[str, Any]:
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Arc: {name}",
+        arc_vba,
+        name=name,
+        curve=curve,
+        center=center,
+        radius=radius,
+        start_angle=start_angle,
+        end_angle=end_angle,
+        segments=segments,
+    )
+
+
+def define_polygon_solid(
+    project_path: str,
+    name: str,
+    component: str,
+    material: str,
+    vertices: list[tuple[float, float]],
+    z_range: tuple[float, float],
+) -> dict[str, Any]:
+    try:
+        profile = detect_compatibility_profile()
+        generated = polygon_solid_vba(
+            name=name,
+            component=component,
+            material=material,
+            vertices=vertices,
+            z_range=z_range,
+            profile=profile,
+        )
+    except (CSTRuntimeError, ValueError) as exc:
+        if isinstance(exc, CSTRuntimeError):
+            return exc.to_response(project_path=_abs_project_path(project_path))
+        return error_response("invalid_arguments", str(exc), project_path=_abs_project_path(project_path))
+    material_result = _define_material(project_path, material)
+    if material_result.get("status") == "error":
+        return material_result
+    result = _add_vba_history(project_path, f"Define Polygon: {name}", list(generated.lines))
+    if result.get("status") != "error":
+        result["compatibility"] = generated.metadata(profile)
+    return result
+
+
+def define_waveguide_port(
+    project_path: str,
+    port_number: int,
+    face: str,
+    width: float | None = None,
+    height: float | None = None,
+) -> dict[str, Any]:
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Waveguide Port {port_number}",
+        waveguide_port_vba,
+        port_number=port_number,
+        face=face,
+        width=width,
+        height=height,
+    )
+
+
+def define_floquet_port(
+    project_path: str,
+    zmin_modes: int,
+    zmax_modes: int,
+    zmin_reference_distance: float,
+    zmax_reference_distance: float,
+    polarization_type: str,
+) -> dict[str, Any]:
+    return _submit_versioned_vba(
+        project_path,
+        "Define Floquet Port",
+        floquet_port_vba,
+        zmin_modes=zmin_modes,
+        zmax_modes=zmax_modes,
+        zmin_reference_distance=zmin_reference_distance,
+        zmax_reference_distance=zmax_reference_distance,
+        polarization_type=polarization_type,
+    )
 
 
 def pick_face(project_path: str, component: str, name: str, face_id: str) -> dict[str, Any]:

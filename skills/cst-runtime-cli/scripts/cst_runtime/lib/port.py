@@ -18,7 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core.modeling import add_to_history as _add_to_history
+from ..core.modeling import define_floquet_port as _define_floquet_port
+from ..core.modeling import define_waveguide_port as _define_waveguide_port
 from ._facade import wrap_public
 from .contracts import raise_result_error
 
@@ -42,26 +43,13 @@ def define_waveguide(
     Raises:
         RuntimeError: If port cannot be defined
     """
-    vba_lines = [
-        "With Port",
-        "    .Reset",
-        f'    .PortNumber "{port_number}"',
-        f'    .SetNumberOfStimulatedModes "1"',
-        f'    .SetPortType "Waveguide"',
-        f'    .Face "{face}"',
-    ]
-    if width is not None:
-        vba_lines.append(f'    .SetWaveguideWidth "{width}"')
-    if height is not None:
-        vba_lines.append(f'    .SetWaveguideHeight "{height}"')
-    vba_lines.extend([
-        '    .SetWaveguidePort "True"',
-        '    .SetImpedance "50"',
-        '    .SetFrequency "10"',
-        '    .Create',
-        "End With",
-    ])
-    result = _add_to_history(project_path, "\n".join(vba_lines), f"Define Waveguide Port {port_number}")
+    result = _define_waveguide_port(
+        project_path,
+        port_number=port_number,
+        face=face,
+        width=width,
+        height=height,
+    )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to define waveguide port")
 
@@ -87,20 +75,14 @@ def define_floquet(
     Raises:
         RuntimeError: If Floquet port cannot be defined
     """
-    # NOTE: CST 2026 feature - Floquet port API
-    # This implementation is based on CST 2026 VBA syntax
-    # For CST 2022 compatibility, additional testing may be needed
-    vba = f"""With Port
-    .Reset
-    .Floquet
-    .SetDialogParameter "ZminModes", "{zmin_modes}"
-    .SetDialogParameter "ZmaxModes", "{zmax_modes}"
-    .SetDialogParameter "ZminReferenceDistance", "{zmin_reference_distance}"
-    .SetDialogParameter "ZmaxReferenceDistance", "{zmax_reference_distance}"
-    .SetDialogParameter "PolarizationType", "{polarization_type}"
-    .CreateFloquetPort
-End With"""
-    result = _add_to_history(project_path, vba, "Define Floquet Port")
+    result = _define_floquet_port(
+        project_path,
+        zmin_modes=zmin_modes,
+        zmax_modes=zmax_modes,
+        zmin_reference_distance=zmin_reference_distance,
+        zmax_reference_distance=zmax_reference_distance,
+        polarization_type=polarization_type,
+    )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to define Floquet port")
 

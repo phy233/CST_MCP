@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..core.modeling import define_boundary as _define_boundary
-from ..core.modeling import add_to_history as _add_to_history
+from ..core.modeling import set_boundary_per_face as _set_boundary_per_face
 from ._facade import wrap_public
 from .contracts import raise_result_error
 
@@ -65,18 +65,16 @@ def set_per_face(
     Raises:
         RuntimeError: If boundary cannot be set
     """
-    vba = f"""With Boundary
-    .Xmin "{xmin}"
-    .Xmax "{xmax}"
-    .Ymin "{ymin}"
-    .Ymax "{ymax}"
-    .Zmin "{zmin}"
-    .Zmax "{zmax}"
-    .ApplyInAllDirections "False"
-    .PeriodicUsePrimitive "False"
-    .SetPeriodicShiftAngle "True", "{periodic_angle}"
-End With"""
-    result = _add_to_history(project_path, vba, "Define Boundary Per Face")
+    result = _set_boundary_per_face(
+        project_path,
+        xmin=xmin,
+        xmax=xmax,
+        ymin=ymin,
+        ymax=ymax,
+        zmin=zmin,
+        zmax=zmax,
+        periodic_angle=periodic_angle,
+    )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to set boundary per face")
 

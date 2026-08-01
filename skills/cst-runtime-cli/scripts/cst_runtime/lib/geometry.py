@@ -42,6 +42,11 @@ from ..core.modeling import create_component as _create_component
 from ..core.modeling import change_material as _change_material
 from ..core.modeling import transform_shape as _transform_shape
 from ..core.modeling import add_to_history as _add_to_history
+from ..core.modeling import activate_working_coordinate_system as _activate_wcs
+from ..core.modeling import deactivate_working_coordinate_system as _deactivate_wcs
+from ..core.modeling import define_arc_curve as _define_arc_curve
+from ..core.modeling import define_polygon_solid as _define_polygon_solid
+from ..core.modeling import translate_shape as _translate_shape
 from ._facade import wrap_public
 from .contracts import raise_result_error
 
@@ -312,23 +317,14 @@ def translate(
     Raises:
         RuntimeError: 如果平移失败时抛出
     """
-    # NOTE: CST 2026 feature - transform_shape needs to be extended to support "translate"
-    # Currently this is a placeholder that constructs VBA directly
-    vba = [
-        "With Transform",
-        "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Vector "{vector[0]}", "{vector[1]}", "{vector[2]}"',
-        f'    .MultipleObjects "{"True" if multiple_objects else "False"}"',
-        f'    .Repetitions "{repetitions}"',
-        '    .MultipleSelection "False"',
-        f'    .Destination "{destination}"',
-        '    .Material ""',
-        '    .AutoDestination "True"',
-        '    .Transform "Shape", "Translate"',
-        "End With",
-    ]
-    result = _add_to_history(project_path, "\n".join(vba), f"Translate: {name}")
+    result = _translate_shape(
+        project_path,
+        name=name,
+        vector=vector,
+        multiple_objects=multiple_objects,
+        repetitions=repetitions,
+        destination=destination,
+    )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to translate")
 
@@ -379,14 +375,13 @@ def activate_wcs(
     Raises:
         RuntimeError: 如果无法激活 WCS 时抛出
     """
-    vba = f"""With WCS
-    .ActivateWCS "local"
-    .SetOrigin {origin[0]}, {origin[1]}, {origin[2]}
-    .SetNormal {normal[0]}, {normal[1]}, {normal[2]}
-    .SetUVector {uvector[0]}, {uvector[1]}, {uvector[2]}
-    .SetName "{name}"
-End With"""
-    result = _add_to_history(project_path, vba, f"Activate WCS: {name}")
+    result = _activate_wcs(
+        project_path,
+        name=name,
+        origin=origin,
+        normal=normal,
+        uvector=uvector,
+    )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to activate WCS")
 
@@ -400,8 +395,7 @@ def deactivate_wcs(project_path: str) -> None:
     Raises:
         RuntimeError: 如果无法停用 WCS 时抛出
     """
-    vba = 'WCS.ActivateWCS "global"'
-    result = _add_to_history(project_path, vba, "Deactivate WCS")
+    result = _deactivate_wcs(project_path)
     if result.get("status") == "error":
         raise_result_error(result, "Failed to deactivate WCS")
 
@@ -431,18 +425,16 @@ def arc(
     Raises:
         RuntimeError: 如果无法创建圆弧时抛出
     """
-    vba = f"""With Arc
-    .Reset
-    .Name "{name}"
-    .Curve "{component}"
-    .Center {center[0]}, {center[1]}, {center[2]}
-    .Radius {radius}
-    .StartAngle {start_angle}
-    .EndAngle {end_angle}
-    .Segments {segments}
-    .Create
-End With"""
-    result = _add_to_history(project_path, vba, f"Define Arc: {name}")
+    result = _define_arc_curve(
+        project_path,
+        name=name,
+        curve=component,
+        center=center,
+        radius=radius,
+        start_angle=start_angle,
+        end_angle=end_angle,
+        segments=segments,
+    )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to create arc")
 
@@ -471,22 +463,14 @@ def polygon(
     if len(vertices) < 3:
         raise ValueError("Polygon requires at least 3 vertices")
 
-    vba_lines = [
-        "With Polygon3D",
-        "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Component "{component}"',
-        f'    .Material "{material}"',
-    ]
-    for i, (x, y) in enumerate(vertices):
-        vba_lines.append(f'    .Point {x}, {y}, {z_range[0]}')
-    for i, (x, y) in enumerate(reversed(vertices)):
-        vba_lines.append(f'    .Point {x}, {y}, {z_range[1]}')
-    vba_lines.extend([
-        "    .Create",
-        "End With",
-    ])
-    result = _add_to_history(project_path, "\n".join(vba_lines), f"Define Polygon: {name}")
+    result = _define_polygon_solid(
+        project_path,
+        name=name,
+        component=component,
+        material=material,
+        vertices=list(vertices),
+        z_range=z_range,
+    )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to create polygon")
 
