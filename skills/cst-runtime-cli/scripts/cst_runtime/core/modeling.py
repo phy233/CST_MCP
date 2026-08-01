@@ -178,13 +178,49 @@ def _define_material(project_path: str, material: str) -> dict[str, Any]:
     return {"status": "success", "message": f"material '{material}' (will resolve at build time)"}
 
 
+def _material_mtd_path(material_name: str) -> Path:
+    """返回当前 Skill 自带材料库中的 MTD 文件路径。"""
+    skill_root = Path(__file__).resolve().parents[3]
+    return skill_root / "references" / "Materials" / f"{material_name}.mtd"
+
+
+def _material_vba_lines(material_name: str, mtd_content: str) -> list[str]:
+    """从 MTD 的 Definition 节生成完整的 CST Material VBA 块。"""
+    definition_lines: list[str] = []
+    in_definition = False
+    for raw_line in mtd_content.splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_definition = stripped.casefold() == "[definition]"
+            continue
+        if in_definition and stripped:
+            if not stripped.startswith("."):
+                raise ValueError(
+                    "MTD Definition 节包含不受支持的 VBA 行：" + stripped
+                )
+            definition_lines.append(stripped)
+
+    if not definition_lines:
+        raise ValueError("MTD 文件缺少有效的 [Definition] 节")
+    if not any(line.casefold() == ".create" for line in definition_lines):
+        raise ValueError("MTD Definition 节缺少 .Create")
+
+    escaped_name = material_name.replace('"', '""')
+    return [
+        "With Material",
+        "    .Reset",
+        f'    .Name "{escaped_name}"',
+        *(f"    {line}" for line in definition_lines),
+        "End With",
+    ]
+
+
 def define_material_from_mtd(project_path: str, material_name: str) -> dict[str, Any]:
     normalized_project = _abs_project_path(project_path)
     project, status = attach_expected_project(normalized_project)
     if project is None:
         return status
-    skill_root = Path(__file__).resolve().parent.parent.parent.parent.parent
-    mtd_path = skill_root / "references" / "Materials" / f"{material_name}.mtd"
+    mtd_path = _material_mtd_path(material_name)
     if not mtd_path.exists():
         return error_response(
             "material_mtd_not_found",
@@ -192,14 +228,8 @@ def define_material_from_mtd(project_path: str, material_name: str) -> dict[str,
             project_path=normalized_project,
         )
     try:
-        mtd_content = mtd_path.read_text(encoding="utf-8").strip()
-        lines = mtd_content.split("\n")
-        vba_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("[") and stripped.endswith("]"):
-                continue
-            vba_lines.append(stripped)
+        mtd_content = mtd_path.read_text(encoding="utf-8")
+        vba_lines = _material_vba_lines(material_name, mtd_content)
         res = _add_vba_history(normalized_project, f"Define Material: {material_name}", vba_lines, project=project)
         if res.get("status") == "error":
             return res
