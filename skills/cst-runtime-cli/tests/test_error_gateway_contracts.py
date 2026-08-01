@@ -349,7 +349,7 @@ def test_cst_2022_temp_probe_uses_legacy_expression(monkeypatch, tmp_path: Path)
     project = _FakeProject(lambda _label, _script: True)
     project.schematic = FakeSchematic()
     monkeypatch.setattr(
-        "cst_runtime.core.error_gateway.profile_for",
+        "cst_runtime.core.compatibility.execution.profile_for",
         lambda _project: __import__(
             "cst_runtime.core.compatibility.base",
             fromlist=["CompatibilityProfile"],

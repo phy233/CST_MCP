@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import locale
-import tempfile
 import time
 import uuid
 from dataclasses import dataclass
@@ -16,7 +15,8 @@ from .errors import (
     VBARuntimeError,
     success_response,
 )
-from .compatibility import compatibility_metadata, profile_for
+from .compatibility import compatibility_metadata
+from .compatibility.execution import resolve_cst_temp_context
 
 
 @dataclass(frozen=True)
@@ -152,85 +152,6 @@ def resolve_cst_temp_directory(
     """通过即时 VBA 验证并取得 CST 工程 Temp 路径。"""
     directory, _expression = resolve_cst_temp_context(project, project_path, timeout=timeout)
     return directory
-
-
-_TEMP_EXPRESSION_CACHE: dict[str, str] = {}
-
-
-def resolve_cst_temp_context(
-    project: Any,
-    project_path: str,
-    *,
-    timeout: float = 2.0,
-) -> tuple[Path, str]:
-    """返回已验证的 Temp 目录及可安全写入 History 的 VBA 表达式。"""
-    profile = profile_for(project)
-    cache_key = f"{profile.label}:{profile.version}"
-    cached = _TEMP_EXPRESSION_CACHE.get(cache_key)
-    if cached:
-        candidates = [cached]
-    elif profile.is_2022:
-        candidates = ['GetProjectPath("Temp")']
-    elif profile.is_2026_or_later:
-        candidates = ['GetProjectPathName("Temp")']
-    else:
-        # 未知版本不预设语法；候选项只有通过即时 VBA 实测后才会缓存和使用。
-        candidates = ['GetProjectPathName("Temp")', 'GetProjectPath("Temp")']
-
-    probe_path = Path(tempfile.gettempdir()) / f"cst-runtime-temp-probe-{uuid.uuid4().hex}.txt"
-    failures: list[str] = []
-    try:
-        for expression in candidates:
-            macro = "\n".join(
-                [
-                    "Public Sub Main()",
-                    "Dim cstRtProbeFile As Integer",
-                    "Dim cstRtTempPath As String",
-                    f"cstRtTempPath = {expression}",
-                    "cstRtProbeFile = FreeFile",
-                    f'Open "{_vba_string(str(probe_path))}" For Output As #cstRtProbeFile',
-                    "Print #cstRtProbeFile, cstRtTempPath",
-                    "Close #cstRtProbeFile",
-                    "End Sub",
-                ]
-            )
-            try:
-                probe_path.unlink(missing_ok=True)
-                project.schematic.execute_vba_code(macro)
-                deadline = time.monotonic() + max(timeout, 0.0)
-                while not probe_path.is_file() and time.monotonic() < deadline:
-                    time.sleep(0.01)
-                if not probe_path.is_file():
-                    failures.append(f"{expression}: 未生成探测文件")
-                    continue
-                reported = _decode_status_file(probe_path).strip()
-                resolved = Path(reported).expanduser().resolve()
-                if not reported or not resolved.is_dir():
-                    failures.append(f"{expression}: 返回了无效目录 {reported!r}")
-                    continue
-                _TEMP_EXPRESSION_CACHE[cache_key] = expression
-                return resolved, expression
-            except Exception as exc:
-                failures.append(f"{expression}: {exc}")
-        raise CSTSubmissionError(
-            "无法验证当前 CST 版本的 Temp 路径表达式。",
-            feature="history.status_channel",
-            next_action="请确认即时 VBA 可执行，并检查 CST Message Window。",
-            context={"project_path": project_path, "probe_failures": failures},
-        )
-    except CSTSubmissionError:
-        raise
-    except Exception as exc:
-        raise CSTSubmissionError(
-            f"查询 CST Temp 目录失败：{exc}",
-            next_action="请确认 schematic.execute_vba_code 可用。",
-            context={"project_path": project_path},
-        ) from exc
-    finally:
-        try:
-            probe_path.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 def wrap_vba_with_status_channel(

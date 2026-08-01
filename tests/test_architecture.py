@@ -127,3 +127,49 @@ def test_runtime_api_never_imports_cli_or_core() -> None:
         or module.startswith("cst_runtime.core")
     ]
     assert not violations
+
+
+def test_model3d_is_only_accessed_inside_compatibility() -> None:
+    """版本专用的 model3d 属性只能出现在统一兼容边界中。"""
+    violations: list[str] = []
+    for path in RUNTIME.rglob("*.py"):
+        if (RUNTIME / "core" / "compatibility") in path.parents:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr == "model3d":
+                violations.append(f"{path.relative_to(RUNTIME)}:{node.lineno}")
+    assert not violations
+
+
+def test_design_environment_version_methods_are_only_in_compatibility() -> None:
+    """连接方式差异不得重新散落到 core、lib、tools 或 workflows。"""
+    violations: list[str] = []
+    for path in RUNTIME.rglob("*.py"):
+        if (RUNTIME / "core" / "compatibility") in path.parents:
+            continue
+        for line, module in _imports(path):
+            if module == "cst.interface" or module.endswith(".cst.interface"):
+                violations.append(f"{path.relative_to(RUNTIME)}:{line}:{module}")
+    assert not violations
+
+
+def test_lib_contains_no_known_version_specific_vba_markers() -> None:
+    """lib 只能传递语义参数，不得重新拼接已知的版本专用 VBA。"""
+    forbidden = {
+        "PeriodicUsePrimitive",
+        "SetPeriodicShiftAngle",
+        "AutoDestination",
+        "SetPortType",
+        "CreateFloquetPort",
+        "With Polygon3D",
+        "CreateUsingLinearStep",
+        "FarfieldCalculator",
+    }
+    violations: list[str] = []
+    for path in (RUNTIME / "lib").rglob("*.py"):
+        source = path.read_text(encoding="utf-8-sig")
+        for marker in forbidden:
+            if marker in source:
+                violations.append(f"{path.relative_to(RUNTIME)}:{marker}")
+    assert not violations

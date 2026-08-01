@@ -90,6 +90,13 @@ def _submit_versioned_vba(
         return result
     except CSTRuntimeError as exc:
         return exc.to_response(project_path=_abs_project_path(project_path))
+    except (TypeError, ValueError) as exc:
+        return error_response(
+            "invalid_arguments",
+            str(exc),
+            phase="validation",
+            project_path=_abs_project_path(project_path),
+        )
 
 
 def begin_batch(project_path: str, summary: str = "Batch Execution") -> dict[str, Any]:
@@ -689,9 +696,9 @@ def set_field_monitor(project_path: str, field_type: str, start_frequency: str, 
         f"Set{field_type}Monitor",
         monitor_vba,
         field_type=f"{field_type}field",
-        start=float(start_frequency),
-        end=float(end_frequency),
-        samples=int(num_samples),
+        start=start_frequency,
+        end=end_frequency,
+        samples=num_samples,
     )
 
 

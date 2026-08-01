@@ -89,7 +89,7 @@ TOOL_DEFS = {
 "export-farfield-grid": {
     "category": "farfield",
     "risk": "long-running",
-    "description": "Compute a FarfieldCalculator scalar grid and export as JSON under {export_dir}/farfield/. Supports fresh_session reuse.",
+    "description": "Compute a compatible farfield scalar grid and export as JSON under {export_dir}/farfield/. Supports fresh_session reuse.",
     "handler": "tool_export_farfield_grid",
     "json_schema": {
         "type": "object",

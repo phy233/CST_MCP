@@ -170,7 +170,7 @@ def mesh_vba(
                 f'    .EquilibrateMeshRatio "{equilibrate_value}"',
                 '    .UsePecEdgeModel "True"',
                 '    .PointAccEnhancement "0"',
-                '    .AutomeshRefineAtPecLines "True"',
+                '    .AutomeshRefineAtPecLines "True", "2"',
                 "End With",
             ),
             "cst2022",
@@ -238,8 +238,9 @@ def solver_vba(
             },
             "solver.modern_options",
         )
-    lines = ['Mesh.SetCreator "High Frequency"', "With Solver"]
+    lines = ["With Solver"]
     if resolved.is_2026_or_later:
+        lines.insert(0, 'Mesh.SetCreator "High Frequency"')
         lines.extend(['    .Method "Hexahedral"', '    .CalculationType "TD-S"'])
     lines.extend(
         [

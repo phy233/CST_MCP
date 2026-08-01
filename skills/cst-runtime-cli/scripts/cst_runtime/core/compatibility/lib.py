@@ -167,6 +167,8 @@ def polygon_solid_vba(
     profile: CompatibilityProfile | None = None,
 ) -> CompatibleVBA:
     resolved = _profile(profile)
+    if len(vertices) < 3:
+        raise ValueError("Polygon requires at least 3 vertices")
     token = re.sub(r"[^A-Za-z0-9_]", "_", name)[:28] or "Polygon"
     curve = f"__cst_runtime_{token}"
     profile_name = "profile"
