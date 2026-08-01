@@ -32,6 +32,7 @@ from .results import (
     list_all_result_items,
 )
 from .queries import delete_project_results, get_project_solver_type
+from .modeling import CompatibleVBA
 
 __all__ = [
     "get_model3d",
@@ -64,4 +65,5 @@ __all__ = [
     "list_all_result_items",
     "delete_project_results",
     "get_project_solver_type",
+    "CompatibleVBA",
 ]
