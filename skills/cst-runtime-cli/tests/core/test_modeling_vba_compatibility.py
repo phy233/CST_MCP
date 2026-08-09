@@ -4,11 +4,16 @@ import pytest
 
 from cst_runtime.core.compatibility.base import CompatibilityProfile
 from cst_runtime.core.compatibility.modeling import (
+    analytical_curve_vba,
     background_vba,
+    cone_vba,
+    cylinder_vba,
     extrude_curve_vba,
     mesh_vba,
+    mesh_fpbavoid_nonreg_unite_vba,
     monitor_vba,
     polygon3d_vba,
+    postprocess_activation_vba,
     port_vba,
     solver_acceleration_vba,
     solver_vba,
@@ -195,6 +200,156 @@ def test_2022_monitor_converts_step_to_sample_count() -> None:
 def test_2022_monitor_rejects_nondivisible_range() -> None:
     with pytest.raises(ValidationError):
         monitor_vba(field_type="Efield", start=1, end=2, step=0.3, profile=CST2022)
+
+
+def test_cylinder_uses_version_specific_radius_properties() -> None:
+    arguments = {
+        "name": "tube",
+        "component": "component1",
+        "material": "PEC",
+        "outer_radius": 2,
+        "inner_radius": 1,
+        "axis": "z",
+        "range_min": 0,
+        "range_max": 5,
+        "center1": 0,
+        "center2": 0,
+        "segments": 0,
+    }
+    legacy = _text(cylinder_vba(profile=CST2022, **arguments))
+    modern = _text(cylinder_vba(profile=CST2026, **arguments))
+
+    assert '.Outerradius "2"' in legacy
+    assert '.Innerradius "1"' in legacy
+    assert ".Xradius" not in legacy
+    assert '.Xradius "2"' in modern
+    assert '.Yradius "2"' in modern
+    assert ".Innerradius" not in modern
+    assert 'Solid.Subtract "component1:tube"' in modern
+
+
+def test_solid_axis_is_validated_in_compatibility_layer() -> None:
+    with pytest.raises(ValidationError, match="axis"):
+        cylinder_vba(
+            name="bad",
+            component="component1",
+            material="PEC",
+            outer_radius=1,
+            inner_radius=0,
+            axis="q",
+            range_min=0,
+            range_max=1,
+            center1=0,
+            center2=0,
+            segments=0,
+            profile=CST2022,
+        )
+
+
+def test_cone_uses_version_specific_radius_properties() -> None:
+    arguments = {
+        "name": "cone",
+        "component": "component1",
+        "material": "PEC",
+        "bottom_radius": 2,
+        "top_radius": 0,
+        "axis": "z",
+        "range_min": 0,
+        "range_max": 4,
+        "center1": 0,
+        "center2": 0,
+        "segments": 0,
+    }
+    legacy = _text(cone_vba(profile=CST2022, **arguments))
+    modern = _text(cone_vba(profile=CST2026, **arguments))
+
+    assert '.Bottomradius "2"' in legacy
+    assert '.Topradius "0"' in legacy
+    assert ".XradiusTop" not in legacy
+    assert '.Xradius "2"' in modern
+    assert '.YradiusTop "0"' in modern
+    assert ".Bottomradius" not in modern
+
+
+def test_analytical_curve_uses_version_specific_properties() -> None:
+    arguments = {
+        "name": "curve1",
+        "curve": "curves",
+        "law_x": "cos(t)",
+        "law_y": "sin(t)",
+        "law_z": "0",
+        "param_start": "0",
+        "param_end": "2*pi",
+    }
+    legacy = _text(analytical_curve_vba(profile=CST2022, **arguments))
+    modern = _text(analytical_curve_vba(profile=CST2026, **arguments))
+
+    assert '.LawX "cos(t)"' in legacy
+    assert '.ParameterRange "0", "2*pi"' in legacy
+    assert ".CurveExpression" not in legacy
+    assert '.CurveExpression "cos(t)", "sin(t)"' in modern
+    assert '.ParameterName "t"' in modern
+    assert '.Minvalue "0"' in modern
+    assert ".LawZ" not in modern
+
+
+def test_2026_analytical_curve_rejects_nonplanar_law() -> None:
+    with pytest.raises(UnsupportedFeatureError) as caught:
+        analytical_curve_vba(
+            name="helix",
+            curve="curves",
+            law_x="cos(t)",
+            law_y="sin(t)",
+            law_z="t",
+            param_start="0",
+            param_end="2*pi",
+            profile=CST2026,
+        )
+
+    assert caught.value.context["unsupported_arguments"] == ["law_z"]
+
+
+def test_postprocess_activation_rejects_2022_without_target() -> None:
+    with pytest.raises(UnsupportedFeatureError) as caught:
+        postprocess_activation_vba(
+            operation="renormalize",
+            enable=True,
+            profile=CST2022,
+        )
+
+    assert caught.value.context["unsupported_arguments"] == ["operation", "enable"]
+    assert "ApplyTo" in str(caught.value.next_action)
+
+
+def test_2026_postprocess_activation_rejects_undocumented_command() -> None:
+    with pytest.raises(UnsupportedFeatureError) as caught:
+        postprocess_activation_vba(
+            operation="renormalize",
+            enable=True,
+            profile=CST2026,
+        )
+
+    assert "未记录 ActivateOperation" in str(caught.value.next_action)
+
+
+def test_mesh_fpbavoid_nonreg_unite_is_version_guarded() -> None:
+    with pytest.raises(UnsupportedFeatureError):
+        mesh_fpbavoid_nonreg_unite_vba(enable=True, profile=CST2022)
+
+    assert _text(
+        mesh_fpbavoid_nonreg_unite_vba(enable=True, profile=CST2026)
+    ) == "Mesh.FPBAAvoidNonRegUnite True"
+
+
+def test_polygon3d_uses_version_specific_point_signatures() -> None:
+    points = [(0, 0, 0), (1, 2, 0), (2, 0, 0)]
+    legacy = _text(polygon3d_vba("p", "c", points, profile=CST2022))
+    modern = _text(polygon3d_vba("p", "c", points, profile=CST2026))
+
+    assert '.Point "0", "0", "0"' in legacy
+    assert '.Point "0:0:0", "1:2:0", "2:0:0"' in modern
+    assert '.Closed "False"' in modern
+    assert ".Version" not in modern
 
 
 def test_2022_polygon_extrude_and_transform_snapshots() -> None:

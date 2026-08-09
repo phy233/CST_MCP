@@ -11,11 +11,12 @@ from . import gateway
 from .errors import error_response
 from .compatibility import (
     delete_project_results,
-    detect_compatibility_profile,
     get_project_solver_type,
-    unsupported_feature,
 )
-from .compatibility.modeling import solver_acceleration_vba
+from .compatibility.modeling import (
+    mesh_fpbavoid_nonreg_unite_vba,
+    solver_acceleration_vba,
+)
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _single_vba, _submit_versioned_vba
@@ -197,20 +198,12 @@ def set_fdsolver_extrude_open_bc(project_path: str, enable: bool = True) -> dict
 
 
 def set_mesh_fpbavoid_nonreg_unite(project_path: str, enable: bool = True) -> dict[str, Any]:
-    profile = detect_compatibility_profile()
-    if profile.is_2022:
-        return unsupported_feature(
-            "mesh.fpbavoid_nonreg_unite",
-            required_capability="mesh.fpbavoid_nonreg_unite",
-            unsupported_arguments=["enable"],
-            next_action="CST 2022 无等价设置；请移除此调用或升级 CST。",
-        ).to_response(project_path=_abs_project_path(project_path))
-    if not profile.is_2026_or_later:
-        return unsupported_feature(
-            "mesh.fpbavoid_nonreg_unite",
-            required_capability="known_cst_version",
-        ).to_response(project_path=_abs_project_path(project_path))
-    return _single_vba_pops(project_path, "set Mesh.FPBAAvoidNonRegUnite", f'Mesh.FPBAAvoidNonRegUnite {"True" if enable else "False"}')
+    return _submit_versioned_vba(
+        project_path,
+        "set nonregular FPBA union handling",
+        mesh_fpbavoid_nonreg_unite_vba,
+        enable=enable,
+    )
 
 
 def set_mesh_minimum_step_number(project_path: str, num_steps: int = 5) -> dict[str, Any]:

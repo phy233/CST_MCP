@@ -9,10 +9,14 @@ from .error_gateway import submit_vba_history
 from .errors import CSTRuntimeError, error_response, success_response
 from .compatibility import detect_compatibility_profile
 from .compatibility.modeling import (
+    analytical_curve_vba,
     background_vba,
+    cone_vba,
+    cylinder_vba,
     extrude_curve_vba,
     mesh_vba,
     monitor_vba,
+    postprocess_activation_vba,
     polygon3d_vba,
     port_vba,
     solver_vba,
@@ -305,34 +309,22 @@ def define_cylinder(
             "range_min or z_min (and range_max or z_max) is required",
         )
 
-    axis_lower = axis.lower()
-    if axis_lower == "x":
-        range_param = f"Xrange {range_min}, {range_max}"
-        c1, c2 = ".Ycenter", ".Zcenter"
-    elif axis_lower == "y":
-        range_param = f"Yrange {range_min}, {range_max}"
-        c1, c2 = ".Xcenter", ".Zcenter"
-    else:
-        range_param = f"Zrange {range_min}, {range_max}"
-        c1, c2 = ".Xcenter", ".Ycenter"
-
-    vba = [
-        "With Cylinder",
-        "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Component "{component}"',
-        f'    .Material "{material}"',
-        f"    .OuterRadius {outer_radius}",
-        f"    .InnerRadius {inner_radius}",
-        f'    .Axis "{axis}"',
-        f"    .{range_param}",
-        f"    {c1} {center1}",
-        f"    {c2} {center2}",
-        f'    .Segments "{segments}"',
-        "    .Create",
-        "End With",
-    ]
-    return _add_vba_history(project_path, f"Define Cylinder:{name}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Cylinder:{name}",
+        cylinder_vba,
+        name=name,
+        component=component,
+        material=material,
+        outer_radius=outer_radius,
+        inner_radius=inner_radius,
+        axis=axis,
+        range_min=range_min,
+        range_max=range_max,
+        center1=center1,
+        center2=center2,
+        segments=segments,
+    )
 
 
 def define_cone(
@@ -367,34 +359,22 @@ def define_cone(
             "range_min or z_min (and range_max or z_max) is required",
         )
 
-    axis_lower = axis.lower()
-    if axis_lower == "x":
-        range_param = f"Xrange {range_min}, {range_max}"
-        c1, c2 = ".Ycenter", ".Zcenter"
-    elif axis_lower == "y":
-        range_param = f"Yrange {range_min}, {range_max}"
-        c1, c2 = ".Xcenter", ".Zcenter"
-    else:
-        range_param = f"Zrange {range_min}, {range_max}"
-        c1, c2 = ".Xcenter", ".Ycenter"
-
-    vba = [
-        "With Cone",
-        "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Component "{component}"',
-        f'    .Material "{material}"',
-        f"    .BottomRadius {bottom_radius}",
-        f"    .TopRadius {top_radius}",
-        f'    .Axis "{axis}"',
-        f"    .{range_param}",
-        f"    {c1} {center1}",
-        f"    {c2} {center2}",
-        f'    .Segments "{segments}"',
-        "    .Create",
-        "End With",
-    ]
-    return _add_vba_history(project_path, f"Define Cone:{name}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Cone:{name}",
+        cone_vba,
+        name=name,
+        component=component,
+        material=material,
+        bottom_radius=bottom_radius,
+        top_radius=top_radius,
+        axis=axis,
+        range_min=range_min,
+        range_max=range_max,
+        center1=center1,
+        center2=center2,
+        segments=segments,
+    )
 
 
 def define_rectangle(
@@ -783,9 +763,13 @@ def show_bounding_box(project_path: str) -> dict[str, Any]:
 
 
 def activate_post_process_operation(project_path: str, operation: str, enable: bool = True) -> dict[str, Any]:
-    flag = "true" if enable else "false"
-    vba = f'PostProcess1D.ActivateOperation "{operation}", "{flag}"'
-    return _single_vba(project_path, f"activate post process: {operation}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"activate post process: {operation}",
+        postprocess_activation_vba,
+        operation=operation,
+        enable=enable,
+    )
 
 
 def create_mesh_group(project_path: str, group_name: str, items: list[str]) -> dict[str, Any]:
@@ -815,19 +799,18 @@ def define_polygon_3d(project_path: str, name: str, curve: str, points: list[lis
 
 
 def define_analytical_curve(project_path: str, name: str, curve: str, law_x: str, law_y: str, law_z: str, param_start: str, param_end: str) -> dict[str, Any]:
-    vba = [
-        "With AnalyticalCurve",
-        "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Curve "{curve}"',
-        f'    .LawX "{law_x}"',
-        f'    .LawY "{law_y}"',
-        f'    .LawZ "{law_z}"',
-        f'    .ParameterRange "{param_start}", "{param_end}"',
-        "    .Create",
-        "End With",
-    ]
-    return _add_vba_history(project_path, f"Define AnalyticalCurve: {name}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"Define AnalyticalCurve: {name}",
+        analytical_curve_vba,
+        name=name,
+        curve=curve,
+        law_x=law_x,
+        law_y=law_y,
+        law_z=law_z,
+        param_start=param_start,
+        param_end=param_end,
+    )
 
 
 def define_extrude_curve(

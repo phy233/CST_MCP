@@ -138,6 +138,161 @@ def units_vba(
     )
 
 
+def _axis_ranges_and_centers(
+    axis: str,
+    range_min: float | str,
+    range_max: float | str,
+    center1: float | str,
+    center2: float | str,
+) -> tuple[str, tuple[str, float | str], tuple[str, float | str]]:
+    axis_lower = str(axis).strip().lower()
+    if axis_lower == "x":
+        return "Xrange", ("Ycenter", center1), ("Zcenter", center2)
+    if axis_lower == "y":
+        return "Yrange", ("Xcenter", center1), ("Zcenter", center2)
+    if axis_lower == "z":
+        return "Zrange", ("Xcenter", center1), ("Ycenter", center2)
+    raise ValidationError('axis 必须是 "x"、"y" 或 "z"')
+
+
+def _is_literal_zero(value: float | str) -> bool:
+    try:
+        return float(str(value).strip()) == 0.0
+    except ValueError:
+        return False
+
+
+def cylinder_vba(
+    *,
+    name: str,
+    component: str,
+    material: str,
+    outer_radius: float | str,
+    inner_radius: float | str,
+    axis: str,
+    range_min: float | str,
+    range_max: float | str,
+    center1: float | str,
+    center2: float | str,
+    segments: int,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """按 CST 版本生成圆柱；2026 的中空圆柱用两个实体相减实现。"""
+    resolved = _profile(profile)
+    range_name, first_center, second_center = _axis_ranges_and_centers(
+        axis,
+        range_min,
+        range_max,
+        center1,
+        center2,
+    )
+
+    def solid_lines(solid_name: str, radius: float | str) -> list[str]:
+        lines = [
+            "With Cylinder",
+            "    .Reset",
+            f'    .Name "{solid_name}"',
+            f'    .Component "{component}"',
+            f'    .Material "{material}"',
+        ]
+        if resolved.is_2022:
+            lines.extend(
+                [
+                    f'    .Outerradius "{radius}"',
+                    f'    .Innerradius "{inner_radius}"',
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    f'    .Xradius "{radius}"',
+                    f'    .Yradius "{radius}"',
+                ]
+            )
+        lines.extend(
+            [
+                f'    .Axis "{axis}"',
+                f'    .{range_name} "{range_min}", "{range_max}"',
+                f'    .{first_center[0]} "{first_center[1]}"',
+                f'    .{second_center[0]} "{second_center[1]}"',
+                f'    .Segments "{segments}"',
+                "    .Create",
+                "End With",
+            ]
+        )
+        return lines
+
+    lines = solid_lines(name, outer_radius)
+    if resolved.is_2026_or_later and not _is_literal_zero(inner_radius):
+        inner_name = f"__cst_runtime_inner_{name}"
+        lines.extend(solid_lines(inner_name, inner_radius))
+        lines.append(
+            f'Solid.Subtract "{component}:{name}", "{component}:{inner_name}"'
+        )
+    return CompatibleVBA(tuple(lines), resolved.label)
+
+
+def cone_vba(
+    *,
+    name: str,
+    component: str,
+    material: str,
+    bottom_radius: float | str,
+    top_radius: float | str,
+    axis: str,
+    range_min: float | str,
+    range_max: float | str,
+    center1: float | str,
+    center2: float | str,
+    segments: int,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """按 CST 版本生成圆锥或圆台 VBA。"""
+    resolved = _profile(profile)
+    range_name, first_center, second_center = _axis_ranges_and_centers(
+        axis,
+        range_min,
+        range_max,
+        center1,
+        center2,
+    )
+    lines = [
+        "With Cone",
+        "    .Reset",
+        f'    .Name "{name}"',
+        f'    .Component "{component}"',
+        f'    .Material "{material}"',
+    ]
+    if resolved.is_2022:
+        lines.extend(
+            [
+                f'    .Bottomradius "{bottom_radius}"',
+                f'    .Topradius "{top_radius}"',
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f'    .Xradius "{bottom_radius}"',
+                f'    .Yradius "{bottom_radius}"',
+                f'    .XradiusTop "{top_radius}"',
+                f'    .YradiusTop "{top_radius}"',
+            ]
+        )
+    lines.extend(
+        [
+            f'    .Axis "{axis}"',
+            f'    .{range_name} "{range_min}", "{range_max}"',
+            f'    .{first_center[0]} "{first_center[1]}"',
+            f'    .{second_center[0]} "{second_center[1]}"',
+            f'    .Segments "{segments}"',
+            "    .Create",
+            "End With",
+        ]
+    )
+    return CompatibleVBA(tuple(lines), resolved.label)
+
+
 def background_vba(
     *,
     background_type: str | None = None,
@@ -489,16 +644,126 @@ def polygon3d_vba(
     profile: CompatibilityProfile | None = None,
 ) -> CompatibleVBA:
     resolved = _profile(profile)
-    lines = ["With Polygon3D", "    .Reset"]
-    if resolved.is_2026_or_later:
-        lines.append("    .Version 10")
-    lines.extend([f'    .Name "{name}"', f'    .Curve "{curve}"'])
-    for point in points:
-        values = list(point)
-        if len(values) >= 3:
-            lines.append(f'    .Point "{values[0]}", "{values[1]}", "{values[2]}"')
+    normalized_points = [list(point) for point in points]
+    normalized_points = [point for point in normalized_points if len(point) >= 3]
+    lines = [
+        "With Polygon3D",
+        "    .Reset",
+        f'    .Name "{name}"',
+        f'    .Curve "{curve}"',
+    ]
+    if resolved.is_2022:
+        for values in normalized_points:
+            lines.append(
+                f'    .Point "{values[0]}", "{values[1]}", "{values[2]}"'
+            )
+    else:
+        encoded_points = ", ".join(
+            f'"{values[0]}:{values[1]}:{values[2]}"'
+            for values in normalized_points
+        )
+        lines.append(f"    .Point {encoded_points}")
+        lines.append('    .Closed "False"')
     lines.extend(["    .Create", "End With"])
     return CompatibleVBA(tuple(lines), resolved.label)
+
+
+def analytical_curve_vba(
+    *,
+    name: str,
+    curve: str,
+    law_x: str,
+    law_y: str,
+    law_z: str,
+    param_start: str,
+    param_end: str,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """生成解析曲线；2026 官方接口只能等价表达当前工作平面内的曲线。"""
+    resolved = _profile(profile)
+    lines = [
+        "With AnalyticalCurve",
+        "    .Reset",
+        f'    .Name "{name}"',
+        f'    .Curve "{curve}"',
+    ]
+    if resolved.is_2022:
+        lines.extend(
+            [
+                f'    .LawX "{law_x}"',
+                f'    .LawY "{law_y}"',
+                f'    .LawZ "{law_z}"',
+                f'    .ParameterRange "{param_start}", "{param_end}"',
+            ]
+        )
+    else:
+        if not _is_literal_zero(law_z):
+            raise unsupported_feature(
+                "analytical_curve.3d",
+                required_capability="analytical_curve.curve_expression_3d",
+                unsupported_arguments=["law_z"],
+                message=(
+                    "CST 2026 AnalyticalCurve.CurveExpression 只能等价表达当前工作平面内的二维曲线；"
+                    "非零 law_z 不能安全转换。"
+                ),
+            )
+        lines.extend(
+            [
+                f'    .CurveExpression "{law_x}", "{law_y}"',
+                '    .ParameterName "t"',
+                f'    .Minvalue "{param_start}"',
+                f'    .Maxvalue "{param_end}"',
+            ]
+        )
+    lines.extend(["    .Create", "End With"])
+    return CompatibleVBA(tuple(lines), resolved.label)
+
+
+def postprocess_activation_vba(
+    *,
+    operation: str,
+    enable: bool,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """拒绝官方方法表中没有一对一对应项的后处理开关。"""
+    resolved = _profile(profile)
+    next_action = (
+        (
+            "CST 2022 需要 ApplyTo(target)、AddOperation(operation) 后再 Run；"
+            "当前工具未提供 target，不能安全转换。"
+        )
+        if resolved.is_2022
+        else (
+            "CST 2026 官方 PostProcess1D 方法表仅记录 Reset、Calc、GetArray 和 SetCombine；"
+            "未记录 ActivateOperation，不能安全下发。"
+        )
+    )
+    raise unsupported_feature(
+        "postprocess1d.activate_operation",
+        required_capability="postprocess1d.activate_operation",
+        unsupported_arguments=["operation", "enable"],
+        next_action=next_action,
+    )
+
+
+def mesh_fpbavoid_nonreg_unite_vba(
+    *,
+    enable: bool,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """生成仅 CST 2026 支持的 FPBA 非规则合并设置。"""
+    resolved = _profile(profile)
+    if resolved.is_2022:
+        raise unsupported_feature(
+            "mesh.fpbavoid_nonreg_unite",
+            required_capability="mesh.fpbavoid_nonreg_unite",
+            unsupported_arguments=["enable"],
+            next_action="CST 2022 无等价设置；请移除此调用或升级 CST。",
+        )
+    return CompatibleVBA(
+        (f'Mesh.FPBAAvoidNonRegUnite {_bool(enable)}',),
+        resolved.label,
+    )
 
 
 def extrude_curve_vba(
