@@ -1244,6 +1244,16 @@ TOOL_DEFS = {
                 "examples": [
                     "GHz"
                 ]
+            },
+            "temperature": {
+                "type": "string",
+                "enum": [
+                    "Celsius",
+                    "Kelvin",
+                    "Fahrenheit"
+                ],
+                "default": "Celsius",
+                "description": "CST 温度单位；省略时使用 Celsius。"
             }
         },
         "required": [

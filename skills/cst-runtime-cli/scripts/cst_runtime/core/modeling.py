@@ -629,7 +629,7 @@ def define_units(
     voltage: str = "V",
     resistance: str = "Ohm",
     inductance: str = "nH",
-    temperature: str = "degC",
+    temperature: str = "Celsius",
     time: str = "ns",
     current: str = "A",
     conductance: str = "S",

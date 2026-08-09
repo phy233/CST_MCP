@@ -41,6 +41,26 @@ def _bool(value: bool) -> str:
     return "True" if value else "False"
 
 
+def _normalize_temperature_unit(value: str) -> str:
+    """把常见温度单位写法转换为 CST 接受的完整名称。"""
+    aliases = {
+        "celsius": "Celsius",
+        "degc": "Celsius",
+        "°c": "Celsius",
+        "kelvin": "Kelvin",
+        "k": "Kelvin",
+        "fahrenheit": "Fahrenheit",
+        "degf": "Fahrenheit",
+        "°f": "Fahrenheit",
+    }
+    normalized = aliases.get(str(value).strip().casefold())
+    if normalized is None:
+        raise ValidationError(
+            'temperature 必须是 "Celsius"、"Kelvin" 或 "Fahrenheit"'
+        )
+    return normalized
+
+
 def _reject_nondefault(
     profile: CompatibilityProfile,
     feature: str,
@@ -72,6 +92,7 @@ def units_vba(
     profile: CompatibilityProfile | None = None,
 ) -> CompatibleVBA:
     resolved = _profile(profile)
+    temperature = _normalize_temperature_unit(temperature)
     values = {
         "Length": length,
         "Frequency": frequency,
@@ -85,6 +106,11 @@ def units_vba(
         "Capacitance": capacitance,
     }
     if resolved.is_2026_or_later:
+        values["Temperature"] = {
+            "Celsius": "degC",
+            "Kelvin": "K",
+            "Fahrenheit": "degF",
+        }[temperature]
         return CompatibleVBA(
             tuple(["With Units", *[f'    .SetUnit "{name}", "{value}"' for name, value in values.items()], "End With"]),
             "cst2026",

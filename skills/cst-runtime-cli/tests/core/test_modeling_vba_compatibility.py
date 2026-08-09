@@ -33,7 +33,7 @@ def _unit_arguments(**overrides):
         "voltage": "V",
         "resistance": "Ohm",
         "inductance": "nH",
-        "temperature": "degC",
+        "temperature": "Celsius",
         "time": "ns",
         "current": "A",
         "conductance": "S",
@@ -48,7 +48,7 @@ def test_2022_units_use_legacy_methods_and_report_not_applied() -> None:
     text = _text(generated)
 
     assert '.Geometry "mm"' in text
-    assert '.TemperatureUnit "degC"' in text
+    assert '.TemperatureUnit "Celsius"' in text
     assert "SetUnit" not in text
     assert generated.not_applied["voltage"] == "V"
 
@@ -58,6 +58,37 @@ def test_2022_units_reject_nondefault_electrical_unit() -> None:
         units_vba(profile=CST2022, **_unit_arguments(voltage="mV"))
 
     assert caught.value.context["unsupported_arguments"] == ["voltage"]
+
+
+def test_2026_units_keep_set_unit_temperature_token() -> None:
+    generated = units_vba(profile=CST2026, **_unit_arguments())
+
+    assert '.SetUnit "Temperature", "degC"' in _text(generated)
+
+
+@pytest.mark.parametrize(
+    ("supplied", "expected"),
+    [
+        ("degC", "Celsius"),
+        ("K", "Kelvin"),
+        ("degF", "Fahrenheit"),
+    ],
+)
+def test_units_normalize_legacy_temperature_aliases(
+    supplied: str,
+    expected: str,
+) -> None:
+    generated = units_vba(
+        profile=CST2022,
+        **_unit_arguments(temperature=supplied),
+    )
+
+    assert f'.TemperatureUnit "{expected}"' in _text(generated)
+
+
+def test_units_reject_unknown_temperature_unit() -> None:
+    with pytest.raises(ValidationError, match="temperature"):
+        units_vba(profile=CST2022, **_unit_arguments(temperature="Rankine"))
 
 
 def test_background_reset_is_versioned() -> None:

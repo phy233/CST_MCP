@@ -97,6 +97,23 @@ def test_define_brick_schema_accepts_decimal_substrate_thickness() -> None:
     )
 
 
+def test_define_units_schema_exposes_cst_temperature_names() -> None:
+    schema = all_defs()["define-units"]["json_schema"]
+    temperature = schema["properties"]["temperature"]
+
+    assert temperature["default"] == "Celsius"
+    assert temperature["enum"] == ["Celsius", "Kelvin", "Fahrenheit"]
+    validate(
+        {
+            "project_path": "D:/work/working.cst",
+            "length": "mm",
+            "frequency": "GHz",
+            "temperature": "Celsius",
+        },
+        schema,
+    )
+
+
 def test_union_scalar_schema_remains_available_to_cli_helpers() -> None:
     assert build_args_templates()["define-brick"]["x_min"] == -10
     assert "x_min" in build_direct_arg_specs()["define-brick"]
