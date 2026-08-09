@@ -5,7 +5,7 @@ import ast
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_config_has_separate_worker_runtime() -> None:
@@ -54,6 +54,25 @@ def test_mcp_layer_does_not_import_runtime() -> None:
                     or node.module.startswith("cst_runtime.")
                 ):
                     violations.append(f"{path.name}:{node.lineno}")
+    assert not violations
+
+
+def test_mcp_only_uses_runtime_registry_through_worker() -> None:
+    """MCP 服务不得绕过 Worker 直接依赖 Runtime 的内部层。"""
+    forbidden = ("cst_runtime.core", "cst_runtime.lib", "cst_runtime.tools")
+    violations: list[str] = []
+    for path in (PROJECT_ROOT / "mcp_server").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            modules: list[str] = []
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                modules = [node.module]
+            for module in modules:
+                if module.startswith(forbidden):
+                    violations.append(f"{path.name}:{node.lineno}:{module}")
+
     assert not violations
 
 

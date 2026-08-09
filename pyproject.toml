@@ -30,7 +30,7 @@ cst-mcp = "mcp_server.server:main"
 packages = ["mcp_server"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["mcp_server/tests", "skills/cst-runtime-cli/tests"]
 asyncio_mode = "auto"
 pythonpath = [".", "skills/cst-runtime-cli/scripts"]
 addopts = "--import-mode=importlib"

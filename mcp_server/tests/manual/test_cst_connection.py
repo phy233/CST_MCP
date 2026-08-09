@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 # 将 skills 下的模块路径拼接到根目录后，加入系统搜索路径
 RUNTIME_SCRIPTS_PATH = PROJECT_ROOT / "skills" / "cst-runtime-cli" / "scripts"

@@ -1,4 +1,4 @@
-"""MCP 到 runtime worker 的协议测试。"""
+"""MCP 到 Runtime Worker 的协议测试。"""
 from __future__ import annotations
 
 import io

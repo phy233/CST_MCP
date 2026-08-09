@@ -1,3 +1,5 @@
+"""人工验证 MCP 工具注册、Worker 连续性与崩溃恢复。"""
+
 import sys
 import json
 import time

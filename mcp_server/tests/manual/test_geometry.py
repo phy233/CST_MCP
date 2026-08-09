@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 # 设置环境路径以加载 proxy
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 RUNTIME_SCRIPTS_PATH = PROJECT_ROOT / "skills" / "cst-runtime-cli" / "scripts"
 sys.path.insert(0, str(RUNTIME_SCRIPTS_PATH))
 

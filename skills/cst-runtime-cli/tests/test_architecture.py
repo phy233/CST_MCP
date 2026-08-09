@@ -5,7 +5,7 @@ import ast
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 RUNTIME = ROOT / "skills" / "cst-runtime-cli" / "scripts" / "cst_runtime"
 
 
@@ -101,17 +101,6 @@ def test_runtime_api_does_not_depend_on_mcp() -> None:
         for path in (RUNTIME / "api").glob("*.py")
         for line, module in _imports(path)
         if module == "mcp" or module.startswith("mcp.")
-    ]
-    assert not violations
-
-
-def test_mcp_only_uses_runtime_registry_through_worker() -> None:
-    forbidden = ("cst_runtime.core", "cst_runtime.lib", "cst_runtime.tools")
-    violations = [
-        f"{path.name}:{line}:{module}"
-        for path in (ROOT / "mcp_server").glob("*.py")
-        for line, module in _imports(path)
-        if module.startswith(forbidden)
     ]
     assert not violations
 
