@@ -38,41 +38,6 @@ TOOL_DEFS = {
     },
 },
 
-"add-to-history": {
-    "category": "modeling",
-    "risk": "write",
-    "description": "Execute a raw VBA command via add_to_history for operations not covered by other tools.",
-    "handler": "tool_add_to_history",
-    "json_schema": {
-        "type": "object",
-        "properties": {
-            "project_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            },
-            "command": {
-                "type": "string",
-                "examples": [
-                    "Solid.Add \"Component1:solid1\", \"Component1:solid2\""
-                ]
-            },
-            "history_name": {
-                "type": "string",
-                "examples": [
-                    "custom boolean add"
-                ]
-            }
-        },
-        "required": [
-            "project_path",
-            "command",
-            "history_name"
-        ]
-    },
-},
-
 "boolean-add": {
     "category": "modeling",
     "risk": "write",
@@ -2098,7 +2063,6 @@ def tool_transform_curve(args: dict) -> dict: return _md.transform_curve(**args)
 def tool_create_horn_segment(args: dict) -> dict: return _md.create_horn_segment(**args)
 def tool_create_loft_sweep(args: dict) -> dict: return _md.create_loft_sweep(**args)
 def tool_create_hollow_sweep(args: dict) -> dict: return _md.create_hollow_sweep(**args)
-def tool_add_to_history(args: dict) -> dict: return _md.add_to_history(**args)
 def tool_pick_face(args: dict) -> dict: return _md.pick_face(**args)
 def tool_define_loft(args: dict) -> dict: return _md.define_loft(**args)
 def tool_export_e_field(args: dict) -> dict: return _md.export_e_field(**args)

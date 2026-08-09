@@ -38,7 +38,7 @@ _CST_REQUIRED_TOOLS = {
     "define-analytical-curve", "define-extrude-curve",
     "transform-shape", "transform-curve",
     "create-horn-segment", "create-loft-sweep", "create-hollow-sweep",
-    "add-to-history", "pick-face", "define-loft",
+    "pick-face", "define-loft",
     "export-e-field", "export-surface-current", "export-voltage",
     "define-parameters",
     "export-farfield-fresh-session", "export-existing-farfield-cut-fresh-session",
@@ -71,6 +71,7 @@ class TestToolsMetadata:
     def test_all_tools_are_listed(self) -> None:
         names = get_all_tool_names()
         assert len(names) > 50, f"Only {len(names)} tools found"
+        assert "add-to-history" not in names
 
     def test_every_tool_describe_returns_success(self) -> None:
         for tool in get_all_tool_names():
