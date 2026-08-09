@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from .base import get_model3d, unsupported_feature
+from .base import get_model3d, profile_for, unsupported_feature
 from .execution import execute_text_query, vba_string
 
 
@@ -99,9 +99,38 @@ def read_legacy_farfield_list(
     return scalar_values, point_theta, point_phi
 
 
+def read_farfield_scalar_list(
+    project: Any,
+    *,
+    tree_path: str,
+    result_type: str,
+    frequency_ghz: float,
+    theta_values: list[float],
+    phi_values: list[float],
+) -> tuple[list[float], list[float], list[float], str, dict[str, Any]]:
+    """使用两版都可验证的 FarfieldPlot 列表接口读取角度网格。"""
+    profile = profile_for(project)
+    scalar_values, point_theta, point_phi = read_legacy_farfield_list(
+        project,
+        tree_path=tree_path,
+        plot_mode=result_type,
+        frequency_ghz=frequency_ghz,
+        theta_values=theta_values,
+        phi_values=phi_values,
+    )
+    return (
+        scalar_values,
+        point_theta,
+        point_phi,
+        "FarfieldPlot",
+        profile.metadata(path=profile.label),
+    )
+
+
 __all__ = [
     "get_farfield_calculator",
     "legacy_farfield_query_vba",
+    "read_farfield_scalar_list",
     "read_legacy_farfield_list",
     "supports_farfield_calculator",
 ]

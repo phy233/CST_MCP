@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from cst_runtime.core import farfield
+from cst_runtime.core.compatibility import farfield as compatibility_farfield
 from cst_runtime.core.compatibility.base import CompatibilityProfile
 from cst_runtime.core.compatibility.farfield import legacy_farfield_query_vba
 
 
 CST2022 = CompatibilityProfile(major=2022, version="2022", source="test")
+CST2026 = CompatibilityProfile(major=2026, version="2026", source="test")
 
 
 def test_legacy_farfield_query_uses_farfield_plot_list_api() -> None:
@@ -30,20 +32,20 @@ def test_legacy_farfield_query_uses_farfield_plot_list_api() -> None:
 def test_scalar_grid_selects_2022_legacy_reader(monkeypatch) -> None:
     calls = {}
 
-    monkeypatch.setattr(farfield, "profile_for", lambda _project: CST2022)
+    monkeypatch.setattr(compatibility_farfield, "profile_for", lambda _project: CST2022)
 
     def fake_reader(project, **kwargs):
         calls.update(project=project, **kwargs)
         return [1.0, 2.0, 3.0, 4.0], [0.0, 90.0, 0.0, 90.0], [0.0, 0.0, 180.0, 180.0]
 
-    monkeypatch.setattr(farfield, "read_legacy_farfield_list", fake_reader)
+    monkeypatch.setattr(compatibility_farfield, "read_legacy_farfield_list", fake_reader)
     monkeypatch.setattr(
-        farfield,
+        compatibility_farfield,
         "get_farfield_calculator",
         lambda _project: (_ for _ in ()).throw(AssertionError("CST 2022 不得访问 FarfieldCalculator")),
     )
 
-    result = farfield._read_farfield_scalar_grid_via_calculator(
+    result = farfield._read_farfield_scalar_grid(
         project=object(),
         farfield_name="farfield (f=10) [1]",
         result_type="Gain",
@@ -61,6 +63,43 @@ def test_scalar_grid_selects_2022_legacy_reader(monkeypatch) -> None:
     assert result["grid_values"] == [[1.0, 2.0], [3.0, 4.0]]
     assert result["compatibility"]["profile"] == "cst2022"
     assert calls["plot_mode"] == "Gain"
+
+
+def test_scalar_grid_uses_farfield_plot_in_2026_too(monkeypatch) -> None:
+    monkeypatch.setattr(compatibility_farfield, "profile_for", lambda _project: CST2026)
+    monkeypatch.setattr(
+        compatibility_farfield,
+        "read_legacy_farfield_list",
+        lambda _project, **_kwargs: (
+            [1.0, 2.0, 3.0, 4.0],
+            [0.0, 90.0, 0.0, 90.0],
+            [0.0, 0.0, 180.0, 180.0],
+        ),
+    )
+    monkeypatch.setattr(
+        compatibility_farfield,
+        "get_farfield_calculator",
+        lambda _project: (_ for _ in ()).throw(
+            AssertionError("角度列表方法不得错误调用 FarfieldCalculator")
+        ),
+    )
+
+    result = farfield._read_farfield_scalar_grid(
+        project=object(),
+        farfield_name="farfield (f=10) [1]",
+        result_type="Gain",
+        unit="dBi",
+        theta_step_deg=90,
+        phi_step_deg=180,
+        theta_min_deg=0,
+        theta_max_deg=90,
+        phi_min_deg=0,
+        phi_max_deg=180,
+    )
+
+    assert result["status"] == "success"
+    assert result["source"] == "FarfieldPlot"
+    assert result["compatibility"]["profile"] == "cst2026"
 
 
 def test_ascii_export_cut_template_remains_2022_compatible() -> None:

@@ -27,6 +27,7 @@ from .farfield import (
     supports_farfield_calculator,
     get_farfield_calculator,
     legacy_farfield_query_vba,
+    read_farfield_scalar_list,
     read_legacy_farfield_list,
 )
 from .tree import get_tree_items, result_item_exists, select_tree_item
@@ -64,6 +65,7 @@ __all__ = [
     "supports_farfield_calculator",
     "get_farfield_calculator",
     "legacy_farfield_query_vba",
+    "read_farfield_scalar_list",
     "read_legacy_farfield_list",
     "get_tree_items",
     "result_item_exists",

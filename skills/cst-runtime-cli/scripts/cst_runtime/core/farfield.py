@@ -15,12 +15,9 @@ from .session import get_attached_project, open_project, close_project
 from .utils import abs_project_path, serialize_value
 from .modeling import _single_vba
 from .compatibility import (
-    get_farfield_calculator,
     get_model3d,
     get_tree_items,
-    profile_for,
-    read_legacy_farfield_list,
-    select_tree_item,
+    read_farfield_scalar_list,
 )
 from ..analysis.farfield import (
     _extract_farfield_frequency_ghz,
@@ -273,7 +270,7 @@ def _gui_set_result_navigator_selection(
     return result
 
 
-def _read_farfield_scalar_grid_via_calculator(
+def _read_farfield_scalar_grid(
     project: Any,
     farfield_name: str,
     result_type: str,
@@ -316,38 +313,20 @@ def _read_farfield_scalar_grid_via_calculator(
 
     try:
         tree_path = f"Farfields\\{farfield_name}"
-        profile = profile_for(project)
-        if profile.is_2022:
-            scalar_values, point_theta, point_phi = read_legacy_farfield_list(
-                project,
-                tree_path=tree_path,
-                plot_mode=result_type,
-                frequency_ghz=float(frequency_ghz),
-                theta_values=theta_values,
-                phi_values=phi_values,
-            )
-            source = "FarfieldPlot"
-        else:
-            calculator = get_farfield_calculator(project)
-            calculator.Reset()
-            calculator.SetScaleLinear(False)
-            calculator.DBUnit("0")
-            select_tree_item(project, tree_path)
-            for phi_value in phi_values:
-                for theta_value in theta_values:
-                    calculator.AddListEvaluationPoint(
-                        theta_value,
-                        phi_value,
-                        1.0,
-                        "spherical",
-                        "frequency",
-                        frequency_ghz,
-                    )
-            calculator.CalculateList(tree_path, "farfield Eonly")
-            scalar_values = [float(value) for value in calculator.GetList(result_type, "Spherical Abs")]
-            point_theta = [float(value) for value in calculator.GetList(result_type, "Point_T")]
-            point_phi = [float(value) for value in calculator.GetList(result_type, "Point_P")]
-            source = "FarfieldCalculator"
+        (
+            scalar_values,
+            point_theta,
+            point_phi,
+            source,
+            compatibility,
+        ) = read_farfield_scalar_list(
+            project,
+            tree_path=tree_path,
+            result_type=result_type,
+            frequency_ghz=float(frequency_ghz),
+            theta_values=theta_values,
+            phi_values=phi_values,
+        )
 
         expected_points = len(theta_values) * len(phi_values)
         if len(scalar_values) != expected_points:
@@ -391,7 +370,7 @@ def _read_farfield_scalar_grid_via_calculator(
             "peak_theta_deg": float(point_theta[peak_idx]),
             "peak_phi_deg": float(point_phi[peak_idx]),
             "boresight_value": None if boresight_value is None else float(boresight_value),
-            "compatibility": profile.metadata(path=profile.label),
+            "compatibility": compatibility,
             "runtime_module": "cst_runtime.farfield",
         }
     except Exception as exc:
@@ -535,7 +514,7 @@ def export_farfield_grid(
                 import warnings
                 warnings.warn(f"Result navigator selection failed (non-fatal): {sel_result.get('message')}")
 
-        read_result = _read_farfield_scalar_grid_via_calculator(
+        read_result = _read_farfield_scalar_grid(
             project=project, farfield_name=farfield_name,
             result_type=normalized_mode["result_type"], unit=normalized_mode["unit"],
             theta_step_deg=theta_step_deg, phi_step_deg=phi_step_deg,

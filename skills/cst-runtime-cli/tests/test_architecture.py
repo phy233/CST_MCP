@@ -162,3 +162,29 @@ def test_lib_contains_no_known_version_specific_vba_markers() -> None:
             if marker in source:
                 violations.append(f"{path.relative_to(RUNTIME)}:{marker}")
     assert not violations
+
+
+def test_version_specific_vba_markers_stay_in_compatibility_layer() -> None:
+    """官方参考中明确存在版本差异的 VBA 标记不得散落在 core 业务模块。"""
+    forbidden = {
+        "GetProjectPathName(",
+        ".SetUnit ",
+        ".Outerradius",
+        ".Innerradius",
+        ".Bottomradius",
+        ".Topradius",
+        ".XradiusTop",
+        ".CurveExpression",
+        "With Polygon3D",
+        "PostProcess1D.ActivateOperation",
+        "FPBAAvoidNonRegUnite",
+        "FarfieldCalculator",
+    }
+    violations: list[str] = []
+    for path in (RUNTIME / "core").glob("*.py"):
+        source = path.read_text(encoding="utf-8-sig")
+        for marker in forbidden:
+            if marker in source:
+                violations.append(f"{path.relative_to(RUNTIME)}:{marker}")
+
+    assert not violations
