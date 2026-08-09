@@ -32,7 +32,7 @@ _CST_REQUIRED_TOOLS = {
     "define-units", "set-farfield-monitor", "set-efield-monitor",
     "set-field-monitor", "set-probe", "delete-probe", "delete-monitor",
     "set-background-with-space", "set-farfield-plot-cuts", "show-bounding-box",
-    "activate-post-process", "create-mesh-group", "set-solver-acceleration",
+    "create-mesh-group", "set-solver-acceleration",
     "set-fdsolver-extrude-open-bc", "set-mesh-fpbavoid-nonreg-unite",
     "set-mesh-minimum-step-number", "define-polygon-3d",
     "define-analytical-curve", "define-extrude-curve",
@@ -72,6 +72,7 @@ class TestToolsMetadata:
         names = get_all_tool_names()
         assert len(names) > 50, f"Only {len(names)} tools found"
         assert "add-to-history" not in names
+        assert "activate-post-process" not in names
 
     def test_every_tool_describe_returns_success(self) -> None:
         for tool in get_all_tool_names():

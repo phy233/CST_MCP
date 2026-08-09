@@ -3,41 +3,6 @@ from . import _register_tool_defs
 
 
 TOOL_DEFS = {
-"activate-post-process": {
-    "category": "modeling",
-    "risk": "write",
-    "description": "Activate or deactivate a post-processing operation.",
-    "handler": "tool_activate_post_process",
-    "json_schema": {
-        "type": "object",
-        "properties": {
-            "project_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            },
-            "operation": {
-                "type": "string",
-                "examples": [
-                    "envelop"
-                ]
-            },
-            "enable": {
-                "type": "boolean",
-                "examples": [
-                    True
-                ]
-            }
-        },
-        "required": [
-            "project_path",
-            "operation",
-            "enable"
-        ]
-    },
-},
-
 "boolean-add": {
     "category": "modeling",
     "risk": "write",
@@ -2053,7 +2018,6 @@ def tool_delete_monitor(args: dict) -> dict: return _md.delete_monitor(**args)
 def tool_set_background_with_space(args: dict) -> dict: return _md.set_background_with_space(**args)
 def tool_set_farfield_plot_cuts(args: dict) -> dict: return _md.set_farfield_plot_cuts(**args)
 def tool_show_bounding_box(args: dict) -> dict: return _md.show_bounding_box(**args)
-def tool_activate_post_process(args: dict) -> dict: return _md.activate_post_process_operation(**args)
 def tool_create_mesh_group(args: dict) -> dict: return _md.create_mesh_group(**args)
 def tool_define_polygon_3d(args: dict) -> dict: return _md.define_polygon_3d(**args)
 def tool_define_analytical_curve(args: dict) -> dict: return _md.define_analytical_curve(**args)
