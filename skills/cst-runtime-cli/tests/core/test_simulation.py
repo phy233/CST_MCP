@@ -1,6 +1,7 @@
 """Test core/simulation.py: guard integration."""
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -41,3 +42,56 @@ def test_is_simulation_running_no_project(mocker):
     )
     result = is_simulation_running("/nonexistent.cst")
     assert result["status"] == "error"
+
+
+def test_start_simulation_reports_false_solver_result(monkeypatch):
+    from cst_runtime.core import simulation
+
+    project = SimpleNamespace(modeler=SimpleNamespace(run_solver=lambda: False))
+    monkeypatch.setattr(simulation.gateway, "guard_before_simulation", lambda _path: None)
+    monkeypatch.setattr(
+        simulation,
+        "attach_expected_project",
+        lambda _path: (project, {}),
+    )
+
+    result = simulation.start_simulation("D:/work/model.cst")
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "solver_run_failed"
+
+
+def test_start_simulation_accepts_true_solver_result(monkeypatch):
+    from cst_runtime.core import simulation
+
+    project = SimpleNamespace(modeler=SimpleNamespace(run_solver=lambda: True))
+    monkeypatch.setattr(simulation.gateway, "guard_before_simulation", lambda _path: None)
+    monkeypatch.setattr(
+        simulation,
+        "attach_expected_project",
+        lambda _path: (project, {}),
+    )
+
+    result = simulation.start_simulation("D:/work/model.cst")
+
+    assert result["status"] == "success"
+    assert result["message"] == "simulation completed"
+
+
+def test_rebuild_warns_that_results_are_deleted_and_checks_return(monkeypatch):
+    from cst_runtime.core import simulation
+
+    captured: dict[str, str] = {}
+
+    def fake_single(project_path, history_name, vba_line):
+        captured["vba_line"] = vba_line
+        return {"status": "success", "project_path": project_path}
+
+    monkeypatch.setattr(simulation, "_single_vba_pops", fake_single)
+
+    result = simulation.rebuild_structure("D:/work/model.cst")
+
+    assert result["status"] == "success"
+    assert result["results_deleted"] is True
+    assert "删除" in result["warning"]
+    assert "If Not Application.Rebuild Then ReportError" in captured["vba_line"]

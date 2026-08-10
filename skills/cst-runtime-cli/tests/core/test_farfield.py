@@ -73,6 +73,8 @@ def test_result_navigator_passes_project_path_to_vba_gateway(monkeypatch):
     assert captured["project"] is project
     assert captured["project_path"] == "C:/demo.cst"
     assert "Sub Main()" in captured["code"]
+    assert "If Not SelectTreeItem" in captured["code"]
+    assert "ReportError" in captured["code"]
     assert result["selected_run_ids"] == [1, 3]
 
 

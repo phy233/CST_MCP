@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from cst_runtime.core import project as project_core
 from cst_runtime.core.compatibility import materials, queries, results, tree
-from cst_runtime.core.errors import UnsupportedFeatureError
+from cst_runtime.core.errors import UnsupportedFeatureError, VerificationError
 
 
 def test_result_exists_prefers_result_tree_api() -> None:
@@ -25,6 +27,37 @@ def test_result_exists_falls_back_to_vba(monkeypatch) -> None:
 
     assert tree.result_item_exists(object(), "1D Results\\S-Parameters") is True
     assert any("ResultTree.DoesTreeItemExist" in line for line in captured)
+
+
+def test_select_tree_item_falls_back_to_documented_vba_global(monkeypatch) -> None:
+    captured: list[str] = []
+
+    def query(_project, lines):
+        captured.extend(lines)
+        return ["1"]
+
+    monkeypatch.setattr(tree, "execute_text_query", query)
+
+    tree.select_tree_item(object(), "Farfields\\farfield (f=8) [1]")
+
+    script = "\n".join(captured)
+    assert 'If SelectTreeItem("Farfields\\farfield (f=8) [1]") Then' in script
+
+
+def test_select_tree_item_reports_false_vba_result(monkeypatch) -> None:
+    monkeypatch.setattr(tree, "execute_text_query", lambda _project, _lines: ["0"])
+
+    with pytest.raises(VerificationError, match="未能选中"):
+        tree.select_tree_item(object(), "missing")
+
+
+def test_select_tree_item_reports_false_direct_result() -> None:
+    project = SimpleNamespace(
+        modeler=SimpleNamespace(SelectTreeItem=lambda _path: False)
+    )
+
+    with pytest.raises(VerificationError, match="未能选中"):
+        tree.select_tree_item(project, "missing")
 
 
 def test_tree_items_fall_back_to_recursive_result_tree_vba(monkeypatch) -> None:

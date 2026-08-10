@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from cst_runtime.core import compat as legacy_compat
 from cst_runtime.core.compatibility import session
 
 
@@ -87,3 +88,16 @@ def test_activate_project_prefers_official_project_method():
     session.activate_project(environment, project)
 
     assert calls == ["project.activate"]
+
+
+def test_safe_quiet_mode_uses_2022_documented_getter():
+    calls: list[str] = []
+    environment = SimpleNamespace(
+        in_quiet_mode=lambda: calls.append("in_quiet_mode") or True,
+        quiet_mode_enabled=lambda: (_ for _ in ()).throw(
+            AssertionError("不得调用 CST 2022 不存在的方法")
+        ),
+    )
+
+    assert legacy_compat.safe_quiet_mode(environment) is True
+    assert calls == ["in_quiet_mode"]

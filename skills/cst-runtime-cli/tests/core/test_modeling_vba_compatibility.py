@@ -59,7 +59,7 @@ def test_2022_units_use_legacy_methods_and_report_not_applied() -> None:
     text = _text(generated)
 
     assert '.Geometry "mm"' in text
-    assert '.TemperatureUnit "Celsius"' in text
+    assert '.TemperatureUnit "celsius"' in text
     assert "SetUnit" not in text
     assert generated.not_applied["voltage"] == "V"
 
@@ -80,9 +80,9 @@ def test_2026_units_keep_set_unit_temperature_token() -> None:
 @pytest.mark.parametrize(
     ("supplied", "expected"),
     [
-        ("degC", "Celsius"),
-        ("K", "Kelvin"),
-        ("degF", "Fahrenheit"),
+        ("degC", "celsius"),
+        ("K", "kelvin"),
+        ("degF", "fahrenheit"),
     ],
 )
 def test_units_normalize_legacy_temperature_aliases(
@@ -124,9 +124,29 @@ def test_2022_mesh_snapshot_excludes_modern_markers() -> None:
     text = _text(generated)
 
     assert ".LinesPerWavelength" in text
-    assert ".MinimumLineNumber" in text
+    assert '.MinimumStepNumber "5"' in text
+    assert ".MinimumLineNumber" not in text
+    assert generated.not_applied["steps_per_box_far"] == 1
     for marker in ("MeshSettings", "PBAVersion", "TSTVersion", "SetCADProcessingMethod"):
         assert marker not in text
+
+
+def test_2022_mesh_rejects_nondefault_unmappable_far_box_setting() -> None:
+    with pytest.raises(UnsupportedFeatureError) as caught:
+        mesh_vba(
+            steps_per_wave_near=5,
+            steps_per_wave_far=5,
+            steps_per_box_near=5,
+            steps_per_box_far=2,
+            edge_refinement_ratio=2,
+            edge_refinement_buffer_lines=3,
+            ratio_limit_geometry=10,
+            equilibrate_value=1.5,
+            use_gpu=True,
+            profile=CST2022,
+        )
+
+    assert "steps_per_box_far" in caught.value.context["unsupported_arguments"]
 
 
 def test_2022_solver_omits_modern_options_and_rejects_enabled_request() -> None:
@@ -205,14 +225,44 @@ def test_2022_monitor_converts_step_to_sample_count() -> None:
     assert "CreateUsingLinearStep" not in text
 
 
-def test_2022_monitor_rejects_nondivisible_range() -> None:
-    with pytest.raises(ValidationError):
+def test_2022_efield_monitor_rejects_frequency_range() -> None:
+    with pytest.raises(UnsupportedFeatureError, match="只支持单频"):
         monitor_vba(
             field_type="Efield",
             start=1,
             end=2,
             step=0.3,
             name="e-field (f=1-2)",
+            profile=CST2022,
+        )
+
+
+def test_2022_efield_monitor_uses_single_frequency_method() -> None:
+    generated = monitor_vba(
+        field_type="Efield",
+        start=8,
+        end=8,
+        step=1,
+        name="e-field (f=8)",
+        profile=CST2022,
+    )
+    text = _text(generated)
+
+    assert '.Name "e-field (f=8)"' in text
+    assert '.Frequency "8"' in text
+    assert ".FrequencyRange" not in text
+    assert ".FrequencySamples" not in text
+    assert generated.not_applied["step"] == 1
+
+
+def test_2022_hfield_monitor_rejects_multiple_samples() -> None:
+    with pytest.raises(UnsupportedFeatureError, match="FrequencySamples"):
+        monitor_vba(
+            field_type="Hfield",
+            start=8,
+            end=8,
+            samples=5,
+            name="h-field (f=8)",
             profile=CST2022,
         )
 
@@ -277,23 +327,123 @@ def test_other_monitor_entrypoints_pass_nonempty_generated_names(monkeypatch) ->
         return {"status": "success"}
 
     monkeypatch.setattr(core_modeling, "_submit_versioned_vba", fake_submit)
+    monkeypatch.setattr(core_modeling, "detect_compatibility_profile", lambda: CST2022)
 
     core_modeling.set_efield_monitor(
         "D:/project.cst",
         start_freq=2.35,
-        end_freq=2.55,
+        end_freq=2.35,
         step=0.05,
     )
-    assert captured["name"] == "e-field (f=2.35-2.55)"
+    assert captured["name"] == "e-field (f=2.35)"
 
     core_modeling.set_field_monitor(
         "D:/project.cst",
         field_type="H",
         start_frequency="2.35",
-        end_frequency="2.55",
-        num_samples="5",
+        end_frequency="2.35",
+        num_samples="1",
     )
-    assert captured["name"] == "h-field (f=2.35-2.55)"
+    assert captured["name"] == "h-field (f=2.35)"
+    assert captured["field_type"] == "Hfield"
+
+
+def test_2026_efield_entrypoint_keeps_range_name(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_submit(project_path, history_name, builder, **arguments):
+        captured.update(arguments)
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_submit_versioned_vba", fake_submit)
+    monkeypatch.setattr(core_modeling, "detect_compatibility_profile", lambda: CST2026)
+
+    core_modeling.set_efield_monitor("D:/project.cst", 2.35, 2.55, 0.05)
+
+    assert captured["name"] == "e-field (f=2.35-2.55)"
+
+
+def test_define_monitor_name_reflects_requested_range_without_fake_suffix(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_submit(project_path, history_name, builder, **arguments):
+        captured.update(arguments)
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_submit_versioned_vba", fake_submit)
+
+    core_modeling.define_monitor("D:/project.cst", 8, 12, 1)
+
+    assert captured["name"] == "farfield (f=8-12)"
+
+
+def test_set_probe_normalizes_documented_eh_values(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_single(project_path, history_name, vba, project=None):
+        captured["history_name"] = history_name
+        captured["vba"] = vba
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_single_vba", fake_single)
+
+    result = core_modeling.set_probe("D:/project.cst", "H", "1", "2", "3")
+
+    assert result["status"] == "success"
+    assert 'Probe.Field "hfield"' in captured["vba"]
+    assert "hfieldfield" not in captured["vba"]
+
+
+def test_set_probe_rejects_non_eh_field_before_vba(monkeypatch) -> None:
+    monkeypatch.setattr(
+        core_modeling,
+        "_single_vba",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("不得提交 VBA")),
+    )
+
+    result = core_modeling.set_probe("D:/project.cst", "e-field", "1", "2", "3")
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "validation_error"
+
+
+def test_export_paths_follow_2022_documented_result_names(monkeypatch) -> None:
+    captured: list[str] = []
+
+    def fake_export(project_path, tree_path, file_path, history_name):
+        captured.append(tree_path)
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_ascii_export", fake_export)
+
+    core_modeling.export_e_field("D:/project.cst", "8", "D:/exports")
+    core_modeling.export_voltage("D:/project.cst", "1", "D:/exports")
+
+    assert captured == [
+        "2D/3D Results\\E-Field\\e-field (f=8) [1]",
+        "1D Results\\Voltage Monitors\\voltage1",
+    ]
+
+
+def test_ascii_export_checks_tree_selection_before_export(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_single(project_path, history_name, vba, project=None):
+        captured["vba"] = vba
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_single_vba", fake_single)
+
+    core_modeling._ascii_export(
+        "D:/project.cst",
+        "2D/3D Results\\E-Field\\e-field (f=8) [1]",
+        'D:/exports/e-field "8".txt',
+        "ExportEField",
+    )
+
+    assert "If Not SelectTreeItem" in captured["vba"]
+    assert "ReportError" in captured["vba"]
+    assert 'ASCIIExport.FileName "D:/exports/e-field ""8"".txt"' in captured["vba"]
 
 
 def test_2022_plot_export_uses_vba_global_object() -> None:

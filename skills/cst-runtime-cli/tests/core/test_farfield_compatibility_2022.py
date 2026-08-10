@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import pytest
+
 from cst_runtime.core import farfield
 from cst_runtime.core.compatibility import farfield as compatibility_farfield
 from cst_runtime.core.compatibility.base import CompatibilityProfile
-from cst_runtime.core.compatibility.farfield import legacy_farfield_query_vba
+from cst_runtime.core.compatibility.farfield import (
+    legacy_farfield_query_vba,
+    read_legacy_farfield_list,
+)
+from cst_runtime.core.errors import VerificationError
 
 
 CST2022 = CompatibilityProfile(major=2022, version="2022", source="test")
@@ -22,11 +28,33 @@ def test_legacy_farfield_query_uses_farfield_plot_list_api() -> None:
     )
 
     assert 'FarfieldPlot.SetPlotMode "realized gain"' in text
+    assert 'If Not SelectTreeItem("Farfields\\farfield (f=10) [1]") Then' in text
+    assert "__CST_TREE_SELECTION_FAILED__" in text
     assert text.count("FarfieldPlot.AddListEvaluationPoint") == 4
     assert 'FarfieldPlot.CalculateList ""' in text
     assert 'FarfieldPlot.GetList("spherical abs")' in text
     assert 'FarfieldPlot.GetList("Point_T")' in text
     assert "FarfieldCalculator" not in text
+
+
+def test_legacy_farfield_reader_reports_tree_selection_failure(monkeypatch) -> None:
+    monkeypatch.setattr(
+        compatibility_farfield,
+        "execute_text_query",
+        lambda *_args, **_kwargs: [
+            "__CST_TREE_SELECTION_FAILED__Farfields\\missing"
+        ],
+    )
+
+    with pytest.raises(VerificationError, match="未能选中"):
+        read_legacy_farfield_list(
+            object(),
+            tree_path="Farfields\\missing",
+            plot_mode="Gain",
+            frequency_ghz=8,
+            theta_values=[0],
+            phi_values=[0],
+        )
 
 
 def test_scalar_grid_selects_2022_legacy_reader(monkeypatch) -> None:
@@ -109,6 +137,8 @@ def test_ascii_export_cut_template_remains_2022_compatible() -> None:
     )
 
     assert "With ASCIIExport" in text
+    assert "If Not SelectTreeItem" in text
+    assert "ReportError" in text
     assert ".Reset" in text
     assert ".FileName" in text
     assert ".Execute" in text
