@@ -87,6 +87,8 @@ Set mws = app.OpenFile("C:\project.cst")  ' 打开已有工程
 | `DeleteResults()` | 删除所有结果 |
 | `AskForDeleteResults() → bool` | 弹确认框删除结果 |
 
+CST 2022 的 `ChangeSolverType` 只接受以下 17 个字符串，大小写和空格应按文档原值传入：`"HF Time Domain"`、`"HF Eigenmode"`、`"HF Frequency Domain"`、`"HF IntegralEq"`、`"HF Multilayer"`、`"HF Asymptotic"`、`"LF EStatic"`、`"LF MStatic"`、`"LF Stationary Current"`、`"LF Frequency Domain"`、`"LF Time Domain (MQS)"`、`"PT Tracking"`、`"PT Wakefields"`、`"PT PIC"`、`"Thermal Steady State"`、`"Thermal Transient"`、`"Mechanics"`。Runtime 应在 Python 参数校验和工具 JSON Schema 中使用这份清单，不能把任意字符串提交给 CST 后才等待 VBA 报错。
+
 #### 查询
 
 | 方法签名 | 返回 | 说明 |
@@ -1468,6 +1470,8 @@ CST 2022 的频域 `Efield`/`Hfield` 监视器使用 `Frequency(double freq)`，
 
 `UseSubvolume(False)` 表示使用计算域包围盒；官方普通 E-field 示例也只写 `.UseSubvolume "False"`。只有启用子体积时才需要 `SetSubvolume(xmin, xmax, ymin, ymax, zmin, zmax)`，官方子体积示例按 `.UseSubvolume "True"`、`.SetSubvolume ...` 的组合使用。因此兼容层在禁用子体积时不得继续拼接坐标，也不应在没有工程几何依据时猜测 `zmax` 默认值。
 
+上述规则不能扩展到宽带 farfield。CST 2022 明确把 `UseSubvolume`/`SetSubvolume` 限定为 field source、**单频** farfield/RCS、E-field 和 H-field 监视器；使用 `FrequencyRange`/`FrequencySamples` 的宽带 farfield 必须完全省略这两个方法。若上层仍请求子体积，兼容层应在 `not_applied` 中如实记录，而不是生成无文档依据的 VBA。
+
 监视器定义名和求解后的结果树名不是同一层级。`Monitor.Name` 的官方示例为 `e-field (f=2.5)`，不含激励后缀；结果树示例则为 `e-field (f=0.1) [1]`、`farfield (f=16) [1]`。`[1]` 是求解结果的激励编号，不应预先写进 `Monitor.Name`，更不能使用非官方的 `_1` 代替。
 
 ### 查询
@@ -2094,11 +2098,12 @@ Plot.ExportImage "D:\exports\view.png", 1920, 1080
 ### 求解器类型
 
 ```
-"HF Time Domain", "HF Frequency Domain", "HF Eigenmode",
-"HF Integral Equation", "Asymptotic", "EM Static", "EM Quasistatic",
-"EM Magnetostatic", "EM Electrostatic", "Stationary Current",
-"Thermal Steady State", "Thermal Transient", "Particle Tracking",
-"PIC", "Wakefield", "CHT", "Structural Mechanics"
+"HF Time Domain", "HF Eigenmode", "HF Frequency Domain",
+"HF IntegralEq", "HF Multilayer", "HF Asymptotic",
+"LF EStatic", "LF MStatic", "LF Stationary Current",
+"LF Frequency Domain", "LF Time Domain (MQS)",
+"PT Tracking", "PT Wakefields", "PT PIC",
+"Thermal Steady State", "Thermal Transient", "Mechanics"
 ```
 
 ### 网格类型

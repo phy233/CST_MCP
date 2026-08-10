@@ -951,7 +951,7 @@ result = define_brick(
 |------|-------------|------|
 | `define_frequency_range` 🟢 | `(project_path, start_freq, end_freq)` | 设置求解器频率范围 |
 | `change_frequency_range` 🟢 | `(project_path, min_frequency, max_frequency)` | 更改频率范围（字符串参数） |
-| `change_solver_type` 🟢 | `(project_path, solver_type)` | 更改求解器类型 |
+| `change_solver_type` 🟢 | `(project_path, solver_type)` | 按 CST 2022 `ChangeSolverType` 文档列出的 17 个合法值更改求解器类型；其他值在提交 VBA 前返回参数错误 |
 | `define_background` 🟢 | `(project_path, background_type="Normal")` | 设置背景材料类型 |
 | `define_boundary` 🟢 | `(project_path, face_type="expanded open", symmetry_type="none")` | 设置 6 面边界条件 + 对称 |
 | `define_mesh` 🟢 | `(project_path, steps_per_wave_near=5, ..., use_gpu=True)` | 定义六面体网格设置（含 PBA 和边缘细化） |
@@ -963,7 +963,7 @@ result = define_brick(
 | 函数 | 签名（简化） | 功能 |
 |------|-------------|------|
 | `define_port` 🟢 | `(project_path, port_number, x_min, ..., orientation)` | 定义波导端口 |
-| `define_monitor` 🟢 | `(project_path, start_freq, end_freq, step)` | 定义远场频率监视器 |
+| `define_monitor` 🟢 | `(project_path, start_freq, end_freq, step)` | 定义宽带远场频率监视器；CST 2022 不提交子体积指令，并在请求时通过 `not_applied` 标注 |
 | `set_farfield_monitor` 🟢 | `(project_path, start_freq, end_freq, step=1, subvolume_..., enable_nearfield=True)` | 配置远场监视器；当前使用计算域包围盒，兼容保留的 `subvolume_*` 参数不提交给 CST |
 | `set_efield_monitor` 🟢 | `(project_path, start_freq, end_freq, step=1, dimension="Volume", subvolume_...)` | 配置 E 场体积/表面监视器；当前使用计算域包围盒，兼容保留的 `subvolume_*` 参数不提交给 CST |
 | `set_field_monitor` 🟢 | `(project_path, field_type, start_frequency, end_frequency, num_samples)` | 通用场监视器（E/H） |

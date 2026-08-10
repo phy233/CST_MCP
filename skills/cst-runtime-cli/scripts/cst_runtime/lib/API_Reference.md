@@ -39,7 +39,7 @@
     *   **调用示例**: `session.close_project("C:\\model.cst", save=True)`
     *   **底层Core API**: `core.session.close_project`
 *   **`inspect`** / **`list_open`** / **`is_locked`** / **`quit_cst`** / **`save_project`**
-    *   **功能描述**: 提供工程状态检查、已打开工程列表、工程是否卡死锁定以及强制退出等功能。
+    *   **功能描述**: 提供工程状态检查、已打开工程列表、工程是否卡死锁定以及强制退出等功能。`is_locked` 与 `wait_project_unlocked` 使用同一规则，递归检查 `.cst` 工程伴生目录中的 `*.lok`，不检查不存在的 `项目名.cst.lock`。
     *   **底层Core API**: `core.session.inspect`, `core.identity.list_open_projects`, `core.project.save_project` 等。
 
 ### 2.2 模块: `parameters`
