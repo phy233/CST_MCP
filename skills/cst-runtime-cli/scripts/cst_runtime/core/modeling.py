@@ -18,6 +18,7 @@ from .compatibility.modeling import (
     loft_vba,
     mesh_vba,
     monitor_vba,
+    plot_export_vba,
     postprocess_activation_vba,
     polygon3d_vba,
     port_vba,
@@ -104,6 +105,37 @@ def _submit_versioned_vba(
             phase="validation",
             project_path=_abs_project_path(project_path),
         )
+
+
+def _run_separate_cleanup(
+    project_path: str,
+    result: dict[str, Any],
+    history_name: str,
+    vba_line: str,
+    *,
+    target: str,
+) -> None:
+    """主体成功后单独清理；清理失败只能降级为警告。"""
+    if result.get("status") == "error":
+        return
+    if result.get("submission") == "buffered":
+        result["cleanup"] = {
+            "status": "skipped",
+            "target": target,
+            "reason": "批处理尚未执行，不能提前确认主体成功并安排独立清理",
+        }
+        return
+
+    cleanup_result = _single_vba(project_path, history_name, vba_line)
+    if cleanup_result.get("status") == "error":
+        result["cleanup"] = {
+            "status": "warning",
+            "target": target,
+            "message": "主体操作成功，但后续临时对象清理失败",
+            "result": cleanup_result,
+        }
+        return
+    result["cleanup"] = {"status": "success", "target": target}
 
 
 def begin_batch(project_path: str, summary: str = "Batch Execution") -> dict[str, Any]:
@@ -660,6 +692,7 @@ def set_farfield_monitor(
         start=start_freq,
         end=end_freq,
         step=step,
+        name=f"farfield (f={start_freq}-{end_freq})",
         subvolume=(
             subvolume_x_min,
             subvolume_x_max,
@@ -694,6 +727,7 @@ def set_efield_monitor(
         start=start_freq,
         end=end_freq,
         step=step,
+        name=f"e-field (f={start_freq}-{end_freq})",
         dimension=dimension,
         subvolume=(
             subvolume_x_min,
@@ -716,6 +750,7 @@ def set_field_monitor(project_path: str, field_type: str, start_frequency: str, 
         start=start_frequency,
         end=end_frequency,
         samples=num_samples,
+        name=f"{field_type.lower()}-field (f={start_frequency}-{end_frequency})",
     )
 
 
@@ -852,6 +887,12 @@ def define_extrude_curve(
     result = _add_vba_history(project_path, f"Define ExtrudeCurve: {name}", list(generated.lines))
     if result.get("status") != "error":
         result["compatibility"] = generated.metadata(profile)
+        if "delete_profile" in generated.not_applied:
+            result["profile_retention"] = {
+                "status": "not_applied",
+                "requested_delete_profile": False,
+                "reason": "CST 2022 ExtrudeCurve.Create 会自动消费输入曲线项，无法保留该轮廓",
+            }
     return result
 
 
@@ -1123,18 +1164,44 @@ def define_arc_curve(
     end_angle: float,
     segments: int = 0,
 ) -> dict[str, Any]:
-    return _submit_versioned_vba(
+    try:
+        profile = detect_compatibility_profile()
+        generated = arc_vba(
+            name=name,
+            curve=curve,
+            center=center,
+            radius=radius,
+            start_angle=start_angle,
+            end_angle=end_angle,
+            segments=segments,
+            profile=profile,
+        )
+    except (CSTRuntimeError, ValueError) as exc:
+        if isinstance(exc, CSTRuntimeError):
+            return exc.to_response(project_path=_abs_project_path(project_path))
+        return error_response(
+            "invalid_arguments",
+            str(exc),
+            project_path=_abs_project_path(project_path),
+        )
+
+    result = _add_vba_history(
         project_path,
         f"Define Arc: {name}",
-        arc_vba,
-        name=name,
-        curve=curve,
-        center=center,
-        radius=radius,
-        start_angle=start_angle,
-        end_angle=end_angle,
-        segments=segments,
+        list(generated.lines),
     )
+    if result.get("status") != "error":
+        result["compatibility"] = generated.metadata(profile)
+        cleanup_target = generated.not_applied.get("wcs_cleanup")
+        if cleanup_target:
+            _run_separate_cleanup(
+                project_path,
+                result,
+                f"Cleanup Arc WCS: {name}",
+                f'WCS.Delete "{cleanup_target}"',
+                target=str(cleanup_target),
+            )
+    return result
 
 
 def define_polygon_solid(
@@ -1280,7 +1347,7 @@ def capture_3d_view(
     import json
     import base64
     from datetime import datetime
-    from .session import open_project, close_project, get_attached_project
+    from .session import close_project, get_attached_project, open_project
     
     if not project_path:
         return error_response("project_path_required", "project_path is required")
@@ -1294,6 +1361,12 @@ def capture_3d_view(
 
     if view_type not in {"custom", "preset"}:
         return error_response("invalid_view_type", f"view_type must be 'custom' or 'preset'")
+    if view_type == "custom":
+        return error_response(
+            "unsupported_feature",
+            "custom 视角尚无经过 CST 2022/2026 官方接口验证的安全实现",
+            phase="compatibility",
+        )
 
     p = Path(project_path)
     if not p.exists():
@@ -1315,94 +1388,94 @@ def capture_3d_view(
     png_path = out_dir / f"{filename_prefix}_{ts_str}.png"
     json_path = out_dir / f"{filename_prefix}_{ts_str}.json"
     
-    # Open project and capture view
+    open_result = open_project(str(p))
+    if open_result.get("status") == "error":
+        return open_result
+    opened_here = not bool(open_result.get("already_open"))
+    capture_result: dict[str, Any]
+
     try:
-        open_project(str(p))
         prj = get_attached_project(str(p))
-        
-        # Set view based on type
-        if view_type == "preset":
-            _set_preset_view(prj, preset_name)
+        if prj is None:
+            capture_result = error_response(
+                "project_attach_failed",
+                "工程打开后没有取得对应的 CST Project 对象",
+                project_path=str(p),
+            )
         else:
-            _set_custom_view(prj, azimuth, elevation, zoom)
-        
-        # Export image
-        _export_image(prj, str(png_path))
-        
-        # Write metadata JSON
-        metadata = {
-            "project_path": str(p.resolve()),
-            "timestamp": ts.isoformat(timespec="seconds"),
-            "view_type": view_type,
-            "view_params": {
-                "azimuth": azimuth if view_type == "custom" else None,
-                "elevation": elevation if view_type == "custom" else None,
-                "zoom": zoom,
-                "preset_name": preset_name if view_type == "preset" else None
-            },
-            "image_path": str(png_path.resolve()),
-            "metadata_path": str(json_path.resolve()),
-            "image_size": {"width": 1920, "height": 1080},
-            "status": "success"
-        }
-        json_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
-        
-        close_project(str(p), save=False, kill_processes=True)
-        
-        result = {
-            "status": "success",
-            "image_path": str(png_path.resolve()),
-            "metadata_path": str(json_path.resolve()),
-            "view_type": view_type,
-            "view_params": {
-                "azimuth": azimuth if view_type == "custom" else None,
-                "elevation": elevation if view_type == "custom" else None,
-                "zoom": zoom,
-                "preset_name": preset_name if view_type == "preset" else None
-            },
-            "tool": "capture-3d-view",
-            "adapter": "cst_runtime_cli"
-        }
-        
-        # Optionally include base64-encoded image data for agent analysis
-        if return_image_data:
-            with open(png_path, "rb") as f:
-                image_bytes = f.read()
-            result["image_data_base64"] = base64.b64encode(image_bytes).decode("ascii")
-        
-        return result
-        
-    except Exception as e:
-        return error_response("export_failed", f"Failed to capture 3D view: {e}")
+            profile = detect_compatibility_profile()
+            generated = plot_export_vba(
+                preset_name=preset_name,
+                output_path=str(png_path),
+                width=1920,
+                height=1080,
+                profile=profile,
+            )
+            history_result = _add_vba_history(
+                str(p),
+                f"Capture 3D View:{preset_name}",
+                list(generated.lines),
+                project=prj,
+            )
+            if history_result.get("status") == "error":
+                capture_result = history_result
+            elif not png_path.is_file() or png_path.stat().st_size <= 0:
+                capture_result = error_response(
+                    "export_file_missing",
+                    "CST 已完成截图 VBA，但 PNG 文件不存在或为空",
+                    project_path=str(p),
+                    image_path=str(png_path),
+                )
+            else:
+                metadata = {
+                    "project_path": str(p),
+                    "timestamp": ts.isoformat(timespec="seconds"),
+                    "view_type": view_type,
+                    "view_params": {
+                        "azimuth": None,
+                        "elevation": None,
+                        "zoom": zoom,
+                        "preset_name": preset_name,
+                    },
+                    "image_path": str(png_path.resolve()),
+                    "metadata_path": str(json_path.resolve()),
+                    "image_size": {"width": 1920, "height": 1080},
+                    "status": "success",
+                }
+                json_path.write_text(
+                    json.dumps(metadata, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                capture_result = {
+                    "status": "success",
+                    "image_path": str(png_path.resolve()),
+                    "metadata_path": str(json_path.resolve()),
+                    "view_type": view_type,
+                    "view_params": metadata["view_params"],
+                    "compatibility": generated.metadata(profile),
+                    "tool": "capture-3d-view",
+                    "adapter": "cst_runtime_cli",
+                }
+                if return_image_data:
+                    image_bytes = png_path.read_bytes()
+                    capture_result["image_data_base64"] = base64.b64encode(
+                        image_bytes
+                    ).decode("ascii")
+    except CSTRuntimeError as exc:
+        capture_result = exc.to_response(project_path=str(p))
+    except Exception as exc:
+        capture_result = error_response(
+            "export_failed",
+            f"Failed to capture 3D view: {exc}",
+            project_path=str(p),
+        )
 
-
-def _set_preset_view(prj, preset_name: str) -> None:
-    """Set camera to preset view using CST COM API RestoreView()."""
-    # CST has predefined view names that can be restored
-    # Verified working: Front, Back, Left, Right, Top, Bottom, Perspective
-    # Note: "Isometric" is NOT a valid CST view name - use "Perspective" instead
-    cst_view_name = preset_name
-    if preset_name == "Isometric":
-        cst_view_name = "Perspective"  # Closest equivalent in CST
-    prj.modeler.Plot.RestoreView(cst_view_name)
-    
-    # Zoom to fit the model in view
-    prj.modeler.Plot.ZoomToStructure()
-
-
-def _set_custom_view(prj, azimuth: float, elevation: float, zoom: float) -> None:
-    """Set camera to custom azimuth/elevation/zoom.
-    
-    Note: CST COM API does not directly support custom view angles.
-    This is a placeholder for future implementation.
-    Current behavior: uses current view without modification.
-    """
-    # TODO: Implement custom view control when CST API is available
-    # Plot.Rotate() requires specific direction constants, not angles
-    pass
-
-
-def _export_image(prj, png_path: str) -> None:
-    """Export current 3D view to PNG file."""
-    # Verified working: prj.modeler.Plot.ExportImage(path, width, height)
-    prj.modeler.Plot.ExportImage(png_path, 1920, 1080)
+    if opened_here:
+        close_result = close_project(str(p), save=False, kill_processes=False)
+        if close_result.get("status") == "error":
+            capture_result["cleanup"] = {
+                "status": "warning",
+                "message": "截图完成后未能关闭本次临时打开的工程",
+                "result": close_result,
+            }
+    return capture_result

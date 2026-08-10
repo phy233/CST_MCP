@@ -593,7 +593,7 @@ def monitor_vba(
     end: float,
     step: float | None = None,
     samples: int | None = None,
-    name: str = "",
+    name: str,
     dimension: str = "Volume",
     subvolume: tuple[float, float, float, float, float, float] | None = None,
     use_subvolume: bool = False,
@@ -602,6 +602,10 @@ def monitor_vba(
     profile: CompatibilityProfile | None = None,
 ) -> CompatibleVBA:
     resolved = _profile(profile)
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise ValidationError("监视器名称不能为空")
+    escaped_name = vba_string(normalized_name)
     if resolved.is_2022:
         count = int(samples) if samples is not None else _sample_count(start, end, float(step))
         if count < 1:
@@ -610,8 +614,7 @@ def monitor_vba(
         count = int(samples) if samples is not None else 1
     lines = ["With Monitor", "    .Reset"]
     if resolved.is_2022:
-        if name:
-            lines.append(f'    .Name "{name}"')
+        lines.append(f'    .Name "{escaped_name}"')
         lines.extend(
             [
                 '    .Domain "Frequency"',
@@ -634,7 +637,7 @@ def monitor_vba(
         lines = [
             "With Monitor",
             "    .Reset",
-            f'    .SetName "{name}"',
+            f'    .SetName "{escaped_name}"',
             '    .SetDimensionType "Farfield"',
             '    .SetDomain "Frequency"',
             f"    .SetDomainRange {start}, {end}",
@@ -663,6 +666,42 @@ def monitor_vba(
         lines.append(f'    .CreateUsingLinearSamples "{start}", "{end}", "{count}"')
     lines.append("End With")
     return CompatibleVBA(tuple(lines), "cst2026")
+
+
+def plot_export_vba(
+    *,
+    preset_name: str,
+    output_path: str,
+    width: int = 1920,
+    height: int = 1080,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """通过 VBA 全局 Plot 对象导出当前三维视图。"""
+    resolved = _profile(profile)
+    view_names = {
+        "Front": "Front",
+        "Back": "Back",
+        "Top": "Top",
+        "Bottom": "Bottom",
+        "Left": "Left",
+        "Right": "Right",
+        "Isometric": "Perspective",
+    }
+    if preset_name not in view_names:
+        raise ValidationError(f"不支持的三维视图预设: {preset_name}")
+    if width <= 0 or height <= 0:
+        raise ValidationError("图像宽度和高度必须大于零")
+
+    escaped_view = vba_string(view_names[preset_name])
+    escaped_path = vba_string(output_path)
+    return CompatibleVBA(
+        (
+            f'Plot.RestoreView "{escaped_view}"',
+            "Plot.ZoomToStructure",
+            f'Plot.ExportImage "{escaped_path}", {width}, {height}',
+        ),
+        resolved.label,
+    )
 
 
 def rectangle_vba(
@@ -918,10 +957,8 @@ def extrude_curve_vba(
     if resolved.is_2026_or_later:
         lines.append(f'    .DeleteProfile "{_bool(delete_profile)}"')
     lines.extend([f'    .Curve "{curve}"', "    .Create", "End With"])
-    if resolved.is_2022 and delete_profile:
-        curve_container = curve.split(":", 1)[0]
-        lines.append(f'Curve.DeleteCurve "{curve_container}"')
-    return CompatibleVBA(tuple(lines), resolved.label)
+    not_applied = {"delete_profile": False} if resolved.is_2022 and not delete_profile else {}
+    return CompatibleVBA(tuple(lines), resolved.label, not_applied=not_applied)
 
 
 def transform_vba(
@@ -981,6 +1018,7 @@ __all__ = [
     "loft_vba",
     "mesh_vba",
     "monitor_vba",
+    "plot_export_vba",
     "polygon3d_vba",
     "rectangle_vba",
     "port_vba",

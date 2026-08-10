@@ -162,10 +162,13 @@ def arc_vba(
         "    .Create",
         "End With",
         f'WCS.Restore "{stored_wcs}"',
-        f'WCS.Delete "{stored_wcs}"',
         *_curve_item_verification_vba(curve, name, source="Arc.Create"),
     ]
-    return CompatibleVBA(tuple(lines), "cst2022")
+    return CompatibleVBA(
+        tuple(lines),
+        "cst2022",
+        not_applied={"wcs_cleanup": stored_wcs},
+    )
 
 
 def polygon_solid_vba(
@@ -222,8 +225,6 @@ def polygon_solid_vba(
             "End With",
         ]
     )
-    if resolved.is_2022:
-        lines.append(f'Curve.DeleteCurve "{curve}"')
     if z_range[0] != 0:
         lines.extend(
             transform_vba(
