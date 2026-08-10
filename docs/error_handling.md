@@ -131,48 +131,20 @@ Proxy 启动、IPC、退出、响应 ID 和超时故障统一为 `transport_erro
 | `rollback_failed` | `rollback` | 后续版本尝试恢复但无法确认成功 |
 | `runtime_error` | `runtime` | 未归入上述阶段的运行时错误 |
 
-## 无 CST 测试
+## 测试入口
 
-Runtime 测试要求普通 Python 3.9：
-
-```powershell
-$env:PYTHONPATH = (Resolve-Path "skills/cst-runtime-cli/scripts").Path
-python -m pytest -q `
-  skills/cst-runtime-cli/tests/test_error_gateway_contracts.py `
-  skills/cst-runtime-cli/tests/test_history_buffer_gateway.py `
-  skills/cst-runtime-cli/tests/test_lib_contracts.py `
-  skills/cst-runtime-cli/tests/test_array.py `
-  skills/cst-runtime-cli/tests/core/test_project.py
-```
-
-根目录 MCP/Proxy 无 CST 测试要求 Python 3.12+，但测试 Worker 仍必须指向 Python 3.9：
+普通 `python -m pytest -q` 只运行离线测试，不启动 CST。真实 CST 2022 测试必须显式运行：
 
 ```powershell
-$env:CST_WORKER_PYTHON = "C:\path\to\python3.9.exe"
-python -m pytest -q
+python -m pytest -q -s --run-cst -m cst_integration
 ```
 
-真实 CST 2022 Worker 还必须能导入对应版本的 CST Python 库。
+真机层通过唯一 Python 3.9 Worker 复用一个隔离工程副本，不再使用每用例复制工程或人工
+观察脚本。建模测试会查询实体真实存在，再调用公开删除工具并确认实体消失；求解器只启动到
+`running=True`，随后强制停止。
 
-测试覆盖异常类、JSON 序列化、`OK/ERROR/missing/malformed/timeout`、延迟状态写入、
-ERROR 后 COM 抛错、stale 状态拒绝、两阶段 Buffer、Worker traceback 隐藏、Proxy/MCP
-transport envelope，以及 lib 对原始错误类型的保留。
-
-## CST 2022 人工验收
-
-人工用例在 `skills/cst-runtime-cli/tests/test_error_gateway_cst2022.py`。它默认跳过，且每个用例
-复制源工程；不要把生产工程直接作为测试目标。
-
-```powershell
-$env:CST_TEST_PROJECT = "D:\path\to\disposable-source.cst"
-$env:CST_RUN_ERROR_GATEWAY_TESTS = "1"
-python -m pytest -s -m "cst_integration" `
-  skills/cst-runtime-cli/tests/test_error_gateway_cst2022.py
-```
-
-用例包括：正常 brick、不存在材料、主动 `Err.Raise`、VBA 语法错误，以及
-`_GetHistory/_TryToUndoNTimes` 的观察性记录。最后一个用例不把一次 Undo 当作事务保证，
-只输出执行前、失败后、Undo 后的 History 证据。
+完整的环境要求、单工程生命周期、清理契约和空结果 xfail 规则见
+[CST MCP 测试指南](testing.md)。
 
 ## 已知限制
 
