@@ -26,12 +26,14 @@ def _fake_batch(monkeypatch):
 
 def test_array_groups_codes_and_uses_only_one_reference(monkeypatch) -> None:
     events = _fake_batch(monkeypatch)
-    translations: list[tuple[str, tuple[float, float, float]]] = []
+    translations: list[tuple[str, tuple[float, float, float], dict]] = []
     deletions: list[str] = []
     monkeypatch.setattr(
         array,
         "translate",
-        lambda project_path, name, vector, **kwargs: translations.append((name, vector)),
+        lambda project_path, name, vector, **kwargs: translations.append(
+            (name, vector, kwargs)
+        ),
     )
     monkeypatch.setattr(
         array,
@@ -67,6 +69,7 @@ def test_array_groups_codes_and_uses_only_one_reference(monkeypatch) -> None:
     assert built_codes == ["a", "b"]
     assert events == ["begin", "flush"]
     assert len(translations) == 2
+    assert all("destination" not in kwargs for _, _, kwargs in translations)
     assert deletions == ["ref_b"]
 
 

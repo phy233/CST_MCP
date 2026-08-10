@@ -31,26 +31,22 @@ def connect_design_environment(pid: int) -> Any:
 
 
 def connect_to_any_design_environment() -> Any:
-    """依次尝试新版连接、PID 连接与 CST 2022 直接构造。"""
+    """只连接现有 Design Environment，绝不在只读检查中隐式新建。"""
     design_environment = _interface().DesignEnvironment
     failures: list[str] = []
-    for name in ("connect_to_any", "connect_to_any_or_new"):
-        connector = getattr(design_environment, name, None)
-        if callable(connector):
-            try:
-                return connector()
-            except Exception as exc:
-                failures.append(f"{name}: {exc}")
+    connector = getattr(design_environment, "connect_to_any", None)
+    if callable(connector):
+        try:
+            return connector()
+        except Exception as exc:
+            failures.append(f"connect_to_any: {exc}")
     for pid in running_design_environment_pids():
         try:
             return connect_design_environment(pid)
         except Exception as exc:
             failures.append(f"connect({pid}): {exc}")
-    try:
-        return design_environment()
-    except Exception as exc:
-        failures.append(f"DesignEnvironment(): {exc}")
-    raise RuntimeError("无法连接 CST DesignEnvironment；" + "；".join(failures))
+    detail = "；".join(failures) if failures else "没有发现运行中的 Design Environment"
+    raise RuntimeError("无法连接现有 CST DesignEnvironment；" + detail)
 
 
 def create_design_environment() -> Any:

@@ -268,7 +268,6 @@ def build_array(
                         vector=(element.x, element.y, element.z),
                         multiple_objects=True,
                         repetitions=1,
-                        destination=built.component,
                     )
                     _raise_if_failed(translated)
                 instances_created += 1

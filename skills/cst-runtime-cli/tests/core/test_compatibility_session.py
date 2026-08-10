@@ -40,16 +40,27 @@ def test_connect_falls_back_to_pid(monkeypatch):
     assert session.connect_to_any_design_environment() is expected
 
 
-def test_connect_falls_back_to_direct_constructor(monkeypatch):
-    expected = object()
-
+def test_connect_never_creates_environment_during_read_only_lookup(monkeypatch):
     class DesignEnvironment:
+        @staticmethod
+        def connect_to_any():
+            raise RuntimeError("没有现有环境")
+
+        @staticmethod
+        def connect_to_any_or_new():
+            raise AssertionError("只读连接不得新建环境")
+
         def __new__(cls):
-            return expected
+            raise AssertionError("只读连接不得调用构造器")
 
     monkeypatch.setattr(session, "_interface", lambda: SimpleNamespace(DesignEnvironment=DesignEnvironment))
 
-    assert session.connect_to_any_design_environment() is expected
+    try:
+        session.connect_to_any_design_environment()
+    except RuntimeError as exc:
+        assert "无法连接现有 CST DesignEnvironment" in str(exc)
+    else:
+        raise AssertionError("没有现有环境时应明确失败")
 
 
 def test_active_project_supports_property_and_method_forms():
