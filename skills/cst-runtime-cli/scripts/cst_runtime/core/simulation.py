@@ -245,7 +245,13 @@ def rebuild_structure(project_path: str) -> dict[str, Any]:
     result = _single_vba_pops(
         project_path,
         "Rebuild",
-        'If Not Rebuild Then ReportError "Rebuild returned False"',
+        "\n".join(
+            [
+                "If Not Rebuild Then",
+                '    ReportError "Rebuild returned False"',
+                "End If",
+            ]
+        ),
     )
     if result.get("status") != "error":
         result["results_deleted"] = True
