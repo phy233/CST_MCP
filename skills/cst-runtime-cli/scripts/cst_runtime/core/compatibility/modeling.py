@@ -7,6 +7,7 @@ from typing import Any, Iterable
 
 from ..errors import ValidationError
 from .base import CompatibilityProfile, detect_compatibility_profile, unsupported_feature
+from .execution import vba_string
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,34 @@ def _profile(profile: CompatibilityProfile | None) -> CompatibilityProfile:
 
 def _bool(value: bool) -> str:
     return "True" if value else "False"
+
+
+def _curve_container_guard_vba(curve: str) -> tuple[str, ...]:
+    """确保曲线容器存在，避免曲线项被静默丢弃。"""
+    escaped_curve = vba_string(curve)
+    tree_path = vba_string(f"Curves\\{curve}")
+    return (
+        f'If Not SelectTreeItem("{tree_path}") Then',
+        f'    Curve.NewCurve "{escaped_curve}"',
+        "End If",
+    )
+
+
+def _curve_item_verification_vba(
+    curve: str,
+    name: str,
+    *,
+    source: str = "Polygon3D.Create",
+) -> tuple[str, ...]:
+    """验证曲线项，并通过现有 History 状态文件网关报告失败。"""
+    tree_path = vba_string(f"Curves\\{curve}\\{name}")
+    full_name = vba_string(f"{curve}:{name}")
+    escaped_source = vba_string(source)
+    return (
+        f'If Not SelectTreeItem("{tree_path}") Then',
+        f'    ReportError "{escaped_source}: Curve item was not created: {full_name}"',
+        "End If",
+    )
 
 
 def _normalize_temperature_unit(value: str) -> str:
@@ -636,6 +665,33 @@ def monitor_vba(
     return CompatibleVBA(tuple(lines), "cst2026")
 
 
+def rectangle_vba(
+    *,
+    name: str,
+    curve: str,
+    x_min: float | str,
+    x_max: float | str,
+    y_min: float | str,
+    y_max: float | str,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """创建矩形曲线项，并满足 CST 2022 的曲线容器前置条件。"""
+    resolved = _profile(profile)
+    lines = [
+        *_curve_container_guard_vba(curve),
+        "With Rectangle",
+        "    .Reset",
+        f'    .Name "{vba_string(name)}"',
+        f'    .Curve "{vba_string(curve)}"',
+        f'    .Xrange "{vba_string(str(x_min))}", "{vba_string(str(x_max))}"',
+        f'    .Yrange "{vba_string(str(y_min))}", "{vba_string(str(y_max))}"',
+        "    .Create",
+        "End With",
+        *_curve_item_verification_vba(curve, name, source="Rectangle.Create"),
+    ]
+    return CompatibleVBA(tuple(lines), resolved.label)
+
+
 def polygon3d_vba(
     name: str,
     curve: str,
@@ -646,25 +702,41 @@ def polygon3d_vba(
     resolved = _profile(profile)
     normalized_points = [list(point) for point in points]
     normalized_points = [point for point in normalized_points if len(point) >= 3]
+    if len(normalized_points) < 3:
+        raise ValidationError("三维多边形至少需要三个有效点")
+
+    escaped_name = vba_string(name)
+    escaped_curve = vba_string(curve)
     lines = [
+        *_curve_container_guard_vba(curve),
         "With Polygon3D",
         "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Curve "{curve}"',
+        f'    .Name "{escaped_name}"',
+        f'    .Curve "{escaped_curve}"',
     ]
     if resolved.is_2022:
         for values in normalized_points:
             lines.append(
-                f'    .Point "{values[0]}", "{values[1]}", "{values[2]}"'
+                f'    .Point "{vba_string(str(values[0]))}", '
+                f'"{vba_string(str(values[1]))}", '
+                f'"{vba_string(str(values[2]))}"'
             )
     else:
         encoded_points = ", ".join(
-            f'"{values[0]}:{values[1]}:{values[2]}"'
+            f'"{vba_string(str(values[0]))}:'
+            f'{vba_string(str(values[1]))}:'
+            f'{vba_string(str(values[2]))}"'
             for values in normalized_points
         )
         lines.append(f"    .Point {encoded_points}")
         lines.append('    .Closed "False"')
-    lines.extend(["    .Create", "End With"])
+    lines.extend(
+        [
+            "    .Create",
+            "End With",
+            *_curve_item_verification_vba(curve, name),
+        ]
+    )
     return CompatibleVBA(tuple(lines), resolved.label)
 
 
@@ -682,6 +754,7 @@ def analytical_curve_vba(
     """生成解析曲线；2026 官方接口只能等价表达当前工作平面内的曲线。"""
     resolved = _profile(profile)
     lines = [
+        *_curve_container_guard_vba(curve),
         "With AnalyticalCurve",
         "    .Reset",
         f'    .Name "{name}"',
@@ -715,8 +788,57 @@ def analytical_curve_vba(
                 f'    .Maxvalue "{param_end}"',
             ]
         )
-    lines.extend(["    .Create", "End With"])
+    lines.extend(
+        [
+            "    .Create",
+            "End With",
+            *_curve_item_verification_vba(
+                curve,
+                name,
+                source="AnalyticalCurve.Create",
+            ),
+        ]
+    )
     return CompatibleVBA(tuple(lines), resolved.label)
+
+
+def loft_vba(
+    *,
+    name: str,
+    component: str,
+    material: str,
+    tangency: float,
+    minimize_twist: bool,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """生成 Loft；CST 2022 官方对象没有 Minimizetwist。"""
+    resolved = _profile(profile)
+    lines = [
+        "With Loft",
+        "    .Reset",
+        f'    .Name "{vba_string(name)}"',
+        f'    .Component "{vba_string(component)}"',
+        f'    .Material "{vba_string(material)}"',
+        f'    .Tangency "{tangency}"',
+    ]
+    if resolved.is_2026_or_later:
+        lines.append(f'    .Minimizetwist "{_bool(minimize_twist)}"')
+    lines.extend(["    .CreateNew", "End With"])
+    not_applied = {"minimize_twist": minimize_twist} if resolved.is_2022 else {}
+    return CompatibleVBA(tuple(lines), resolved.label, not_applied=not_applied)
+
+
+def change_solver_type_vba(
+    *,
+    solver_type: str,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """使用 VBA Sub 的无括号语法切换求解器。"""
+    resolved = _profile(profile)
+    return CompatibleVBA(
+        (f'ChangeSolverType "{vba_string(solver_type)}"',),
+        resolved.label,
+    )
 
 
 def postprocess_activation_vba(
@@ -779,6 +901,10 @@ def extrude_curve_vba(
     profile: CompatibilityProfile | None = None,
 ) -> CompatibleVBA:
     resolved = _profile(profile)
+    if resolved.is_2022 and ":" not in curve:
+        raise ValidationError(
+            'CST 2022 ExtrudeCurve.curve 必须是完整曲线项名 "container:item"'
+        )
     lines = [
         "With ExtrudeCurve",
         "    .Reset",
@@ -793,7 +919,8 @@ def extrude_curve_vba(
         lines.append(f'    .DeleteProfile "{_bool(delete_profile)}"')
     lines.extend([f'    .Curve "{curve}"', "    .Create", "End With"])
     if resolved.is_2022 and delete_profile:
-        lines.append(f'Curve.DeleteCurve "{curve}"')
+        curve_container = curve.split(":", 1)[0]
+        lines.append(f'Curve.DeleteCurve "{curve_container}"')
     return CompatibleVBA(tuple(lines), resolved.label)
 
 
@@ -850,9 +977,12 @@ __all__ = [
     "CompatibleVBA",
     "background_vba",
     "extrude_curve_vba",
+    "change_solver_type_vba",
+    "loft_vba",
     "mesh_vba",
     "monitor_vba",
     "polygon3d_vba",
+    "rectangle_vba",
     "port_vba",
     "solver_acceleration_vba",
     "solver_vba",

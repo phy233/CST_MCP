@@ -125,7 +125,11 @@ def get_open_project(environment: Any, project_path: str) -> Any:
 
 
 def activate_project(environment: Any, project: Any) -> None:
-    """激活工程，兼容显式 setter 与可写属性。"""
+    """激活工程；优先使用 CST 2022/2026 都公开的 Project.activate。"""
+    activator = getattr(project, "activate", None)
+    if callable(activator):
+        activator()
+        return
     setter = getattr(environment, "set_active_project", None)
     if callable(setter):
         setter(project)

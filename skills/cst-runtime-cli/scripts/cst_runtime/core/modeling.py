@@ -13,12 +13,15 @@ from .compatibility.modeling import (
     background_vba,
     cone_vba,
     cylinder_vba,
+    change_solver_type_vba,
     extrude_curve_vba,
+    loft_vba,
     mesh_vba,
     monitor_vba,
     postprocess_activation_vba,
     polygon3d_vba,
     port_vba,
+    rectangle_vba,
     solver_vba,
     transform_vba,
     units_vba,
@@ -268,9 +271,9 @@ def define_brick(
         f'    .Name "{name}"',
         f'    .Component "{component}"',
         f'    .Material "{material}"',
-        f"    .Xrange {x_min}, {x_max}",
-        f"    .Yrange {y_min}, {y_max}",
-        f"    .Zrange {z_min}, {z_max}",
+        f'    .Xrange "{x_min}", "{x_max}"',
+        f'    .Yrange "{y_min}", "{y_max}"',
+        f'    .Zrange "{z_min}", "{z_max}"',
         "    .Create",
         "End With",
     ]
@@ -386,17 +389,17 @@ def define_rectangle(
     y_min: float | str,
     y_max: float | str,
 ) -> dict[str, Any]:
-    vba = [
-        "With Rectangle",
-        "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Curve "{curve}"',
-        f"    .Xrange {x_min}, {x_max}",
-        f"    .Yrange {y_min}, {y_max}",
-        "    .Create",
-        "End With",
-    ]
-    return _add_vba_history(project_path, f"Define Rectangle:{name}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Rectangle:{name}",
+        rectangle_vba,
+        name=name,
+        curve=curve,
+        x_min=x_min,
+        x_max=x_max,
+        y_min=y_min,
+        y_max=y_max,
+    )
 
 
 def boolean_subtract(project_path: str, target: str, tool: str) -> dict[str, Any]:
@@ -449,8 +452,12 @@ def change_frequency_range(project_path: str, min_frequency: str, max_frequency:
 
 
 def change_solver_type(project_path: str, solver_type: str) -> dict[str, Any]:
-    vba = f'ChangeSolverType("{solver_type}")'
-    return _single_vba(project_path, f"change solver type to {solver_type}", vba)
+    return _submit_versioned_vba(
+        project_path,
+        f"change solver type to {solver_type}",
+        change_solver_type_vba,
+        solver_type=solver_type,
+    )
 
 
 def define_background(project_path: str, background_type: str = "Normal") -> dict[str, Any]:
@@ -933,7 +940,7 @@ def create_horn_segment(project_path: str, segment_id: int, bottom_radius: float
 
 
 def _profile_brick(project_path, project, component, name, material, xmin, xmax, ymin, ymax, z):
-    vba = f'With Brick\n    .Name "{name}"\n    .Component "{component}"\n    .Material "{material}"\n    .Xrange "{xmin}", "{xmax}"\n    .Yrange "{ymin}", "{ymax}"\n    .Zrange "{z}", "{z}"\n    .Create\nEnd With'
+    vba = f'With Brick\n    .Reset\n    .Name "{name}"\n    .Component "{component}"\n    .Material "{material}"\n    .Xrange "{xmin}", "{xmax}"\n    .Yrange "{ymin}", "{ymax}"\n    .Zrange "{z}", "{z}"\n    .Create\nEnd With'
     return _single_vba(project_path, f"Create:{name}", vba, project=project)
 
 
@@ -942,9 +949,24 @@ def _pick_face(project_path, project, component, name):
 
 
 def _do_loft(project_path, project, name, component, material, tangency, minimize_twist):
-    twist = "true" if minimize_twist else "false"
-    vba = f'With Loft\n    .Reset\n    .Name "{name}"\n    .Component "{component}"\n    .Material "{material}"\n    .Tangency "{tangency}"\n    .Minimizetwist "{twist}"\n    .CreateNew\nEnd With'
-    return _single_vba(project_path, f"Loft:{name}", vba, project=project)
+    profile = detect_compatibility_profile()
+    generated = loft_vba(
+        name=name,
+        component=component,
+        material=material,
+        tangency=tangency,
+        minimize_twist=minimize_twist,
+        profile=profile,
+    )
+    result = _add_vba_history(
+        project_path,
+        f"Loft:{name}",
+        list(generated.lines),
+        project=project,
+    )
+    if result.get("status") != "error":
+        result["compatibility"] = generated.metadata(profile)
+    return result
 
 
 def _delete_temp(project_path, project, component, name):
@@ -1193,18 +1215,16 @@ def define_loft(project_path: str, name: str, component: str, material: str, tan
     mat_result = _define_material(project_path, material)
     if mat_result.get("status") == "error":
         return mat_result
-    twist = "true" if minimize_twist else "false"
-    return _add_vba_history(project_path, f"Define Loft:{name}", [
-        "With Loft",
-        "    .Reset",
-        f'    .Name "{name}"',
-        f'    .Component "{component}"',
-        f'    .Material "{material}"',
-        f'    .Tangency "{tangency}"',
-        f'    .Minimizetwist "{twist}"',
-        "    .CreateNew",
-        "End With",
-    ])
+    return _submit_versioned_vba(
+        project_path,
+        f"Define Loft:{name}",
+        loft_vba,
+        name=name,
+        component=component,
+        material=material,
+        tangency=tangency,
+        minimize_twist=minimize_twist,
+    )
 
 
 def _ascii_export(project_path: str, tree_path: str, file_path: str, history_name: str) -> dict[str, Any]:

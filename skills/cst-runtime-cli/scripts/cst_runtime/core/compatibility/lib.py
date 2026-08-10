@@ -6,7 +6,14 @@ import re
 from typing import Sequence
 
 from .base import CompatibilityProfile
-from .modeling import CompatibleVBA, _bool, _profile, transform_vba
+from .modeling import (
+    CompatibleVBA,
+    _bool,
+    _curve_container_guard_vba,
+    _curve_item_verification_vba,
+    _profile,
+    transform_vba,
+)
 
 
 def boundary_per_face_vba(
@@ -105,6 +112,7 @@ def arc_vba(
     if not resolved.is_2022:
         return CompatibleVBA(
             (
+                *_curve_container_guard_vba(curve),
                 "With Arc",
                 "    .Reset",
                 f'    .Name "{name}"',
@@ -116,6 +124,7 @@ def arc_vba(
                 f"    .Segments {segments}",
                 "    .Create",
                 "End With",
+                *_curve_item_verification_vba(curve, name, source="Arc.Create"),
             ),
             "cst2026",
         )
@@ -130,6 +139,7 @@ def arc_vba(
     token = re.sub(r"[^A-Za-z0-9_]", "_", name)[:32] or "Arc"
     stored_wcs = f"__CSTRuntime_{token}_WCS"
     lines = [
+        *_curve_container_guard_vba(curve),
         f'WCS.Store "{stored_wcs}"',
         'WCS.ActivateWCS "local"',
         f"WCS.SetOrigin 0, 0, {center[2]}",
@@ -153,6 +163,7 @@ def arc_vba(
         "End With",
         f'WCS.Restore "{stored_wcs}"',
         f'WCS.Delete "{stored_wcs}"',
+        *_curve_item_verification_vba(curve, name, source="Arc.Create"),
     ]
     return CompatibleVBA(tuple(lines), "cst2022")
 
@@ -173,6 +184,7 @@ def polygon_solid_vba(
     curve = f"__cst_runtime_{token}"
     profile_name = "profile"
     lines = [
+        *_curve_container_guard_vba(curve),
         "With Polygon",
         "    .Reset",
         f'    .Name "{profile_name}"',
@@ -186,6 +198,11 @@ def polygon_solid_vba(
             f'    .LineTo "{vertices[0][0]}", "{vertices[0][1]}"',
             "    .Create",
             "End With",
+            *_curve_item_verification_vba(
+                curve,
+                profile_name,
+                source="Polygon.Create",
+            ),
             "With ExtrudeCurve",
             "    .Reset",
             f'    .Name "{name}"',
