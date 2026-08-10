@@ -1,9 +1,55 @@
-# CST 官方 Python API 参考手册
+# CST 2022/2026 官方 Python API 参考手册
 
-> CST Studio Suite 2026 — `cst.interface` / `cst.results` / `cst.units`
+> CST Studio Suite 2022 与 2026 — `cst.interface` / `cst.results` / `cst.units`
+>
+> 2022 一手来源：`D:\Program Files (x86)\CST Studio Suite 2022\Online Help\mergedProjects\Python\python_overview.htm`。该入口链接到同一安装目录中的 `Online Help\Python\main.html`，具体签名位于 `Online Help\Python\source\cst.interface.html` 与 `cst.results.html`。
+
+## 0. CST 2022 与 2026 的关键 Python 差异
+
+本手册主体保留 2026 的完整能力说明；本节是运行 `cst_runtime` 时必须优先遵守的 2022 兼容边界。不能把 2026 对象是否存在、属性/方法形态或参数表直接套到 2022。
+
+### 0.1 `cst.interface` 签名差异
+
+| 能力 | CST 2022 官方签名/形态 | CST 2026 用法 | 兼容要求 |
+|---|---|---|---|
+| 构造 DE | `DesignEnvironment(mode=StartMode.New, pid=-1, options=None, gui_linux=None, process_info=None)` | 新版构造器可增加参数 | 只向 2022 传其文档列出的参数；普通新建优先 `DesignEnvironment.new()`。 |
+| 连接 DE | `connect(pid: int)`、`connect_to_any()`、`connect_to_any_or_new()` | 同名接口仍可用 | `pid` 必须是整数；按 PID 连接时不要传管道字符串。 |
+| DE 进程号 | `de.pid()` | 新版封装可能暴露为属性 | 兼容层必须同时接受 callable 和属性值。 |
+| DE 版本 | `DesignEnvironment.version()` 静态方法 | 新版封装可能暴露为属性/其他版本信息 | 不可固定写成 `de.version`；本工程以官方模块发布信息为主进行版本识别。 |
+| 取得工程 | `active_project()`、`get_open_project(path: str)`、`list_open_projects()` | 新版可能增加工程对象快捷入口 | 2022 的 `get_open_project` 参数是工程路径，不是显示名称。 |
+| 激活工程 | `project.activate()` | 新版可能另有 DE setter | 两版共同的公开入口是 `Project.activate()`，兼容层应优先调用它。 |
+| 工程类型 | `project.project_type()` | 新版文档/封装可能表现为属性 | 兼容层应同时接受方法和属性。 |
+| 保存工程 | `project.save(path: str='', include_results: bool=True)` | `save()` 仍可保存当前工程 | 2022 新建工程首次保存可直接传路径；第二参数是布尔值，不是文件名。 |
+| 工程文件名 | `project.filename()` | 运行时 Project 仍为方法；`results.ProjectFile.filename` 是属性 | 必须区分在线 `Project` 与离线 `ProjectFile`，不能统一写成同一种形态。 |
+| `model3d` | 2022 `Project` 官方页未提供；建模入口是 `project.modeler` | 2026 提供 `project.model3d` 历史控制对象 | 2022 代码不得无保护访问 `model3d`。 |
+| 即时 VBA | `project.schematic.execute_vba_code(vba_code, timeout=None)` | 2026 已移除该公开入口 | 2022 可用于只读探测；需要历史记录与统一错误状态时仍走 `modeler.add_to_history`。 |
+| History | `modeler.add_to_history(header, vba_code, timeout=None)` | 同名入口 | `header`、`vba_code` 都是字符串；错误完成状态由本工程的 VBA 状态文件网关确认。 |
+
+### 0.2 `cst.results` 签名差异
+
+2022 官方结果模块只记录 `ProjectFile`、`ResultModule` 和一维 `ResultItem`，没有 2026 的 `Result2DItem`、`Quantity`、`ComplexQuantity`、`Unit` 等对象。
+
+| 能力 | CST 2022 官方签名 | 注意事项 |
+|---|---|---|
+| 打开结果工程 | `ProjectFile(filepath: str, allow_interactive: bool=False)`，或空构造后 `init(filepath, allow_interactive=False)` | `allow_interactive=True` 只能读取已经保存到磁盘的状态；CST 中未保存的变化可能使数据过期或不完整。 |
+| 文件名 | `ProjectFile.filename` 属性 | 这里没有括号，与在线 `Project.filename()` 不同。 |
+| 结果模块 | `get_3d()`、`get_schematic()` | 都返回 `ResultModule`。 |
+| 树枚举 | `get_tree_items(filter: str='0D/1D')` | 2022 文档没有承诺新版所有过滤器；本工程只对已验证的 `0D/1D`、`colormap` 做直接调用，其余走兼容查询或拒绝。 |
+| Run ID | `get_run_ids(treepath, skip_nonparametric=False)` | 非参数化结果的合法 Run ID 可以是 `0`；不能用真假值判断其是否存在。 |
+| 结果项 | `get_result_item(treepath, run_id=0, load_impedances=True)` | `run_id` 是整数；`load_impedances` 是布尔值。 |
+| 参数组合 | `get_parameter_combination(run_id: int)` | 对非参数化 Run 可能没有组合元数据；已经读到曲线时，不应让该可选元数据阻断导出。 |
+| 二维结果 | 2022 无 `get_result2d_item` | 必须能力检测；可枚举 `colormap`，但不能伪装成 2026 的二维对象 API。 |
+
+### 0.3 本工程的调用纪律
+
+- core 业务代码只使用稳定语义；函数名、参数形态和对象缺失的适配统一放在 `core/compatibility/`。
+- 2022 的即时 VBA 适合读取版本、临时目录或查询值；建模、删除、变换等需要 History 和可审计错误的操作走 `add_to_history` 状态文件网关。
+- `add_to_history` 的 Python 返回值不能替代后续状态检查。成功必须以状态文件或可观察的工程状态为准。
+- 任何 2026 专属对象都必须先做能力检测；不允许通过捕获任意异常后假装成功。
 
 ## 目录
 
+0. [CST 2022 与 2026 的关键 Python 差异](#0-cst-2022-与-2026-的关键-python-差异)
 1. [架构总览](#1-架构总览)
 2. [cst.interface — 运行时连接](#2-cstinterface--运行时连接)
    - [DesignEnvironment](#21-designenvironment)
@@ -350,7 +396,7 @@ pf.list_subprojects()          # → list[str]
 sub = pf.load_subproject("name")  # → ProjectFile
 ```
 
-**支持：** 2025/2026 版本，未打包（unpacked）且未加密的 `.cst` 文件。
+**支持：** CST 2022 官方文档已经提供该离线接口；较新版本继续提供。工程文件需要是未打包（unpacked）且未加密的 `.cst` 文件。
 
 ---
 

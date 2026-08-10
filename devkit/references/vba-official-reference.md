@@ -1,6 +1,6 @@
-# CST Studio Suite 2026 VBA 官方对象参考
+# CST Studio Suite 2022/2026 VBA 官方对象参考
 
-> 来源：`C:\Program Files\CST Studio Suite 2026\Online Help\mergedProjects\VBA_3D\` 官方 HTML 文档（150+ 页），逐对象提取属性签名、类型、枚举值、官方示例。
+> 2026 来源：`C:\Program Files\CST Studio Suite 2026\Online Help\mergedProjects\VBA_3D\` 官方 HTML 文档（150+ 页）；2022 差异逐页复核自 `D:\Program Files (x86)\CST Studio Suite 2022\Online Help\mergedProjects\VBA_3D\`。
 >
 > 与 `vba-reference.md` 的关系：本文档提供**完整的官方 API 签名**，`vba-reference.md` 提供**生产验证的组合模板和使用模式**。
 
@@ -119,6 +119,44 @@ Set mws = app.OpenFile("C:\project.cst")  ' 打开已有工程
 |---|---|---|
 | `AddToHistoryNoModelChange(caption, contents)` | `AddToHistory(caption, contents)` | 2022 没有“不标记模型变更”的变体；旧方法会写入历史树，并可能使结果失效。 |
 | `GetProjectPathName(type)` | `GetProjectPath(type)` | 方法名不同，参数 `type` 的语义相同。 |
+
+#### CST 2022 History 拼接与错误回传要求
+
+`Modeler.add_to_history(header, vba_code, timeout=None)` 的第二个参数必须是一段完整、可独立编译的 VBA 文本。Python 生成器应遵守以下规则：
+
+1. **使用真实换行拼接。** 推荐 `"\n".join(lines)`；不要把两个字符 `\`、`n` 当作 VBA 换行。每个 `With` 必须有配对的 `End With`，每个 `If` 必须有配对的 `End If`。
+2. **区分 Python 字符串转义与 VBA 字符串转义。** VBA 字符串内部的 `"` 要写成两个双引号 `""`；Windows 路径中的反斜杠对 VBA 没有特殊含义，但在普通 Python 字面量中需要写成 `\\` 或使用原始字符串。
+3. **按 VBA 的调用位置决定括号。** 作为语句调用时写 `ReportError "message"`、`.Xrange "0", "1"`；只有在表达式、赋值或条件中取返回值时才写 `If Not SelectTreeItem("...") Then`。不要把 Python 的函数调用括号规则机械套到 VBA Sub 调用。
+4. **保留 CST 参数表达式。** 官方方法表把许多坐标标为 `double`，但 2022 官方示例仍用字符串传入 `"a+2"` 等工程参数表达式。因此生成建模 VBA 时，数值或表达式通常应作为带引号字符串传给 CST 对象；VBA 自身的循环索引、文件号和布尔条件则使用真实 `Long`、`Integer`、`Boolean`。
+5. **数组必须先定维。** 传给 `StoreParameters`、`GetTreeResults` 等 `variant/string_array` 参数的变量要先 `Dim`/`ReDim`，并按官方要求传变量本身，不能把 Python 列表文本直接拼成 VBA 数组参数。
+6. **曲线名有两层。** `Curve.NewCurve "container"` 创建容器；`Polygon`、`Polygon3D`、`Arc`、`AnalyticalCurve` 的 `.Curve` 只填容器名；`ExtrudeCurve.Curve` 必须填完整曲线项名 `"container:item"`。创建曲线项前要保证容器已存在。
+7. **统一使用现有状态文件网关。** CST 2022 用 `ReportError "..."` 终止当前 VBA，并由外层 `On Error GoTo` 捕获 `Err.Number`/`Err.Description`，写入状态文件供 Python 解析。不要在生成器内使用 `Err.Raise`、`Erl` 或另建错误协议。
+8. **提交返回值不是最终证据。** 2022 VBA 帮助把 `AddToHistory` 的布尔值描述为创建并执行成功；但 Python 桥接层仍必须等状态文件或核对实体/结果状态，避免把 COM 提交成功误判为 History 内部执行成功。
+
+本工程对应的安全骨架如下：
+
+```python
+lines = [
+    'If Not SelectTreeItem("Curves\\profile") Then',
+    '    Curve.NewCurve "profile"',
+    'End If',
+    'With Polygon',
+    '    .Reset',
+    '    .Name "outline"',
+    '    .Curve "profile"',
+    '    .Point "0", "0"',
+    '    .LineTo "10", "0"',
+    '    .LineTo "0", "10"',
+    '    .LineTo "0", "0"',
+    '    .Create',
+    'End With',
+    'If Not SelectTreeItem("Curves\\profile\\outline") Then',
+    '    ReportError "Polygon.Create: curve item was not created"',
+    'End If',
+]
+vba_code = "\n".join(lines)
+project.modeler.add_to_history("Create outline", vba_code)
+```
 
 ---
 
@@ -599,7 +637,9 @@ End With
 
 ### 5.9 Polygon3D（三维多边形曲线）
 
-**文件：** `common_vbacurves\common_vbacurves_polygon3d_object.htm`
+**2026 文件：** `common_vbacurves\common_vbacurves_polygon3d_object.htm`
+
+**2022 文件：** `common_vbacurves\common_vbacurves_polygon3d.htm`
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
@@ -639,6 +679,8 @@ End With
 | `AnalyticalCurve` | `CurveExpression`、`ParameterName`、`Minvalue` / `Maxvalue` | `LawX`、`LawY`、`LawZ` 与 `ParameterRange(tmin, tmax)`。 |
 | `Polygon3D` | 单次传入字符串坐标序列及 `Closed` | 每个点调用一次 `Point(x, y, z)`；无 `Closed` 属性。 |
 
+2022 的 `Polygon3D.Curve(curvename)` 明确要求曲线容器已经存在。`Point` 每调用一次只追加一个点；官方页没有规定自动闭合，也没有要求自动重复首点。是否重复首点应由上层业务语义决定，通用生成器不能擅自改变开闭状态。
+
 ```vba
 ' CST 2022：三维多边形曲线
 With Polygon3D
@@ -669,7 +711,34 @@ End With
 | `Taper` | double | 锥度角度（度） |
 | `Drafttype` | string | `"Round"` / `"Sharp"` / `"Apex"` |
 
-### 6.2 Loft（放样）
+### 6.2 ExtrudeCurve（拉伸曲线项）
+
+**2022 文件：** `common_vbacurves\common_vbacurves_extrudecurve_object.htm`
+
+| 方法 | CST 2022 参数 | 说明 |
+|---|---|---|
+| `Name` / `Component` / `Material` | `name` | 输出实体信息。 |
+| `Thickness` / `Twistangle` / `Taperangle` | `double` | 允许用带引号字符串保留工程参数表达式。 |
+| `Curve` | `name curveitemname` | 必须是完整曲线项名，例如 `"curve1:circle1"`，不能只传容器 `"curve1"`。 |
+| `Create` | 无参数 | 前述属性完整后创建实体。 |
+
+2022 没有 2026 的 `DeleteProfile(bool)`。如需清理临时轮廓，应在 `Create` 成功并经树节点验证后调用 `Curve.DeleteCurve "container"`；不要在创建前删除容器。
+
+```vba
+With ExtrudeCurve
+    .Reset
+    .Name "solid2"
+    .Component "component1"
+    .Material "Vacuum"
+    .Thickness "2"
+    .Twistangle "0"
+    .Taperangle "0"
+    .Curve "curve1:circle1"
+    .Create
+End With
+```
+
+### 6.3 Loft（放样）
 
 **文件：** `common_vbaloft\common_vbaloftloft_object.htm`
 
@@ -680,7 +749,11 @@ End With
 | `TaperStyle` | string | `"Apex"` / `"Cone"` |
 | `Scale` | bool | 是否缩放 |
 
-### 6.3 Rotate（旋转）
+#### CST 2022 兼容用法
+
+2022 官方 `Loft` 页只记录 `Reset`、`Name`、`Component`、`Material`、`Tangency` 和 `Create/CreateNew`，没有 `Minimizetwist`。因此 2022 模板必须省略该指令，并在返回元数据的 `not_applied` 中明确记录请求值；不能把“未应用”伪装成已生效。
+
+### 6.4 Rotate（旋转）
 
 **文件：** `common_vbarotateo\common_vbarotateo_rotate_object.htm`
 
