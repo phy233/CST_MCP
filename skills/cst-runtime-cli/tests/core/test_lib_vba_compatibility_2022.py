@@ -75,10 +75,14 @@ def test_arc_uses_legacy_points_and_restores_wcs() -> None:
             profile=CST2022,
         )
     )
+    assert 'If Not SelectTreeItem("Curves\\curve1") Then' in text
+    assert 'Curve.NewCurve "curve1"' in text
     assert ".Xcenter" in text
     assert '.UseAngle "True"' in text
     assert "WCS.Restore" in text
     assert "WCS.Delete" in text
+    assert 'ReportError "Arc.Create: Curve item was not created: curve1:arc1"' in text
+    assert "Err.Raise" not in text
     assert ".StartAngle" not in text
 
 
@@ -93,9 +97,15 @@ def test_polygon_builds_2d_profile_then_extrudes_and_cleans_up() -> None:
             profile=CST2022,
         )
     )
+    assert 'If Not SelectTreeItem("Curves\\__cst_runtime_plate") Then' in text
+    assert 'Curve.NewCurve "__cst_runtime_plate"' in text
     assert "With Polygon\n" in text
     assert "With Polygon3D" not in text
+    assert 'If Not SelectTreeItem("Curves\\__cst_runtime_plate\\profile") Then' in text
+    assert 'ReportError "Polygon.Create: Curve item was not created: __cst_runtime_plate:profile"' in text
+    assert "Err.Raise" not in text
     assert "With ExtrudeCurve" in text
+    assert '.Curve "__cst_runtime_plate:profile"' in text
     assert "Curve.DeleteCurve" in text
     assert ".DeleteProfile" not in text
 

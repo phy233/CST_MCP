@@ -6,15 +6,18 @@ from cst_runtime.core.compatibility.base import CompatibilityProfile
 from cst_runtime.core.compatibility.modeling import (
     analytical_curve_vba,
     background_vba,
+    change_solver_type_vba,
     cone_vba,
     cylinder_vba,
     extrude_curve_vba,
+    loft_vba,
     mesh_vba,
     mesh_fpbavoid_nonreg_unite_vba,
     monitor_vba,
     polygon3d_vba,
     postprocess_activation_vba,
     port_vba,
+    rectangle_vba,
     solver_acceleration_vba,
     solver_vba,
     transform_vba,
@@ -346,20 +349,74 @@ def test_polygon3d_uses_version_specific_point_signatures() -> None:
     legacy = _text(polygon3d_vba("p", "c", points, profile=CST2022))
     modern = _text(polygon3d_vba("p", "c", points, profile=CST2026))
 
+    assert 'If Not SelectTreeItem("Curves\\c") Then' in legacy
+    assert 'Curve.NewCurve "c"' in legacy
     assert '.Point "0", "0", "0"' in legacy
+    assert legacy.count('.Point "0", "0", "0"') == 1
     assert '.Point "0:0:0", "1:2:0", "2:0:0"' in modern
     assert '.Closed "False"' in modern
+    assert 'If Not SelectTreeItem("Curves\\c\\p") Then' in modern
+    assert 'ReportError "Polygon3D.Create: Curve item was not created: c:p"' in modern
+    assert "Err.Raise" not in modern
+    assert "Curve item was not created: c:p" in modern
     assert ".Version" not in modern
 
 
+def test_polygon3d_preserves_explicit_closing_point() -> None:
+    modern = _text(
+        polygon3d_vba(
+            "profile",
+            "cut_profiles",
+            [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 0)],
+            profile=CST2026,
+        )
+    )
+
+    assert '.Point "0:0:0", "1:0:0", "0:1:0", "0:0:0"' in modern
+    assert '.Closed "False"' in modern
+
+
+def test_polygon3d_rejects_fewer_than_three_points() -> None:
+    with pytest.raises(ValidationError, match="至少需要三个"):
+        polygon3d_vba("p", "c", [(0, 0, 0), (1, 0, 0)], profile=CST2022)
+
+
+def test_analytical_curve_creates_container_and_uses_status_gateway_error() -> None:
+    text = _text(
+        analytical_curve_vba(
+            name="helix",
+            curve="curves1",
+            law_x="cos(t)",
+            law_y="sin(t)",
+            law_z="t",
+            param_start="0",
+            param_end="2*pi",
+            profile=CST2022,
+        )
+    )
+
+    assert 'If Not SelectTreeItem("Curves\\curves1") Then' in text
+    assert 'Curve.NewCurve "curves1"' in text
+    assert 'If Not SelectTreeItem("Curves\\curves1\\helix") Then' in text
+    assert 'ReportError "AnalyticalCurve.Create: Curve item was not created: curves1:helix"' in text
+    assert "Err.Raise" not in text
+
+
 def test_2022_polygon_extrude_and_transform_snapshots() -> None:
-    polygon = _text(polygon3d_vba("p", "c", [(0, 0, 0), (1, 0, 0)], profile=CST2022))
+    polygon = _text(
+        polygon3d_vba(
+            "p",
+            "c",
+            [(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+            profile=CST2022,
+        )
+    )
     extrude = _text(
         extrude_curve_vba(
             name="solid",
             component="component1",
             material="PEC",
-            curve="profile",
+            curve="curve1:profile",
             thickness=1,
             twist_angle=0,
             taper_angle=0,
@@ -380,9 +437,79 @@ def test_2022_polygon_extrude_and_transform_snapshots() -> None:
 
     assert ".Version" not in polygon
     assert ".DeleteProfile" not in extrude
-    assert 'Curve.DeleteCurve "profile"' in extrude
+    assert '.Curve "curve1:profile"' in extrude
+    assert 'Curve.DeleteCurve "curve1"' in extrude
     assert "AutoDestination" not in transform
     assert ".Destination" not in transform
+
+
+def test_2022_extrude_requires_full_curve_item_name() -> None:
+    with pytest.raises(ValidationError, match="container:item"):
+        extrude_curve_vba(
+            name="solid",
+            component="component1",
+            material="PEC",
+            curve="profile",
+            thickness=1,
+            twist_angle=0,
+            taper_angle=0,
+            delete_profile=True,
+            profile=CST2022,
+        )
+
+
+def test_2022_rectangle_creates_container_and_reports_through_gateway() -> None:
+    text = _text(
+        rectangle_vba(
+            name="outline",
+            curve="profiles",
+            x_min="xmin",
+            x_max="xmax",
+            y_min=-1,
+            y_max=1,
+            profile=CST2022,
+        )
+    )
+
+    assert 'Curve.NewCurve "profiles"' in text
+    assert '.Xrange "xmin", "xmax"' in text
+    assert 'ReportError "Rectangle.Create: Curve item was not created: profiles:outline"' in text
+    assert "Err.Raise" not in text
+
+
+def test_2022_loft_omits_undocumented_minimize_twist() -> None:
+    legacy = loft_vba(
+        name="loft1",
+        component="component1",
+        material="PEC",
+        tangency=0,
+        minimize_twist=True,
+        profile=CST2022,
+    )
+    modern = loft_vba(
+        name="loft1",
+        component="component1",
+        material="PEC",
+        tangency=0,
+        minimize_twist=True,
+        profile=CST2026,
+    )
+
+    assert ".Minimizetwist" not in _text(legacy)
+    assert legacy.not_applied == {"minimize_twist": True}
+    assert '.Minimizetwist "True"' in _text(modern)
+
+
+def test_change_solver_type_uses_vba_sub_syntax_without_parentheses() -> None:
+    text = _text(
+        change_solver_type_vba(
+            solver_type="HF Time Domain",
+            profile=CST2022,
+        )
+    )
+
+    assert text == 'ChangeSolverType "HF Time Domain"'
+    assert "ChangeSolverType(" not in text
 
 
 def test_2022_transform_rejects_destination() -> None:

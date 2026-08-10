@@ -64,3 +64,15 @@ def test_list_open_projects_falls_back_to_active_project():
     environment = SimpleNamespace(active_project=lambda: project)
 
     assert session.list_open_project_paths(environment) == ["D:/work/demo.cst"]
+
+
+def test_activate_project_prefers_official_project_method():
+    calls: list[str] = []
+    project = SimpleNamespace(activate=lambda: calls.append("project.activate"))
+    environment = SimpleNamespace(
+        set_active_project=lambda _project: calls.append("environment.set_active_project")
+    )
+
+    session.activate_project(environment, project)
+
+    assert calls == ["project.activate"]
