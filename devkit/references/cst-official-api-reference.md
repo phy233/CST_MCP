@@ -1044,7 +1044,9 @@ type(prj.model3d).__name__      # → 'Model3D' （和 modeler 是同一类型�
 | 集群/HPC | 5+ | `AddMPIClusterNodeConfig()`, `UseDistributedComputingForParameters()` |
 | **Python 扩展** | 19 | `add_to_history()`, `abort_solver()`, `allow/disallow_history_commands()`, `get_active_solver_name()`, `get_solver_run_info()`, `get_tree_items()`, `dist2d()`, `dist3d()`, `full_history_rebuild()` |
 
-#### 6 个 COM 子对象（链式访问）
+#### 6 个 COM 子对象（链式访问，仅限已验证的 CST 2026 封装）
+
+> CST 2022 官方 `cst.interface.Modeler` 页面没有暴露这些链式子对象。2022 不得直接使用 `project.modeler.Plot`、`project.modeler.Monitor` 等写法；应通过兼容层生成官方 VBA，并使用状态文件网关确认执行结果。
 
 ```python
 m = prj.modeler
@@ -1242,7 +1244,7 @@ cmd.Execute()  # → RemoteObject
 | # | 能力 | 路径 | 价值 | 风险 | 实测确认 |
 |---|------|------|------|------|---------|
 | 1 | **直接 COM 调用（138 方法）** | `prj.modeler.VBAMethod()` | **高** — 去掉 VBA 字符串层 | 低 — COM 接口稳定 | ✅ MRO 确认 |
-| 2 | **COM 子对象链式调用** | `modeler.Monitor.Create()`, `modeler.Mesh.AdaptionLimit()` | **高** — 6 个子对象全功能访问 | 低 | ✅ 实测 |
+| 2 | **COM 子对象链式调用（2026）** | `modeler.Monitor.Create()`, `modeler.Mesh.AdaptionLimit()` | **高** — 6 个子对象全功能访问 | 中 — CST 2022 官方 `Modeler` 不提供 | ✅ 2026 实测 |
 | 3 | **model3d 私有方法** | `_execute_vba_code()`, `_GetHistory()`, `_TryToUndoNTimes()` | 中 — 历史树操作/VBA fallback | 中 — 私有 API 可能移除 | ✅ 实测 |
 | 4 | **BeginHide/EndHide 批处理** | `modeler.BeginHide()` → 批量操作 → `EndHide()` | **高** — 批量性能提升 10-100x | 低 | ✅ 实测 |
 | 5 | **批量结果读取** | `rm._get_all_result_items()` | 中 — 省去一次遍历 | 低 | ✅ 实测 70 项 |

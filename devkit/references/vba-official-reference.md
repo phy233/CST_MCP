@@ -722,7 +722,7 @@ End With
 | `Curve` | `name curveitemname` | 必须是完整曲线项名，例如 `"curve1:circle1"`，不能只传容器 `"curve1"`。 |
 | `Create` | 无参数 | 前述属性完整后创建实体。 |
 
-2022 没有 2026 的 `DeleteProfile(bool)`。如需清理临时轮廓，应在 `Create` 成功并经树节点验证后调用 `Curve.DeleteCurve "container"`；不要在创建前删除容器。
+2022 没有 2026 的 `DeleteProfile(bool)`，因为 2022 官方说明 `ExtrudeCurve.Create` 完成后输入 curve item 会自动消失。不要再追加 `Curve.DeleteCurve` 或 `Curve.DeleteCurveItem`：前者删除整个曲线容器，后者删除指定曲线项，而此时输入项已经被拉伸操作消费。若上层请求 `delete_profile=False`，2022 无法保留该输入轮廓，兼容层必须把这一项标记为未应用。
 
 ```vba
 With ExtrudeCurve
@@ -1439,6 +1439,8 @@ WCS.AlignWCSWithGlobalCoordinates
 | `Monitor.SetSubVolume(double x1, x2, y1, y2, z1, z2)` | 子体积 | — |
 | `Monitor.SetSubVolumeOffset(double d1..d6)` | 偏移 | — |
 | `Monitor.UseSubvolume(bool flag)` | 启用子体积 | — |
+
+在 CST 2022 中，调用 `Monitor.Create` 前必须先提供非空的 `.Name`。频率范围、场类型和采样数都合法也不能替代名称；生成器应在 Python 参数验证阶段拒绝空名称，不能提交缺少 `.Name` 的 VBA。
 | `Monitor.SamplingStrategy(enum {"Linear","Logarithmic"})` | 采样策略 | `"Linear"` |
 | `Monitor.Samples(int n)` | 采样数 | — |
 | `Monitor.MaxOrder(int n)` | 最大阶数 | `1` |
@@ -1997,6 +1999,18 @@ End With
 ## 22. Plot1D — 1D 绘图
 
 **文件：** `common_vbaplot\common_vbaplot_plot1d_object.htm`（353 行）
+
+### 22.0 Plot — 当前二维/三维视图
+
+CST 2022 的 `Plot` 是 VBA 全局对象，不是 `cst.interface.Modeler` 的 Python 属性。不能写 `project.modeler.Plot`；应通过现有 VBA 状态文件网关执行：
+
+```vba
+Plot.RestoreView "Perspective"
+Plot.ZoomToStructure
+Plot.ExportImage "D:\exports\view.png", 1920, 1080
+```
+
+`RestoreView(name)`、`ZoomToStructure` 和 `ExportImage(filename, width, height)` 均由 `common_vbaplot\common_vbaplot_plot_object.htm` 记录。Python 收到 VBA 成功状态后还必须验证图像文件存在且非空。
 
 ### 视图与外观
 
