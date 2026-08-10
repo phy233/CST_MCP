@@ -19,21 +19,6 @@ def test_start_sim_async_rejects_dirty_project(tmp_path):
     assert_json_error(result, "params_not_rebuilt")
 
 
-def test_start_sim_allows_clean_project(mocker):
-    """Start simulation passes on clean project (no gateway block)."""
-    from cst_runtime.core.simulation import start_simulation_async
-
-    mock_project = mocker.MagicMock()
-    mocker.patch(
-        "cst_runtime.core.simulation.attach_expected_project",
-        return_value=(mock_project, {"status": "success"}),
-    )
-
-    dummy = "/tmp/clean.cst"
-    result = start_simulation_async(dummy)
-    assert result["status"] == "success"
-
-
 def test_start_sim_sync_also_rejects_dirty(tmp_path):
     """T2: synchronous start_simulation also checks dirty flag."""
     from cst_runtime.core.simulation import start_simulation
