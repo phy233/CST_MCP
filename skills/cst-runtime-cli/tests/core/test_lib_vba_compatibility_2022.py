@@ -63,40 +63,39 @@ def test_wcs_uses_store_instead_of_set_name() -> None:
 
 
 def test_arc_uses_legacy_points_and_restores_wcs() -> None:
-    text = _text(
-        arc_vba(
-            name="arc1",
-            curve="curve1",
-            center=(1, 2, 3),
-            radius=5,
-            start_angle=0,
-            end_angle=90,
-            segments=0,
-            profile=CST2022,
-        )
+    generated = arc_vba(
+        name="arc1",
+        curve="curve1",
+        center=(1, 2, 3),
+        radius=5,
+        start_angle=0,
+        end_angle=90,
+        segments=0,
+        profile=CST2022,
     )
+    text = _text(generated)
     assert 'If Not SelectTreeItem("Curves\\curve1") Then' in text
     assert 'Curve.NewCurve "curve1"' in text
     assert ".Xcenter" in text
     assert '.UseAngle "True"' in text
     assert "WCS.Restore" in text
-    assert "WCS.Delete" in text
+    assert "WCS.Delete" not in text
+    assert generated.not_applied["wcs_cleanup"].startswith("__CSTRuntime_")
     assert 'ReportError "Arc.Create: Curve item was not created: curve1:arc1"' in text
     assert "Err.Raise" not in text
     assert ".StartAngle" not in text
 
 
-def test_polygon_builds_2d_profile_then_extrudes_and_cleans_up() -> None:
-    text = _text(
-        polygon_solid_vba(
-            name="plate",
-            component="component1",
-            material="PEC",
-            vertices=((0, 0), (1, 0), (0, 1)),
-            z_range=(0, 1),
-            profile=CST2022,
-        )
+def test_polygon_builds_2d_profile_then_extrudes_without_unsafe_cleanup() -> None:
+    generated = polygon_solid_vba(
+        name="plate",
+        component="component1",
+        material="PEC",
+        vertices=((0, 0), (1, 0), (0, 1)),
+        z_range=(0, 1),
+        profile=CST2022,
     )
+    text = _text(generated)
     assert 'If Not SelectTreeItem("Curves\\__cst_runtime_plate") Then' in text
     assert 'Curve.NewCurve "__cst_runtime_plate"' in text
     assert "With Polygon\n" in text
@@ -106,8 +105,9 @@ def test_polygon_builds_2d_profile_then_extrudes_and_cleans_up() -> None:
     assert "Err.Raise" not in text
     assert "With ExtrudeCurve" in text
     assert '.Curve "__cst_runtime_plate:profile"' in text
-    assert "Curve.DeleteCurve" in text
+    assert "Curve.DeleteCurve" not in text
     assert ".DeleteProfile" not in text
+    assert generated.not_applied == {}
 
 
 def test_waveguide_port_uses_structure_box_and_legacy_ranges() -> None:

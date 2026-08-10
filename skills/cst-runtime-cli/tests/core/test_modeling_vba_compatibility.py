@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from cst_runtime.core import modeling as core_modeling
+from cst_runtime.core import session as core_session
 from cst_runtime.core.compatibility.base import CompatibilityProfile
 from cst_runtime.core.compatibility.modeling import (
     analytical_curve_vba,
@@ -14,6 +16,7 @@ from cst_runtime.core.compatibility.modeling import (
     mesh_vba,
     mesh_fpbavoid_nonreg_unite_vba,
     monitor_vba,
+    plot_export_vba,
     polygon3d_vba,
     postprocess_activation_vba,
     port_vba,
@@ -193,16 +196,191 @@ def test_2022_monitor_converts_step_to_sample_count() -> None:
             start=1,
             end=3,
             step=0.5,
+            name="farfield (f=1-3)",
             profile=CST2022,
         )
     )
+    assert '.Name "farfield (f=1-3)"' in text
     assert '.FrequencySamples "5"' in text
     assert "CreateUsingLinearStep" not in text
 
 
 def test_2022_monitor_rejects_nondivisible_range() -> None:
     with pytest.raises(ValidationError):
-        monitor_vba(field_type="Efield", start=1, end=2, step=0.3, profile=CST2022)
+        monitor_vba(
+            field_type="Efield",
+            start=1,
+            end=2,
+            step=0.3,
+            name="e-field (f=1-2)",
+            profile=CST2022,
+        )
+
+
+def test_monitor_rejects_empty_name_before_generating_vba() -> None:
+    with pytest.raises(ValidationError, match="监视器名称不能为空"):
+        monitor_vba(
+            field_type="Farfield",
+            start=2.35,
+            end=2.55,
+            step=0.05,
+            name="  ",
+            profile=CST2022,
+        )
+
+
+def test_2022_farfield_monitor_generates_valid_name_and_five_samples() -> None:
+    text = _text(
+        monitor_vba(
+            field_type="Farfield",
+            start=2.35,
+            end=2.55,
+            step=0.05,
+            name="farfield (f=2.35-2.55)",
+            enable_nearfield=True,
+            profile=CST2022,
+        )
+    )
+
+    assert '.Name "farfield (f=2.35-2.55)"' in text
+    assert '.FrequencyRange "2.35", "2.55"' in text
+    assert '.FrequencySamples "5"' in text
+    assert '.EnableNearfieldCalculation "True"' in text
+
+
+def test_set_farfield_monitor_passes_nonempty_generated_name(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_submit(project_path, history_name, builder, **arguments):
+        captured.update(arguments)
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_submit_versioned_vba", fake_submit)
+
+    result = core_modeling.set_farfield_monitor(
+        "D:/project.cst",
+        start_freq=2.35,
+        end_freq=2.55,
+        step=0.05,
+    )
+
+    assert result["status"] == "success"
+    assert captured["name"] == "farfield (f=2.35-2.55)"
+
+
+def test_other_monitor_entrypoints_pass_nonempty_generated_names(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_submit(project_path, history_name, builder, **arguments):
+        captured.clear()
+        captured.update(arguments)
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_submit_versioned_vba", fake_submit)
+
+    core_modeling.set_efield_monitor(
+        "D:/project.cst",
+        start_freq=2.35,
+        end_freq=2.55,
+        step=0.05,
+    )
+    assert captured["name"] == "e-field (f=2.35-2.55)"
+
+    core_modeling.set_field_monitor(
+        "D:/project.cst",
+        field_type="H",
+        start_frequency="2.35",
+        end_frequency="2.55",
+        num_samples="5",
+    )
+    assert captured["name"] == "h-field (f=2.35-2.55)"
+
+
+def test_2022_plot_export_uses_vba_global_object() -> None:
+    text = _text(
+        plot_export_vba(
+            preset_name="Isometric",
+            output_path='D:/exports/model "view".png',
+            profile=CST2022,
+        )
+    )
+
+    assert 'Plot.RestoreView "Perspective"' in text
+    assert "Plot.ZoomToStructure" in text
+    assert 'Plot.ExportImage "D:/exports/model ""view"".png", 1920, 1080' in text
+    assert "modeler.Plot" not in text
+
+
+def test_capture_3d_view_submits_plot_vba_through_history_gateway(
+    tmp_path, monkeypatch
+) -> None:
+    project_path = tmp_path / "model.cst"
+    output_dir = tmp_path / "screenshots"
+    project_path.write_bytes(b"cst")
+    fake_project = object()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        core_session,
+        "open_project",
+        lambda project_path: {"status": "success", "already_open": True},
+    )
+    monkeypatch.setattr(
+        core_session,
+        "get_attached_project",
+        lambda project_path: fake_project,
+    )
+    monkeypatch.setattr(core_modeling, "detect_compatibility_profile", lambda: CST2022)
+
+    def fake_history(project_path, history_name, vba_lines, project=None):
+        captured["history_name"] = history_name
+        captured["vba_lines"] = list(vba_lines)
+        export_line = next(line for line in vba_lines if line.startswith("Plot.ExportImage"))
+        image_path = export_line.split('"', 2)[1].replace('""', '"')
+        output = core_modeling.Path(image_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"png")
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_add_vba_history", fake_history)
+
+    result = core_modeling.capture_3d_view(
+        project_path=str(project_path),
+        output_dir=str(output_dir),
+        preset_name="Isometric",
+    )
+
+    assert result["status"] == "success"
+    assert captured["history_name"] == "Capture 3D View:Isometric"
+    assert any(
+        line.startswith("Plot.ExportImage") for line in captured["vba_lines"]
+    )
+    assert core_modeling.Path(result["image_path"]).is_file()
+
+
+def test_separate_cleanup_failure_preserves_main_success(monkeypatch) -> None:
+    result = {"status": "success", "execution": "completed"}
+    monkeypatch.setattr(
+        core_modeling,
+        "_single_vba",
+        lambda *args, **kwargs: {
+            "status": "error",
+            "error_type": "vba_runtime_error",
+            "message": "cleanup failed",
+        },
+    )
+
+    core_modeling._run_separate_cleanup(
+        "D:/project.cst",
+        result,
+        "Cleanup temporary object",
+        'WCS.Delete "temporary"',
+        target="temporary",
+    )
+
+    assert result["status"] == "success"
+    assert result["cleanup"]["status"] == "warning"
+    assert result["cleanup"]["result"]["error_type"] == "vba_runtime_error"
 
 
 def test_cylinder_uses_version_specific_radius_properties() -> None:
@@ -438,7 +616,7 @@ def test_2022_polygon_extrude_and_transform_snapshots() -> None:
     assert ".Version" not in polygon
     assert ".DeleteProfile" not in extrude
     assert '.Curve "curve1:profile"' in extrude
-    assert 'Curve.DeleteCurve "curve1"' in extrude
+    assert "Curve.DeleteCurve" not in extrude
     assert "AutoDestination" not in transform
     assert ".Destination" not in transform
 
@@ -456,6 +634,39 @@ def test_2022_extrude_requires_full_curve_item_name() -> None:
             delete_profile=True,
             profile=CST2022,
         )
+
+
+def test_2022_extrude_relies_on_automatic_profile_consumption() -> None:
+    generated = extrude_curve_vba(
+        name="cut",
+        component="antenna",
+        material="PEC",
+        curve="cut_profiles:cut_profile",
+        thickness=1,
+        twist_angle=0,
+        taper_angle=0,
+        delete_profile=True,
+        profile=CST2022,
+    )
+
+    assert "Curve.DeleteCurve" not in _text(generated)
+    assert generated.not_applied == {}
+
+
+def test_2022_extrude_cannot_preserve_profile() -> None:
+    generated = extrude_curve_vba(
+        name="cut",
+        component="antenna",
+        material="PEC",
+        curve="cut_profiles:cut_profile",
+        thickness=1,
+        twist_angle=0,
+        taper_angle=0,
+        delete_profile=False,
+        profile=CST2022,
+    )
+
+    assert generated.not_applied == {"delete_profile": False}
 
 
 def test_2022_rectangle_creates_container_and_reports_through_gateway() -> None:
