@@ -113,7 +113,7 @@ CST 2022 的 `ChangeSolverType` 只接受以下 17 个字符串，大小写和�
 | `GetSelectedTreeItem() → string` | 当前选中节点路径 |
 | `GetNextSelectedTreeItem() → string` | 下一个选中节点 |
 
-`SelectTreeItem` 是 CST 2022 的 Application/VBA 全局方法，不是 `cst.interface.Project.model3d` 的必要条件。Python Project 没有 `model3d` 时，兼容层应通过即时 VBA 调用 `SelectTreeItem(path)`，并检查其布尔返回值；返回 `False` 表示节点没有成功选中。History 操作应继续使用现有 `ReportError` 状态文件网关上报失败；即时查询则把失败标记写入同一临时文本传输通道，由 Python 解析后返回验证错误，不另建错误协议。
+`SelectTreeItem` 是 CST 2022 的 Application/VBA 全局方法，不是 `cst.interface.Project.model3d` 的必要条件。Python Project 没有 `model3d` 时，兼容层应通过即时 VBA 调用 `SelectTreeItem(path)`，并检查其布尔返回值；返回 `False` 表示节点没有成功选中。History 操作仍通过现有状态文件网关上报失败；即时查询则把失败标记写入同一临时文本传输通道，由 Python 解析后返回验证错误，不另建错误协议。
 
 `Rebuild` 在 CST 2022 的 Application/VBA 全局方法页中以裸全局函数 `Rebuild → bool` 给出；内部 VBA 应写成 `If Not Rebuild Then ...`，不要凭空增加文档未列出的 `Application.` 前缀。该方法会删除全部结果，且只有返回 `True` 才表示重建成功。
 
@@ -136,9 +136,10 @@ CST 2022 的 `ChangeSolverType` 只接受以下 17 个字符串，大小写和�
 4. **保留 CST 参数表达式。** 官方方法表把许多坐标标为 `double`，但 2022 官方示例仍用字符串传入 `"a+2"` 等工程参数表达式。因此生成建模 VBA 时，数值或表达式通常应作为带引号字符串传给 CST 对象；VBA 自身的循环索引、文件号和布尔条件则使用真实 `Long`、`Integer`、`Boolean`。
 5. **数组必须先定维。** 传给 `StoreParameters`、`GetTreeResults` 等 `variant/string_array` 参数的变量要先 `Dim`/`ReDim`，并按官方要求传变量本身，不能把 Python 列表文本直接拼成 VBA 数组参数。
 6. **曲线名有两层。** `Curve.NewCurve "container"` 创建容器；`Polygon`、`Polygon3D`、`Arc`、`AnalyticalCurve` 的 `.Curve` 只填容器名；`ExtrudeCurve.Curve` 必须填完整曲线项名 `"container:item"`。创建曲线项前要保证容器已存在。
-7. **统一使用现有状态文件网关。** CST 2022 用 `ReportError "..."` 终止当前 VBA，并由外层 `On Error GoTo` 捕获 `Err.Number`/`Err.Description`，写入状态文件供 Python 解析。不要在生成器内使用 `Err.Raise`、`Erl` 或另建错误协议。
+7. **统一使用现有状态文件网关。** CST 2022 的 `Application.ReportError(message)` 帮助页写明：它会立即停止当前 VBA 命令求值，并可被 `On Error GoTo` 捕获。但是 2022.5 的 History 实机路径已经观察到两种宿主差异：显式验证调用可能使 History 失败却没有可靠进入错误标签；History 重放中的宿主错误也可能留下空 `Err.Description`。因此内部生成器仍写文档规定的 `ReportError "..."` 语句，但状态网关在提交前必须把这种**独占一行、字符串字面量参数**的内部失败语句改写为显式错误编号、非空描述和 `GoTo` 错误分支；错误状态文件关闭后再调用一次非空 `ReportError`，让首次执行和 History 重放都保留失败状态。不要在生成器内使用 `Err.Raise`、`Erl` 或另建第二套文件协议。
 8. **提交返回值不是最终证据。** 2022 VBA 帮助把 `AddToHistory` 的布尔值描述为创建并执行成功；但 Python 桥接层仍必须等状态文件或核对实体/结果状态，避免把 COM 提交成功误判为 History 内部执行成功。
 9. **文件传输分支必须到达 `Close`。** 即时查询通过 `Open ... For Output`、`Print #file`、`Close #file` 向 Python 回传文本时，失败分支不得在公共 `Close` 之前执行 `Exit Sub`。应使用 `If ... Else ... End If` 包住查询主体，或在提前退出前显式关闭文件，避免缓冲区中的错误标记没有写入磁盘。
+10. **错误描述不得为空。** 网关进入错误分支后，应先保存显式验证消息或 `Err.Description`；如果宿主返回空描述，必须替换为包含错误编号的固定非空说明。禁止执行 `ReportError ""`，否则 CST 2022 会产生 `Unable to evaluate expression: ""` 的二次错误并掩盖原始失败。
 
 本工程对应的安全骨架如下：
 
@@ -689,6 +690,8 @@ End With
 | `Polygon3D` | 单次传入字符串坐标序列及 `Closed` | 每个点调用一次 `Point(x, y, z)`；无 `Closed` 属性。 |
 
 2022 的 `Polygon3D.Curve(curvename)` 明确要求曲线容器已经存在。`Point` 每调用一次只追加一个点；官方页没有规定自动闭合，也没有要求自动重复首点。是否重复首点应由上层业务语义决定，通用生成器不能擅自改变开闭状态。
+
+2022 官方的三维解析曲线示例使用 `SelectTreeItem("Curves\3D-Analytical\3dpolygon_...")` 和 `SelectTreeItem("Curves\3D-Analytical\" + sCurveName)`，证明曲线项采用 `Curves\<容器>\<曲线项>` 两级树路径。因而 Polygon3D 创建后的验证应保留 `Curves\<curve>\<name>`，不能为了消除报错而删除检查；如果该选择返回 `False`，应先按创建失败处理，再由真实工程树枚举判断是否存在对象类型特有的显示路径。
 
 ```vba
 ' CST 2022：三维多边形曲线
