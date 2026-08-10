@@ -94,4 +94,4 @@ def test_rebuild_warns_that_results_are_deleted_and_checks_return(monkeypatch):
     assert result["status"] == "success"
     assert result["results_deleted"] is True
     assert "删除" in result["warning"]
-    assert "If Not Application.Rebuild Then ReportError" in captured["vba_line"]
+    assert captured["vba_line"] == 'If Not Rebuild Then ReportError "Rebuild returned False"'

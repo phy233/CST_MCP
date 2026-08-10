@@ -30,6 +30,9 @@ def test_legacy_farfield_query_uses_farfield_plot_list_api() -> None:
     assert 'FarfieldPlot.SetPlotMode "realized gain"' in text
     assert 'If Not SelectTreeItem("Farfields\\farfield (f=10) [1]") Then' in text
     assert "__CST_TREE_SELECTION_FAILED__" in text
+    assert "Exit Sub" not in text
+    assert text.index("Else") < text.index("FarfieldPlot.Reset")
+    assert text.rindex("End If") > text.index("Next cstRtIndex")
     assert text.count("FarfieldPlot.AddListEvaluationPoint") == 4
     assert 'FarfieldPlot.CalculateList ""' in text
     assert 'FarfieldPlot.GetList("spherical abs")' in text

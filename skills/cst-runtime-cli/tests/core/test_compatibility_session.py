@@ -90,14 +90,45 @@ def test_activate_project_prefers_official_project_method():
     assert calls == ["project.activate"]
 
 
-def test_safe_quiet_mode_uses_2022_documented_getter():
-    calls: list[str] = []
+def test_safe_quiet_mode_uses_2022_documented_context_methods():
+    calls: list[object] = []
+    state = {"quiet": False}
+
+    def in_quiet_mode() -> bool:
+        calls.append("in_quiet_mode")
+        return state["quiet"]
+
+    def set_quiet_mode(flag: bool) -> None:
+        calls.append(("set_quiet_mode", flag))
+        state["quiet"] = flag
+
     environment = SimpleNamespace(
-        in_quiet_mode=lambda: calls.append("in_quiet_mode") or True,
+        in_quiet_mode=in_quiet_mode,
+        set_quiet_mode=set_quiet_mode,
         quiet_mode_enabled=lambda: (_ for _ in ()).throw(
             AssertionError("不得调用 CST 2022 不存在的方法")
         ),
     )
 
-    assert legacy_compat.safe_quiet_mode(environment) is True
+    with legacy_compat.safe_quiet_mode(environment):
+        assert state["quiet"] is True
+
+    assert state["quiet"] is False
+    assert calls == [
+        "in_quiet_mode",
+        ("set_quiet_mode", True),
+        ("set_quiet_mode", False),
+    ]
+
+
+def test_safe_quiet_mode_preserves_enabled_state():
+    calls: list[object] = []
+    environment = SimpleNamespace(
+        in_quiet_mode=lambda: calls.append("in_quiet_mode") or True,
+        set_quiet_mode=lambda flag: calls.append(("set_quiet_mode", flag)),
+    )
+
+    with legacy_compat.safe_quiet_mode(environment):
+        pass
+
     assert calls == ["in_quiet_mode"]

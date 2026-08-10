@@ -298,6 +298,41 @@ def test_2022_farfield_monitor_generates_valid_name_and_five_samples() -> None:
     assert '.EnableNearfieldCalculation "True"' in text
 
 
+def test_2022_monitor_omits_subvolume_coordinates_when_disabled() -> None:
+    text = _text(
+        monitor_vba(
+            field_type="Farfield",
+            start=2.35,
+            end=2.55,
+            step=0.05,
+            name="farfield (f=2.35-2.55)",
+            subvolume=(-105, 105, -105, 105, 0, 445),
+            use_subvolume=False,
+            profile=CST2022,
+        )
+    )
+
+    assert '.UseSubvolume "False"' in text
+    assert ".SetSubvolume" not in text
+
+
+def test_2022_monitor_sets_coordinates_when_subvolume_is_enabled() -> None:
+    text = _text(
+        monitor_vba(
+            field_type="Efield",
+            start=8,
+            end=8,
+            name="e-field (f=8)",
+            subvolume=(-1, 1, -2, 2, 0, 10),
+            use_subvolume=True,
+            profile=CST2022,
+        )
+    )
+
+    assert '.UseSubvolume "True"' in text
+    assert '.SetSubvolume "-1", "1", "-2", "2", "0", "10"' in text
+
+
 def test_set_farfield_monitor_passes_nonempty_generated_name(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -316,6 +351,8 @@ def test_set_farfield_monitor_passes_nonempty_generated_name(monkeypatch) -> Non
 
     assert result["status"] == "success"
     assert captured["name"] == "farfield (f=2.35-2.55)"
+    assert captured["use_subvolume"] is False
+    assert captured["subvolume"] is None
 
 
 def test_other_monitor_entrypoints_pass_nonempty_generated_names(monkeypatch) -> None:
@@ -336,6 +373,8 @@ def test_other_monitor_entrypoints_pass_nonempty_generated_names(monkeypatch) ->
         step=0.05,
     )
     assert captured["name"] == "e-field (f=2.35)"
+    assert captured["use_subvolume"] is False
+    assert captured["subvolume"] is None
 
     core_modeling.set_field_monitor(
         "D:/project.cst",
