@@ -3,7 +3,7 @@
 用法：
     from cst_runtime.lib.solver import start, is_running, stop, rebuild
 
-    # 启动仿真 (非阻塞)
+    # 同步启动并等待仿真结束
     start("C:\\path\\to\\model.cst")
 
     # 检查是否正在运行
@@ -47,7 +47,7 @@ def set_frequency_range(project_path: str, fmin: float, fmax: float) -> Operatio
 
 
 def start(project_path: str) -> OperationResult:
-    """启动仿真 (阻塞模式，直到完成才会返回)。
+    """同步启动仿真，阻塞到结束，并检查 CST 返回的成功标志。
 
     Args:
         project_path: .cst 文件的绝对路径
@@ -59,7 +59,7 @@ def start(project_path: str) -> OperationResult:
 
 
 def start_async(project_path: str) -> OperationResult:
-    """启动仿真 (非阻塞模式，发送指令后立即返回)。
+    """异步启动仿真，发送指令后立即返回，不代表求解成功。
 
     Args:
         project_path: .cst 文件的绝对路径
@@ -71,7 +71,10 @@ def start_async(project_path: str) -> OperationResult:
 
 
 def wait(project_path: str, timeout: int = 3600, interval: int = 10) -> OperationResult:
-    """等待仿真完成。
+    """轮询等待异步仿真停止。
+
+    该函数只依据 ``is_solver_running()``。``running=False`` 表示求解器已不再运行，
+    不能像同步 ``start()`` 的 ``run_solver=True`` 那样证明求解成功。
 
     Args:
         project_path: .cst 文件的绝对路径
@@ -123,7 +126,7 @@ def stop(project_path: str) -> OperationResult:
 
 
 def rebuild(project_path: str) -> OperationResult:
-    """根据最新的参数重建几何结构 (相当于点击 CST 里的 F7)。
+    """根据最新参数重建几何结构；CST 官方说明此操作会删除全部结果。
 
     Args:
         project_path: .cst 文件的绝对路径

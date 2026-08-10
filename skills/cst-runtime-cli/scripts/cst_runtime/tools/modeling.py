@@ -1533,7 +1533,7 @@ TOOL_DEFS = {
 "set-efield-monitor": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set an E-field monitor over a frequency range.",
+    "description": "设置 E-field 监视器；CST 2022 只支持单频，start_freq 必须等于 end_freq。",
     "handler": "tool_set_efield_monitor",
     "json_schema": {
         "type": "object",
@@ -1546,14 +1546,16 @@ TOOL_DEFS = {
             },
             "start_freq": {
                 "type": "number",
+                "description": "监视频率；CST 2022 下必须等于 end_freq。",
                 "examples": [
-                    2.0
+                    8.0
                 ]
             },
             "end_freq": {
                 "type": "number",
+                "description": "新版本 CST 的范围终点；CST 2022 下必须等于 start_freq。",
                 "examples": [
-                    18.0
+                    8.0
                 ]
             },
             "step": {
@@ -1687,7 +1689,7 @@ TOOL_DEFS = {
 "set-field-monitor": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set a field monitor (e.g. H-field) over a frequency range.",
+    "description": "设置 E/H 场监视器；CST 2022 只支持单频。",
     "handler": "tool_set_field_monitor",
     "json_schema": {
         "type": "object",
@@ -1700,26 +1702,30 @@ TOOL_DEFS = {
             },
             "field_type": {
                 "type": "string",
+                "enum": ["E", "H"],
                 "examples": [
                     "H"
                 ]
             },
             "start_frequency": {
                 "type": "string",
+                "description": "监视频率；CST 2022 下必须等于 end_frequency。",
                 "examples": [
-                    "2"
+                    "8"
                 ]
             },
             "end_frequency": {
                 "type": "string",
+                "description": "新版本 CST 的范围终点；CST 2022 下必须等于 start_frequency。",
                 "examples": [
-                    "18"
+                    "8"
                 ]
             },
             "num_samples": {
                 "type": "string",
+                "description": "新版本 CST 的样本数；CST 2022 的 E/H 监视器只允许 1。",
                 "examples": [
-                    "10"
+                    "1"
                 ]
             }
         },
@@ -1749,6 +1755,7 @@ TOOL_DEFS = {
             },
             "field_type": {
                 "type": "string",
+                "enum": ["E", "H"],
                 "examples": [
                     "E"
                 ]

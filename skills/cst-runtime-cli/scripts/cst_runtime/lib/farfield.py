@@ -5,12 +5,12 @@ Usage:
 
     # Export farfield grid data
     result = export_grid("C:\\path\\to\\model.cst",
-                         farfield_name="farfield (f=10)_1",
+                         farfield_name="farfield (f=10) [1]",
                          export_dir="C:\\exports")
 
     # Export farfield cut data
     result = export_cut("C:\\path\\to\\model.cst",
-                        tree_path="Farfields\\farfield (f=10)_1\\Phi=0")
+                        tree_path="Farfields\\Farfield Cuts\\Excitation [1]\\Phi=0\\farfield (f=10)")
 
     # List farfield monitors
     monitors = list_monitors("C:\\path\\to\\model.cst")

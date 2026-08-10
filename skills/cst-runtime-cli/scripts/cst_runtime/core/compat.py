@@ -41,7 +41,7 @@ class _NoOpContextManager:
 
 
 def safe_quiet_mode(environment: object) -> object:
-    getter = getattr(environment, "quiet_mode_enabled", None)
+    getter = getattr(environment, "in_quiet_mode", None)
     if callable(getter):
         try:
             return getter()

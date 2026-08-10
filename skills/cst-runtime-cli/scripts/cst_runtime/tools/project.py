@@ -707,7 +707,7 @@ TOOL_DEFS = {
 "start-simulation-async": {
     "category": "project_ops",
     "risk": "long-running",
-    "description": "Start the CST solver asynchronously for the verified working project.",
+    "description": "异步启动 CST 求解器；返回成功只表示启动调用完成，不代表求解成功。",
     "handler": "tool_start_simulation_async",
     "json_schema": {
         "type": "object",
@@ -805,7 +805,7 @@ TOOL_DEFS = {
 "wait-simulation": {
     "category": "project_ops",
     "risk": "long-running",
-    "description": "Poll is-simulation-running until the solver finishes or timeout expires.",
+    "description": "轮询直到求解器不再运行或超时；running=false 只表示停止，不能证明求解成功。",
     "handler": "tool_wait_simulation",
     "json_schema": {
         "type": "object",

@@ -8,6 +8,7 @@ from . import buffer
 from .error_gateway import submit_vba_history
 from .errors import CSTRuntimeError, error_response, success_response
 from .compatibility import detect_compatibility_profile
+from .compatibility.execution import vba_string
 from .compatibility.modeling import (
     analytical_curve_vba,
     background_vba,
@@ -612,7 +613,7 @@ def define_monitor(project_path: str, start_freq: float, end_freq: float, step: 
         start=start_freq,
         end=end_freq,
         step=step,
-        name=f"farfield (f={start_freq})_1",
+        name=f"farfield (f={start_freq}-{end_freq})",
         subvolume=(-105, 105, -105, 105, 0, 445),
         use_subvolume=True,
         enable_nearfield=True,
@@ -719,6 +720,11 @@ def set_efield_monitor(
     subvolume_z_min: float = 0,
     subvolume_z_max: float = 443,
 ) -> dict[str, Any]:
+    profile = detect_compatibility_profile()
+    if profile.is_2022:
+        monitor_name = f"e-field (f={start_freq})"
+    else:
+        monitor_name = f"e-field (f={start_freq}-{end_freq})"
     return _submit_versioned_vba(
         project_path,
         "Set Efield Monitor",
@@ -727,7 +733,7 @@ def set_efield_monitor(
         start=start_freq,
         end=end_freq,
         step=step,
-        name=f"e-field (f={start_freq}-{end_freq})",
+        name=monitor_name,
         dimension=dimension,
         subvolume=(
             subvolume_x_min,
@@ -742,21 +748,44 @@ def set_efield_monitor(
 
 
 def set_field_monitor(project_path: str, field_type: str, start_frequency: str, end_frequency: str, num_samples: str) -> dict[str, Any]:
+    normalized_field = str(field_type).strip().casefold()
+    if normalized_field not in {"e", "h"}:
+        return error_response(
+            "validation_error",
+            'field_type 只允许 "E" 或 "H"',
+            phase="validation",
+            project_path=_abs_project_path(project_path),
+        )
+    field_name = "Efield" if normalized_field == "e" else "Hfield"
+    profile = detect_compatibility_profile()
+    if profile.is_2022:
+        monitor_name = f"{normalized_field}-field (f={start_frequency})"
+    else:
+        monitor_name = f"{normalized_field}-field (f={start_frequency}-{end_frequency})"
     return _submit_versioned_vba(
         project_path,
-        f"Set{field_type}Monitor",
+        f"Set{normalized_field.upper()}Monitor",
         monitor_vba,
-        field_type=f"{field_type}field",
+        field_type=field_name,
         start=start_frequency,
         end=end_frequency,
         samples=num_samples,
-        name=f"{field_type.lower()}-field (f={start_frequency}-{end_frequency})",
+        name=monitor_name,
     )
 
 
 def set_probe(project_path: str, field_type: str, x_pos: str, y_pos: str, z_pos: str) -> dict[str, Any]:
-    vba = f'Probe.Reset\nProbe.AutoLabel 1\nProbe.Field "{field_type}field"\nProbe.Orientation "All"\nProbe.Xpos "{x_pos}"\nProbe.Ypos "{y_pos}"\nProbe.Zpos "{z_pos}"\nProbe.Create'
-    return _single_vba(project_path, f"Set{field_type}Probe", vba)
+    normalized_field = str(field_type).strip().casefold()
+    if normalized_field not in {"e", "h"}:
+        return error_response(
+            "validation_error",
+            'field_type 只允许 "E" 或 "H"',
+            phase="validation",
+            project_path=_abs_project_path(project_path),
+        )
+    probe_field = "efield" if normalized_field == "e" else "hfield"
+    vba = f'Probe.Reset\nProbe.AutoLabel 1\nProbe.Field "{probe_field}"\nProbe.Orientation "All"\nProbe.Xpos "{x_pos}"\nProbe.Ypos "{y_pos}"\nProbe.Zpos "{z_pos}"\nProbe.Create'
+    return _single_vba(project_path, f"Set{normalized_field.upper()}Probe", vba)
 
 
 def delete_probe_by_id(project_path: str, probe_id: str) -> dict[str, Any]:
@@ -1295,12 +1324,21 @@ def define_loft(project_path: str, name: str, component: str, material: str, tan
 
 
 def _ascii_export(project_path: str, tree_path: str, file_path: str, history_name: str) -> dict[str, Any]:
-    vba = f'SelectTreeItem "{tree_path}"\nASCIIExport.Reset\nASCIIExport.FileName "{file_path}"\nASCIIExport.Execute'
+    escaped_tree_path = vba_string(tree_path)
+    escaped_file_path = vba_string(file_path)
+    vba = (
+        f'If Not SelectTreeItem("{escaped_tree_path}") Then\n'
+        f'    ReportError "ASCIIExport: tree item was not selected: {escaped_tree_path}"\n'
+        "End If\n"
+        "ASCIIExport.Reset\n"
+        f'ASCIIExport.FileName "{escaped_file_path}"\n'
+        "ASCIIExport.Execute"
+    )
     return _single_vba(project_path, history_name, vba)
 
 
 def export_e_field(project_path: str, frequency: str, file_path: str) -> dict[str, Any]:
-    tree = f"2D/3D Results\\E-Field\\e-field (f={frequency}) [pw]"
+    tree = f"2D/3D Results\\E-Field\\e-field (f={frequency}) [1]"
     fpath = f"{file_path}\\E-field-{frequency}GHz.txt"
     return _ascii_export(project_path, tree, fpath, "ExportEField")
 
@@ -1312,7 +1350,7 @@ def export_surface_current(project_path: str, frequency: str, file_path: str) ->
 
 
 def export_voltage(project_path: str, voltage_index: str, file_path: str) -> dict[str, Any]:
-    tree = f"1D Results\\Voltage Monitors\\voltage{voltage_index} [pw]"
+    tree = f"1D Results\\Voltage Monitors\\voltage{voltage_index}"
     fpath = f"{file_path}\\voltage-{voltage_index}.txt"
     return _ascii_export(project_path, tree, fpath, f"ExportVoltage{voltage_index}")
 

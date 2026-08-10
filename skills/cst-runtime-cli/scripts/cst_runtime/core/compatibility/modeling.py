@@ -73,14 +73,14 @@ def _curve_item_verification_vba(
 def _normalize_temperature_unit(value: str) -> str:
     """把常见温度单位写法转换为 CST 接受的完整名称。"""
     aliases = {
-        "celsius": "Celsius",
-        "degc": "Celsius",
-        "°c": "Celsius",
-        "kelvin": "Kelvin",
-        "k": "Kelvin",
-        "fahrenheit": "Fahrenheit",
-        "degf": "Fahrenheit",
-        "°f": "Fahrenheit",
+        "celsius": "celsius",
+        "degc": "celsius",
+        "°c": "celsius",
+        "kelvin": "kelvin",
+        "k": "kelvin",
+        "fahrenheit": "fahrenheit",
+        "degf": "fahrenheit",
+        "°f": "fahrenheit",
     }
     normalized = aliases.get(str(value).strip().casefold())
     if normalized is None:
@@ -136,9 +136,9 @@ def units_vba(
     }
     if resolved.is_2026_or_later:
         values["Temperature"] = {
-            "Celsius": "degC",
-            "Kelvin": "K",
-            "Fahrenheit": "degF",
+            "celsius": "degC",
+            "kelvin": "K",
+            "fahrenheit": "degF",
         }[temperature]
         return CompatibleVBA(
             tuple(["With Units", *[f'    .SetUnit "{name}", "{value}"' for name, value in values.items()], "End With"]),
@@ -361,6 +361,7 @@ def mesh_vba(
             "mesh.modern_refinement",
             {
                 "steps_per_wave_far": (steps_per_wave_far, 5),
+                "steps_per_box_far": (steps_per_box_far, 1),
                 "edge_refinement_ratio": (edge_refinement_ratio, 2),
                 "edge_refinement_buffer_lines": (edge_refinement_buffer_lines, 3),
                 "use_gpu": (use_gpu, True),
@@ -372,8 +373,7 @@ def mesh_vba(
                 "With Mesh",
                 '    .MeshType "PBA"',
                 f'    .LinesPerWavelength "{steps_per_wave_near}"',
-                f'    .MinimumLineNumber "{steps_per_box_near}"',
-                f'    .MinimumStepNumber "{steps_per_box_far}"',
+                f'    .MinimumStepNumber "{steps_per_box_near}"',
                 '    .UseRatioLimit "True"',
                 f'    .RatioLimit "{ratio_limit_geometry}"',
                 '    .EquilibrateMesh "True"',
@@ -386,6 +386,7 @@ def mesh_vba(
             "cst2022",
             not_applied={
                 "steps_per_wave_far": steps_per_wave_far,
+                "steps_per_box_far": steps_per_box_far,
                 "edge_refinement_ratio": edge_refinement_ratio,
                 "edge_refinement_buffer_lines": edge_refinement_buffer_lines,
                 "use_gpu": use_gpu,
@@ -606,7 +607,29 @@ def monitor_vba(
     if not normalized_name:
         raise ValidationError("监视器名称不能为空")
     escaped_name = vba_string(normalized_name)
-    if resolved.is_2022:
+    field_key = str(field_type).strip().casefold()
+    is_single_frequency_field = field_key in {"efield", "hfield"}
+    if resolved.is_2022 and is_single_frequency_field:
+        try:
+            same_frequency = math.isclose(float(start), float(end), rel_tol=1e-12, abs_tol=1e-12)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("CST 2022 Efield/Hfield 监视器频率必须是数值") from exc
+        if not same_frequency:
+            raise unsupported_feature(
+                "monitor.frequency_range",
+                required_capability="single_frequency_efield_hfield",
+                unsupported_arguments=["end"],
+                message="CST 2022 的 Efield/Hfield 频域监视器只支持单频，start 与 end 必须相同",
+            )
+        if samples is not None and int(samples) != 1:
+            raise unsupported_feature(
+                "monitor.frequency_samples",
+                required_capability="single_frequency_efield_hfield",
+                unsupported_arguments=["samples"],
+                message="CST 2022 的 Efield/Hfield 频域监视器不支持 FrequencySamples",
+            )
+        count = 1
+    elif resolved.is_2022:
         count = int(samples) if samples is not None else _sample_count(start, end, float(step))
         if count < 1:
             raise ValidationError("监视器样本数必须大于零")
@@ -620,11 +643,18 @@ def monitor_vba(
                 '    .Domain "Frequency"',
                 f'    .FieldType "{field_type}"',
                 f'    .Dimension "{dimension}"',
-                f'    .FrequencyRange "{start}", "{end}"',
-                f'    .FrequencySamples "{count}"',
-                f'    .UseSubvolume "{_bool(use_subvolume)}"',
             ]
         )
+        if is_single_frequency_field:
+            lines.append(f'    .Frequency "{start}"')
+        else:
+            lines.extend(
+                [
+                    f'    .FrequencyRange "{start}", "{end}"',
+                    f'    .FrequencySamples "{count}"',
+                ]
+            )
+        lines.append(f'    .UseSubvolume "{_bool(use_subvolume)}"')
         if subvolume is not None:
             lines.append('    .SetSubvolume ' + ", ".join(f'"{value}"' for value in subvolume))
         if enable_nearfield is not None:
@@ -632,7 +662,8 @@ def monitor_vba(
         if field_type.lower() == "farfield":
             lines.append('    .ExportFarfieldSource "False"')
         lines.extend(["    .Create", "End With"])
-        return CompatibleVBA(tuple(lines), "cst2022")
+        not_applied = {"step": step} if is_single_frequency_field and step is not None else {}
+        return CompatibleVBA(tuple(lines), "cst2022", not_applied=not_applied)
     if modern_setter_style:
         lines = [
             "With Monitor",

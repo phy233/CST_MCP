@@ -17,7 +17,7 @@ Usage:
               position=(0, 0, 5))
 
     # Delete monitor
-    delete_monitor("C:\\path\\to\\model.cst", "farfield (f=10)_1")
+    delete_monitor("C:\\path\\to\\model.cst", "farfield (f=10)")
 """
 from __future__ import annotations
 
@@ -84,6 +84,9 @@ def set_efield(
 ) -> None:
     """Set E-field monitor.
 
+    CST 2022 的 E-field 监视器只支持单频，因此该版本下
+    ``start_freq`` 与 ``end_freq`` 必须相同。
+
     Args:
         project_path: Path to .cst file
         start_freq: Start frequency in GHz
@@ -126,10 +129,10 @@ def set_field(
 
     Args:
         project_path: Path to .cst file
-        field_type: Field type ("E", "H", "Power", etc.)
-        start_freq: Start frequency
-        end_freq: End frequency
-        num_samples: Number of samples
+        field_type: 场类型，只允许 "E" 或 "H"
+        start_freq: 起始频率；CST 2022 将其作为单一监视频率
+        end_freq: 结束频率；CST 2022 要求它与 ``start_freq`` 相同
+        num_samples: 样本数；CST 2022 要求为 1
 
     Raises:
         RuntimeError: If monitor cannot be set
@@ -148,7 +151,7 @@ def set_probe(
 
     Args:
         project_path: Path to .cst file
-        field_type: Field type ("E", "H", "Power", etc.)
+        field_type: 场类型，只允许 "E" 或 "H"
         position: (x, y, z) probe position
 
     Raises:

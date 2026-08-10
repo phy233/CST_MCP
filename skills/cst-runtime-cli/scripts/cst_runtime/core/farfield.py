@@ -19,6 +19,7 @@ from .compatibility import (
     get_tree_items,
     read_farfield_scalar_list,
 )
+from .compatibility.execution import vba_string
 from ..analysis.farfield import (
     _extract_farfield_frequency_ghz,
     _build_farfield_angle_values,
@@ -32,12 +33,16 @@ from ..analysis.farfield import (
 
 
 def _build_farfield_cut_export_command(tree_path: str, output_file: str) -> str:
+    escaped_tree_path = vba_string(tree_path)
+    escaped_output_file = vba_string(output_file)
     return "\n".join(
         [
-            f'SelectTreeItem "{tree_path}"',
+            f'If Not SelectTreeItem("{escaped_tree_path}") Then',
+            f'    ReportError "Farfield cut export: tree item was not selected: {escaped_tree_path}"',
+            "End If",
             "With ASCIIExport",
             "    .Reset",
-            f'    .FileName "{output_file}"',
+            f'    .FileName "{escaped_output_file}"',
             "    .Execute",
             "End With",
         ]
@@ -252,7 +257,9 @@ def _gui_set_result_navigator_selection(
     macro = "\n".join(
         [
             "Sub Main()",
-            f'    SelectTreeItem("{escaped_tree_path}")',
+            f'    If Not SelectTreeItem("{escaped_tree_path}") Then',
+            f'        ReportError "Result navigator: tree item was not selected: {escaped_tree_path}"',
+            "    End If",
             "    Dim response As String",
             f'    response = ResultNavigatorRequest("{request}", "{escaped_selection}")',
             "End Sub",

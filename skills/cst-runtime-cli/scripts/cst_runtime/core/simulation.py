@@ -23,6 +23,7 @@ from .modeling import _single_vba, _submit_versioned_vba
 
 
 def start_simulation(project_path: str) -> dict[str, Any]:
+    """同步运行求解器；仅当 CST 的 run_solver 返回 True 时报告成功。"""
     normalized_project = _abs_project_path(project_path)
     rejected = gateway.guard_before_simulation(normalized_project)
     if rejected:
@@ -32,7 +33,14 @@ def start_simulation(project_path: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
-        project.modeler.run_solver()
+        solver_successful = bool(project.modeler.run_solver())
+        if not solver_successful:
+            return error_response(
+                "solver_run_failed",
+                "CST 求解器已经结束，但 run_solver 返回 False，求解未成功完成",
+                project_path=normalized_project,
+                runtime_module="cst_runtime.simulation",
+            )
         return {
             "status": "success",
             "project_path": normalized_project,
@@ -49,6 +57,7 @@ def start_simulation(project_path: str) -> dict[str, Any]:
 
 
 def start_simulation_async(project_path: str) -> dict[str, Any]:
+    """异步启动求解器；返回成功仅表示 start_solver 调用已完成。"""
     normalized_project = _abs_project_path(project_path)
     rejected = gateway.guard_before_simulation(normalized_project)
     if rejected:
@@ -232,8 +241,16 @@ def set_frequency_range(project_path: str, fmin: float, fmax: float) -> dict[str
 
 
 def rebuild_structure(project_path: str) -> dict[str, Any]:
-    """根据当前参数重建结构。"""
-    return _single_vba_pops(project_path, "Rebuild", "Application.Rebuild")
+    """根据当前参数重建结构；CST 官方说明该操作会删除全部结果。"""
+    result = _single_vba_pops(
+        project_path,
+        "Rebuild",
+        'If Not Application.Rebuild Then ReportError "Application.Rebuild returned False"',
+    )
+    if result.get("status") != "error":
+        result["results_deleted"] = True
+        result["warning"] = "Application.Rebuild 会删除当前工程中的全部求解结果"
+    return result
 
 
 def delete_results(project_path: str) -> dict[str, Any]:

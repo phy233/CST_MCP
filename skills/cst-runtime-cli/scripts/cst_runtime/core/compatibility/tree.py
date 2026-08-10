@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
-from .base import unsupported_feature
+from ..errors import VerificationError
 from .execution import execute_text_query, vba_string
 
 
@@ -135,16 +135,40 @@ def get_tree_items(project: Any, filter: str | None = None) -> list[Any]:
 
 
 def select_tree_item(project: Any, tree_path: str) -> None:
-    """Selects an item in the CST Navigation Tree."""
+    """选中 CST 导航树节点，并检查文档规定的布尔返回值。"""
     if hasattr(project, "model3d") and hasattr(project.model3d, "SelectTreeItem"):
-        project.model3d.SelectTreeItem(tree_path)
+        selected = project.model3d.SelectTreeItem(tree_path)
+        if selected is False:
+            raise VerificationError(
+                f"CST 未能选中树节点：{tree_path}",
+                feature="tree.select_item",
+                context={"tree_path": tree_path},
+            )
+        return
     elif hasattr(project, "modeler") and hasattr(project.modeler, "SelectTreeItem"):
-        project.modeler.SelectTreeItem(tree_path)
-    else:
-        raise unsupported_feature(
-            "tree.select_item",
-            project=project,
-            required_capability="select_tree_item",
+        selected = project.modeler.SelectTreeItem(tree_path)
+        if selected is False:
+            raise VerificationError(
+                f"CST 未能选中树节点：{tree_path}",
+                feature="tree.select_item",
+                context={"tree_path": tree_path},
+            )
+        return
+    output = execute_text_query(
+        project,
+        [
+            f'If SelectTreeItem("{vba_string(tree_path)}") Then',
+            'Print #cstRtQueryFile, "1"',
+            "Else",
+            'Print #cstRtQueryFile, "0"',
+            "End If",
+        ],
+    )
+    if not output or output[0].strip() != "1":
+        raise VerificationError(
+            f"CST 未能选中树节点：{tree_path}",
+            feature="tree.select_item",
+            context={"tree_path": tree_path},
         )
 
 

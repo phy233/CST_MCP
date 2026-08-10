@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from ..errors import VerificationError
 from .base import get_model3d, profile_for, unsupported_feature
 from .execution import execute_text_query, vba_string
 
@@ -35,8 +36,12 @@ def legacy_farfield_query_vba(
     normalized_mode = plot_mode.strip().lower()
     if normalized_mode not in {"gain", "directivity", "realized gain"}:
         raise ValueError("CST 2022 远场网格仅支持 gain、directivity、realized gain")
+    escaped_tree_path = vba_string(tree_path)
     lines = [
-        f'SelectTreeItem "{vba_string(tree_path)}"',
+        f'If Not SelectTreeItem("{escaped_tree_path}") Then',
+        f'Print #cstRtQueryFile, "__CST_TREE_SELECTION_FAILED__{escaped_tree_path}"',
+        "Exit Sub",
+        "End If",
         "FarfieldPlot.Reset",
         'FarfieldPlot.SetScaleLinear "False"',
         'FarfieldPlot.DBUnit "0"',
@@ -86,6 +91,13 @@ def read_legacy_farfield_list(
         ),
         timeout=30.0,
     )
+    if lines and lines[0].startswith("__CST_TREE_SELECTION_FAILED__"):
+        failed_tree_path = lines[0].removeprefix("__CST_TREE_SELECTION_FAILED__")
+        raise VerificationError(
+            f"CST 未能选中远场结果树节点：{failed_tree_path}",
+            feature="farfield.select_tree_item",
+            context={"tree_path": failed_tree_path},
+        )
     scalar_values: list[float] = []
     point_theta: list[float] = []
     point_phi: list[float] = []
