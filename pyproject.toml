@@ -34,5 +34,10 @@ testpaths = ["mcp_server/tests", "skills/cst-runtime-cli/tests"]
 asyncio_mode = "auto"
 pythonpath = [".", "skills/cst-runtime-cli/scripts"]
 addopts = "--import-mode=importlib"
+markers = [
+    "cst_integration: 需要真实 CST 安装和许可证的串行集成测试",
+    "cst_solver: 会短暂启动并强制停止真实 CST 求解器的测试",
+    "cst_destructive: 会修改隔离工程但必须在测试内清理的真机测试",
+]
 
 [tool.uv]
