@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import locale
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -143,6 +144,38 @@ def _vba_string(value: str) -> str:
     return value.replace('"', '""')
 
 
+_LITERAL_REPORT_ERROR = re.compile(
+    r'^(?P<indent>[ \t]*)ReportError\s+(?P<message>"(?:""|[^"])*")\s*$',
+    re.IGNORECASE,
+)
+
+
+def _route_literal_report_errors(
+    vba_script: str,
+    *,
+    variable_prefix: str,
+    error_label: str,
+) -> str:
+    """把内部字面量 ``ReportError`` 路由到确定的状态网关错误分支。"""
+    routed_lines: list[str] = []
+    for line in vba_script.splitlines():
+        match = _LITERAL_REPORT_ERROR.fullmatch(line)
+        if match is None:
+            routed_lines.append(line)
+            continue
+        indent = match.group("indent")
+        message = match.group("message")
+        routed_lines.extend(
+            [
+                f"{indent}{variable_prefix}ExplicitFailure = True",
+                f"{indent}{variable_prefix}ErrorNumber = 9999",
+                f"{indent}{variable_prefix}ErrorDescription = {message}",
+                f"{indent}GoTo {error_label}",
+            ]
+        )
+    return "\n".join(routed_lines)
+
+
 def resolve_cst_temp_directory(
     project: Any,
     project_path: str,
@@ -165,9 +198,10 @@ def wrap_vba_with_status_channel(
     """包装 History VBA，同时避免持久化当前机器的绝对路径。
 
     arm 文件只在首次提交时存在。以后重建 History 时仍会执行实际业务 VBA，
-    但不会再次创建诊断文件。包装代码只使用 CST 2022 文档确认支持的
-    ``ReportError`` 和 ``Err.Number/Description``，不使用旧解释器不支持的
-    ``Err.Raise``。
+    但不会再次创建诊断文件。内部的字面量 ``ReportError`` 会先路由到明确的
+    错误标签，写完状态文件后再向 CST 报错。包装代码只使用 CST 2022 文档
+    确认支持的 ``ReportError``、``Err.Number/Description`` 和 ``GoTo``，
+    不使用旧解释器不支持的 ``Err.Raise``。
     """
     valid_filename_characters = frozenset(
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
@@ -192,6 +226,11 @@ def wrap_vba_with_status_channel(
     error_label = f"CSTRuntimeError{suffix}"
     done_label = f"CSTRuntimeDone{suffix}"
     variable_prefix = f"cstRt{suffix}"
+    routed_script = _route_literal_report_errors(
+        vba_script,
+        variable_prefix=variable_prefix,
+        error_label=error_label,
+    )
     return "\n".join(
         [
             f"Dim {variable_prefix}StatusFile As String",
@@ -200,6 +239,7 @@ def wrap_vba_with_status_channel(
             f"Dim {variable_prefix}FileNumber As Integer",
             f"Dim {variable_prefix}ErrorNumber As Long",
             f"Dim {variable_prefix}ErrorDescription As String",
+            f"Dim {variable_prefix}ExplicitFailure As Boolean",
             f'{variable_prefix}StatusFile = {status_directory_expression} & "\\{status_file_name}"',
             f'{variable_prefix}ArmFile = {status_directory_expression} & "\\{arm_file_name}"',
             "On Error Resume Next",
@@ -207,7 +247,7 @@ def wrap_vba_with_status_channel(
             f"If {variable_prefix}Armed Then Kill {variable_prefix}ArmFile",
             "On Error GoTo 0",
             f"On Error GoTo {error_label}",
-            vba_script,
+            routed_script,
             f"If {variable_prefix}Armed Then",
             f"{variable_prefix}FileNumber = FreeFile",
             f"Open {variable_prefix}StatusFile For Output As #{variable_prefix}FileNumber",
@@ -216,8 +256,15 @@ def wrap_vba_with_status_channel(
             "End If",
             f"GoTo {done_label}",
             f"{error_label}:",
+            f"If Not {variable_prefix}ExplicitFailure Then",
             f"{variable_prefix}ErrorNumber = Err.Number",
             f"{variable_prefix}ErrorDescription = Err.Description",
+            "End If",
+            f'If {variable_prefix}ErrorDescription = "" Then',
+            f'{variable_prefix}ErrorDescription = '
+            f'"CST History VBA failed without Err.Description (error " & '
+            f'CStr({variable_prefix}ErrorNumber) & ")."',
+            "End If",
             "On Error Resume Next",
             f"If {variable_prefix}Armed Then",
             f"{variable_prefix}FileNumber = FreeFile",
@@ -230,7 +277,6 @@ def wrap_vba_with_status_channel(
             f"Close #{variable_prefix}FileNumber",
             "End If",
             "On Error GoTo 0",
-            f"If Not {variable_prefix}Armed Then "
             f"ReportError {variable_prefix}ErrorDescription",
             f"{done_label}:",
             "",
