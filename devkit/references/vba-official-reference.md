@@ -113,6 +113,8 @@ Set mws = app.OpenFile("C:\project.cst")  ' 打开已有工程
 
 `SelectTreeItem` 是 CST 2022 的 Application/VBA 全局方法，不是 `cst.interface.Project.model3d` 的必要条件。Python Project 没有 `model3d` 时，兼容层应通过即时 VBA 调用 `SelectTreeItem(path)`，并检查其布尔返回值；返回 `False` 表示节点没有成功选中。History 操作应继续使用现有 `ReportError` 状态文件网关上报失败；即时查询则把失败标记写入同一临时文本传输通道，由 Python 解析后返回验证错误，不另建错误协议。
 
+`Rebuild` 在 CST 2022 的 Application/VBA 全局方法页中以裸全局函数 `Rebuild → bool` 给出；内部 VBA 应写成 `If Not Rebuild Then ...`，不要凭空增加文档未列出的 `Application.` 前缀。该方法会删除全部结果，且只有返回 `True` 才表示重建成功。
+
 #### CST 2022 兼容用法
 
 除下列两项外，本节列出的参数读写、`Rebuild`、`RunSolver`、`SelectTreeItem` 等全局方法在 CST 2022 中的名称和参数顺序与 2026 一致。
@@ -134,6 +136,7 @@ Set mws = app.OpenFile("C:\project.cst")  ' 打开已有工程
 6. **曲线名有两层。** `Curve.NewCurve "container"` 创建容器；`Polygon`、`Polygon3D`、`Arc`、`AnalyticalCurve` 的 `.Curve` 只填容器名；`ExtrudeCurve.Curve` 必须填完整曲线项名 `"container:item"`。创建曲线项前要保证容器已存在。
 7. **统一使用现有状态文件网关。** CST 2022 用 `ReportError "..."` 终止当前 VBA，并由外层 `On Error GoTo` 捕获 `Err.Number`/`Err.Description`，写入状态文件供 Python 解析。不要在生成器内使用 `Err.Raise`、`Erl` 或另建错误协议。
 8. **提交返回值不是最终证据。** 2022 VBA 帮助把 `AddToHistory` 的布尔值描述为创建并执行成功；但 Python 桥接层仍必须等状态文件或核对实体/结果状态，避免把 COM 提交成功误判为 History 内部执行成功。
+9. **文件传输分支必须到达 `Close`。** 即时查询通过 `Open ... For Output`、`Print #file`、`Close #file` 向 Python 回传文本时，失败分支不得在公共 `Close` 之前执行 `Exit Sub`。应使用 `If ... Else ... End If` 包住查询主体，或在提前退出前显式关闭文件，避免缓冲区中的错误标记没有写入磁盘。
 
 本工程对应的安全骨架如下：
 
@@ -1462,6 +1465,8 @@ CST 2022 只有一个现行的六面体网格下限入口 `MinimumStepNumber`。
 在 CST 2022 中，调用 `Monitor.Create` 前必须先提供非空的 `.Name`。频率范围、场类型和采样数都合法也不能替代名称；生成器应在 Python 参数验证阶段拒绝空名称，不能提交缺少 `.Name` 的 VBA。
 
 CST 2022 的频域 `Efield`/`Hfield` 监视器使用 `Frequency(double freq)`，官方示例也是单频 `.Frequency 2.5`。`FrequencyRange` 的说明限定为 field source monitor，`FrequencySamples` 的说明限定为 broadband farfield monitor；因此不得为 E/H 监视器拼接这两个方法。上层若传入不同的起止频率，兼容层必须返回不支持，不能把范围伪装成单频成功。
+
+`UseSubvolume(False)` 表示使用计算域包围盒；官方普通 E-field 示例也只写 `.UseSubvolume "False"`。只有启用子体积时才需要 `SetSubvolume(xmin, xmax, ymin, ymax, zmin, zmax)`，官方子体积示例按 `.UseSubvolume "True"`、`.SetSubvolume ...` 的组合使用。因此兼容层在禁用子体积时不得继续拼接坐标，也不应在没有工程几何依据时猜测 `zmax` 默认值。
 
 监视器定义名和求解后的结果树名不是同一层级。`Monitor.Name` 的官方示例为 `e-field (f=2.5)`，不含激励后缀；结果树示例则为 `e-field (f=0.1) [1]`、`farfield (f=16) [1]`。`[1]` 是求解结果的激励编号，不应预先写进 `Monitor.Name`，更不能使用非官方的 `_1` 代替。
 

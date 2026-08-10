@@ -964,8 +964,8 @@ result = define_brick(
 |------|-------------|------|
 | `define_port` 🟢 | `(project_path, port_number, x_min, ..., orientation)` | 定义波导端口 |
 | `define_monitor` 🟢 | `(project_path, start_freq, end_freq, step)` | 定义远场频率监视器 |
-| `set_farfield_monitor` 🟢 | `(project_path, start_freq, end_freq, step=1, subvolume_..., enable_nearfield=True)` | 配置远场监视器（含子体积和近场计算） |
-| `set_efield_monitor` 🟢 | `(project_path, start_freq, end_freq, step=1, dimension="Volume", ...)` | 配置 E 场体积/表面监视器 |
+| `set_farfield_monitor` 🟢 | `(project_path, start_freq, end_freq, step=1, subvolume_..., enable_nearfield=True)` | 配置远场监视器；当前使用计算域包围盒，兼容保留的 `subvolume_*` 参数不提交给 CST |
+| `set_efield_monitor` 🟢 | `(project_path, start_freq, end_freq, step=1, dimension="Volume", subvolume_...)` | 配置 E 场体积/表面监视器；当前使用计算域包围盒，兼容保留的 `subvolume_*` 参数不提交给 CST |
 | `set_field_monitor` 🟢 | `(project_path, field_type, start_frequency, end_frequency, num_samples)` | 通用场监视器（E/H） |
 | `set_probe` 🟢 | `(project_path, field_type, x_pos, y_pos, z_pos)` | 放置场探针 |
 | `delete_probe_by_id` 🟢 | `(project_path, probe_id)` | 按 ID 删除探针 |
@@ -1562,7 +1562,7 @@ CST 2022/2026 版本差异的安全封装。
 | 项 | 说明 |
 |---|---|
 | **签名** | `safe_quiet_mode(de) -> ContextManager` |
-| **功能** | 版本兼容的静默模式。不支持时返回 no-op 上下文管理器 |
+| **功能** | 版本兼容的静默模式。进入时通过 `in_quiet_mode()` 读取原状态并用 `set_quiet_mode(True)` 临时开启，退出时恢复；不支持时返回 no-op 上下文管理器 |
 
 #### `safe_get_version` 🟡
 

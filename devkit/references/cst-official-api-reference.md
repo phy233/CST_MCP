@@ -233,7 +233,7 @@ de.print_version()      # 打印版本
 de.print_command_line_options()
 ```
 
-> CST 2022 的 `DesignEnvironment` 只记录 `in_quiet_mode()` 与 `set_quiet_mode(flag)`。兼容代码不得探测不存在的 `quiet_mode_enabled()`；若只读取状态，应调用 `in_quiet_mode()`。
+> CST 2022 的 `DesignEnvironment` 只记录 `in_quiet_mode()` 与 `set_quiet_mode(flag)`。兼容代码不得探测不存在的 `quiet_mode_enabled()`；若只读取状态，应调用 `in_quiet_mode()`。若兼容函数向调用方承诺返回上下文管理器，则应在进入时用前两者读取并临时开启静默模式，在退出时恢复原状态，而不能直接把 `in_quiet_mode()` 的布尔返回值冒充上下文管理器。
 
 ---
 
