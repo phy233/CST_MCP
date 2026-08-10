@@ -298,7 +298,7 @@ def test_2022_farfield_monitor_generates_valid_name_and_five_samples() -> None:
     assert '.EnableNearfieldCalculation "True"' in text
 
 
-def test_2022_monitor_omits_subvolume_coordinates_when_disabled() -> None:
+def test_2022_broadband_farfield_omits_subvolume_methods_when_disabled() -> None:
     text = _text(
         monitor_vba(
             field_type="Farfield",
@@ -312,7 +312,7 @@ def test_2022_monitor_omits_subvolume_coordinates_when_disabled() -> None:
         )
     )
 
-    assert '.UseSubvolume "False"' in text
+    assert ".UseSubvolume" not in text
     assert ".SetSubvolume" not in text
 
 
@@ -407,6 +407,7 @@ def test_define_monitor_name_reflects_requested_range_without_fake_suffix(monkey
 
     def fake_submit(project_path, history_name, builder, **arguments):
         captured.update(arguments)
+        captured["generated"] = builder(profile=CST2022, **arguments)
         return {"status": "success"}
 
     monkeypatch.setattr(core_modeling, "_submit_versioned_vba", fake_submit)
@@ -414,6 +415,14 @@ def test_define_monitor_name_reflects_requested_range_without_fake_suffix(monkey
     core_modeling.define_monitor("D:/project.cst", 8, 12, 1)
 
     assert captured["name"] == "farfield (f=8-12)"
+    generated = captured["generated"]
+    text = _text(generated)
+    assert ".UseSubvolume" not in text
+    assert ".SetSubvolume" not in text
+    assert generated.not_applied == {
+        "use_subvolume": True,
+        "subvolume": (-105, 105, -105, 105, 0, 445),
+    }
 
 
 def test_set_probe_normalizes_documented_eh_values(monkeypatch) -> None:
@@ -910,6 +919,31 @@ def test_change_solver_type_uses_vba_sub_syntax_without_parentheses() -> None:
 
     assert text == 'ChangeSolverType "HF Time Domain"'
     assert "ChangeSolverType(" not in text
+
+
+def test_change_solver_type_rejects_value_outside_2022_manual() -> None:
+    with pytest.raises(ValidationError, match="ChangeSolverType 文档列出的合法值"):
+        change_solver_type_vba(
+            solver_type="HF Unknown Solver",
+            profile=CST2022,
+        )
+
+
+def test_change_solver_type_returns_validation_error_before_history_submission(monkeypatch) -> None:
+    monkeypatch.setattr(core_modeling, "detect_compatibility_profile", lambda: CST2022)
+    monkeypatch.setattr(
+        core_modeling,
+        "_add_vba_history",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("非法求解器类型不得提交 History")
+        ),
+    )
+
+    result = core_modeling.change_solver_type("D:/project.cst", "HF Unknown Solver")
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "validation_error"
+    assert result["error"]["phase"] == "validation"
 
 
 def test_2022_transform_rejects_destination() -> None:

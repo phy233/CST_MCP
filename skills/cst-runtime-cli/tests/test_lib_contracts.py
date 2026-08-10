@@ -63,6 +63,22 @@ def test_close_project_forwards_process_cleanup_choice(monkeypatch) -> None:
     assert received["kill_processes"] is True
 
 
+def test_session_is_locked_uses_companion_directory_lok_files(tmp_path) -> None:
+    from cst_runtime.lib import session
+
+    project_path = tmp_path / "antenna.cst"
+    legacy_lock = tmp_path / "antenna.cst.lock"
+    legacy_lock.touch()
+
+    assert session.is_locked(str(project_path))["locked"] is False
+
+    companion_dir = tmp_path / "antenna" / "Model3D"
+    companion_dir.mkdir(parents=True)
+    (companion_dir / "Project.lok").touch()
+
+    assert session.is_locked(str(project_path))["locked"] is True
+
+
 def test_existing_geometry_api_no_longer_throws_business_error(monkeypatch) -> None:
     from cst_runtime.lib import geometry
 

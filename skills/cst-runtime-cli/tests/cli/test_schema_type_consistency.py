@@ -114,6 +114,30 @@ def test_define_units_schema_exposes_cst_temperature_names() -> None:
     )
 
 
+def test_change_solver_type_schema_uses_2022_manual_values() -> None:
+    solver_type = all_defs()["change-solver-type"]["json_schema"]["properties"]["solver_type"]
+
+    assert solver_type["enum"] == [
+        "HF Time Domain",
+        "HF Eigenmode",
+        "HF Frequency Domain",
+        "HF IntegralEq",
+        "HF Multilayer",
+        "HF Asymptotic",
+        "LF EStatic",
+        "LF MStatic",
+        "LF Stationary Current",
+        "LF Frequency Domain",
+        "LF Time Domain (MQS)",
+        "PT Tracking",
+        "PT Wakefields",
+        "PT PIC",
+        "Thermal Steady State",
+        "Thermal Transient",
+        "Mechanics",
+    ]
+
+
 def test_union_scalar_schema_remains_available_to_cli_helpers() -> None:
     assert build_args_templates()["define-brick"]["x_min"] == -10
     assert "x_min" in build_direct_arg_specs()["define-brick"]
