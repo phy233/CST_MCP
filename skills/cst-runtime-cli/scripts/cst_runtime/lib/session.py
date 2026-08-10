@@ -24,6 +24,7 @@ from ..core.session import inspect as _inspect
 from ..core.session import quit_cst as _quit_cst
 from ..core.session import create_blank_project as _create_blank_project
 from ..core.project import save_project as _save_project
+from ..core.identity import find_lock_files as _find_lock_files
 from ..core.identity import list_open_projects as _list_open_projects
 from ..core.session import reattach_project as _reattach_project
 from ._facade import call_core
@@ -167,6 +168,7 @@ def is_locked(project_path: str) -> OperationResult:
     Returns:
         如果工程被锁定则返回 True，否则返回 False
     """
-    import pathlib
-    lock_file = pathlib.Path(project_path).with_suffix(".cst.lock")
-    return success_result(locked=lock_file.exists(), project_path=str(project_path))
+    return success_result(
+        locked=bool(_find_lock_files(project_path)),
+        project_path=str(project_path),
+    )

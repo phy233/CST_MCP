@@ -10,6 +10,7 @@ from .errors import CSTRuntimeError, error_response, success_response
 from .compatibility import detect_compatibility_profile
 from .compatibility.execution import vba_string
 from .compatibility.modeling import (
+    CST_2022_SOLVER_TYPES,
     analytical_curve_vba,
     background_vba,
     cone_vba,

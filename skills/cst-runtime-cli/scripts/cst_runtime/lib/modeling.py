@@ -5,6 +5,9 @@ from ..core import modeling as _core
 from ._facade import wrap_core
 
 
+CST_2022_SOLVER_TYPES = _core.CST_2022_SOLVER_TYPES
+
+
 _PUBLIC_OPERATIONS = (
     "define_material_from_mtd",
     "define_brick",
@@ -60,4 +63,4 @@ _PUBLIC_OPERATIONS = (
 for _name in _PUBLIC_OPERATIONS:
     globals()[_name] = wrap_core(getattr(_core, _name))
 
-__all__ = list(_PUBLIC_OPERATIONS)
+__all__ = ["CST_2022_SOLVER_TYPES", *_PUBLIC_OPERATIONS]

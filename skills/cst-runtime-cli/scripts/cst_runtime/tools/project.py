@@ -1,5 +1,6 @@
 """project_ops.py — project_ops + project_identity 工具定义"""
 from . import _register_tool_defs
+from ..lib.modeling import CST_2022_SOLVER_TYPES
 
 
 TOOL_DEFS = {
@@ -54,6 +55,7 @@ TOOL_DEFS = {
             },
             "solver_type": {
                 "type": "string",
+                "enum": list(CST_2022_SOLVER_TYPES),
                 "examples": [
                     "HF Time Domain"
                 ]

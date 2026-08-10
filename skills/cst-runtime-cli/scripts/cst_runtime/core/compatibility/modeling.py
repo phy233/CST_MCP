@@ -10,6 +10,27 @@ from .base import CompatibilityProfile, detect_compatibility_profile, unsupporte
 from .execution import vba_string
 
 
+CST_2022_SOLVER_TYPES = (
+    "HF Time Domain",
+    "HF Eigenmode",
+    "HF Frequency Domain",
+    "HF IntegralEq",
+    "HF Multilayer",
+    "HF Asymptotic",
+    "LF EStatic",
+    "LF MStatic",
+    "LF Stationary Current",
+    "LF Frequency Domain",
+    "LF Time Domain (MQS)",
+    "PT Tracking",
+    "PT Wakefields",
+    "PT PIC",
+    "Thermal Steady State",
+    "Thermal Transient",
+    "Mechanics",
+)
+
+
 @dataclass(frozen=True)
 class CompatibleVBA:
     lines: tuple[str, ...]
@@ -609,6 +630,17 @@ def monitor_vba(
     escaped_name = vba_string(normalized_name)
     field_key = str(field_type).strip().casefold()
     is_single_frequency_field = field_key in {"efield", "hfield"}
+    is_broadband_farfield = False
+    if resolved.is_2022 and field_key == "farfield":
+        try:
+            is_broadband_farfield = not math.isclose(
+                float(start),
+                float(end),
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("CST 2022 Farfield 监视器频率必须是数值") from exc
     if resolved.is_2022 and is_single_frequency_field:
         try:
             same_frequency = math.isclose(float(start), float(end), rel_tol=1e-12, abs_tol=1e-12)
@@ -654,15 +686,20 @@ def monitor_vba(
                     f'    .FrequencySamples "{count}"',
                 ]
             )
-        lines.append(f'    .UseSubvolume "{_bool(use_subvolume)}"')
-        if use_subvolume and subvolume is not None:
-            lines.append('    .SetSubvolume ' + ", ".join(f'"{value}"' for value in subvolume))
+        if not is_broadband_farfield:
+            lines.append(f'    .UseSubvolume "{_bool(use_subvolume)}"')
+            if use_subvolume and subvolume is not None:
+                lines.append('    .SetSubvolume ' + ", ".join(f'"{value}"' for value in subvolume))
         if enable_nearfield is not None:
             lines.append(f'    .EnableNearfieldCalculation "{_bool(enable_nearfield)}"')
         if field_type.lower() == "farfield":
             lines.append('    .ExportFarfieldSource "False"')
         lines.extend(["    .Create", "End With"])
         not_applied = {"step": step} if is_single_frequency_field and step is not None else {}
+        if is_broadband_farfield and use_subvolume:
+            not_applied["use_subvolume"] = True
+            if subvolume is not None:
+                not_applied["subvolume"] = subvolume
         return CompatibleVBA(tuple(lines), "cst2022", not_applied=not_applied)
     if modern_setter_style:
         lines = [
@@ -905,8 +942,14 @@ def change_solver_type_vba(
 ) -> CompatibleVBA:
     """使用 VBA Sub 的无括号语法切换求解器。"""
     resolved = _profile(profile)
+    normalized_solver_type = str(solver_type).strip()
+    if normalized_solver_type not in CST_2022_SOLVER_TYPES:
+        raise ValidationError(
+            "solver_type 必须是 CST 2022 ChangeSolverType 文档列出的合法值",
+            context={"solver_type": solver_type, "allowed_values": list(CST_2022_SOLVER_TYPES)},
+        )
     return CompatibleVBA(
-        (f'ChangeSolverType "{vba_string(solver_type)}"',),
+        (f'ChangeSolverType "{vba_string(normalized_solver_type)}"',),
         resolved.label,
     )
 
@@ -1042,6 +1085,7 @@ def transform_vba(
 
 
 __all__ = [
+    "CST_2022_SOLVER_TYPES",
     "CompatibleVBA",
     "background_vba",
     "extrude_curve_vba",
