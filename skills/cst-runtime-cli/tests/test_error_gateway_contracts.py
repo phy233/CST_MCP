@@ -147,13 +147,57 @@ def test_wrapper_contains_runtime_error_channel(tmp_path: Path) -> None:
     assert "C:/" not in wrapped
     assert "If cstRtoperation123Armed Then" in wrapped
     assert "Then Kill cstRtoperation123ArmFile" in wrapped
-    assert (
-        "If Not cstRtoperation123Armed Then "
-        "ReportError cstRtoperation123ErrorDescription"
-    ) in wrapped
+    assert "Dim cstRtoperation123ExplicitFailure As Boolean" in wrapped
+    assert "ReportError cstRtoperation123ErrorDescription" in wrapped
+    assert "If Not cstRtoperation123Armed Then ReportError" not in wrapped
+    assert 'If cstRtoperation123ErrorDescription = "" Then' in wrapped
+    assert "failed without Err.Description" in wrapped
     assert "Err.Raise" not in wrapped
     assert "Err.Source" not in wrapped
     assert "Erl" not in wrapped
+
+
+def test_wrapper_routes_polygon_verification_failure_before_ok() -> None:
+    wrapped = wrap_vba_with_status_channel(
+        "\n".join(
+            [
+                'If Not SelectTreeItem("Curves\\cut_curve_top_right\\profile") Then',
+                '    ReportError "Polygon3D.Create: Curve item was not created: cut_curve_top_right:profile"',
+                "End If",
+            ]
+        ),
+        "operation.status",
+        "operation.arm",
+        "075d2d53f2514f80b396148b7d61447b",
+        status_directory_expression='GetProjectPath("Temp")',
+    )
+
+    assert 'ReportError "Polygon3D.Create:' not in wrapped
+    assert "cstRt075d2d53f251ExplicitFailure = True" in wrapped
+    assert "cstRt075d2d53f251ErrorNumber = 9999" in wrapped
+    assert (
+        'cstRt075d2d53f251ErrorDescription = "Polygon3D.Create: '
+        'Curve item was not created: cut_curve_top_right:profile"'
+    ) in wrapped
+    assert "GoTo CSTRuntimeError075d2d53f251" in wrapped
+    assert wrapped.index("GoTo CSTRuntimeError075d2d53f251") < wrapped.index(
+        'Print #cstRt075d2d53f251FileNumber, "OK"'
+    )
+    assert "If Not cstRt075d2d53f251ExplicitFailure Then" in wrapped
+    assert "ReportError cstRt075d2d53f251ErrorDescription" in wrapped
+
+
+def test_wrapper_preserves_escaped_literal_report_error_message() -> None:
+    wrapped = wrap_vba_with_status_channel(
+        'ReportError "invalid name ""profile"""',
+        "operation.status",
+        "operation.arm",
+        "quoted-message",
+        status_directory_expression='GetProjectPath("Temp")',
+    )
+
+    assert 'ErrorDescription = "invalid name ""profile"""' in wrapped
+    assert 'ReportError "invalid name' not in wrapped
 
 
 def test_gateway_reports_ok_and_removes_status_file(tmp_path: Path) -> None:
