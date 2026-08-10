@@ -40,13 +40,44 @@ class _NoOpContextManager:
         return None
 
 
+class _QuietModeContextManager:
+    """临时开启静默模式，并在退出时恢复进入前的状态。"""
+
+    def __init__(self, environment: object) -> None:
+        self._environment = environment
+        self._previous: bool | None = None
+        self._changed = False
+
+    def __enter__(self) -> "_QuietModeContextManager":
+        getter = getattr(self._environment, "in_quiet_mode", None)
+        setter = getattr(self._environment, "set_quiet_mode", None)
+        if not callable(getter) or not callable(setter):
+            return self
+        try:
+            self._previous = bool(getter())
+            if not self._previous:
+                setter(True)
+                self._changed = True
+        except Exception:
+            self._previous = None
+            self._changed = False
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        setter = getattr(self._environment, "set_quiet_mode", None)
+        if self._changed and self._previous is not None and callable(setter):
+            try:
+                setter(self._previous)
+            except Exception:
+                pass
+        return None
+
+
 def safe_quiet_mode(environment: object) -> object:
     getter = getattr(environment, "in_quiet_mode", None)
-    if callable(getter):
-        try:
-            return getter()
-        except Exception:
-            pass
+    setter = getattr(environment, "set_quiet_mode", None)
+    if callable(getter) and callable(setter):
+        return _QuietModeContextManager(environment)
     return _NoOpContextManager()
 
 

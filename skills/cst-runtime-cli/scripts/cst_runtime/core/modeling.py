@@ -694,14 +694,8 @@ def set_farfield_monitor(
         end=end_freq,
         step=step,
         name=f"farfield (f={start_freq}-{end_freq})",
-        subvolume=(
-            subvolume_x_min,
-            subvolume_x_max,
-            subvolume_y_min,
-            subvolume_y_max,
-            subvolume_z_min,
-            subvolume_z_max,
-        ),
+        # 保留旧参数签名，但禁用子体积时不把无效坐标提交给 CST。
+        subvolume=None,
         use_subvolume=False,
         enable_nearfield=enable_nearfield,
     )
@@ -735,14 +729,8 @@ def set_efield_monitor(
         step=step,
         name=monitor_name,
         dimension=dimension,
-        subvolume=(
-            subvolume_x_min,
-            subvolume_x_max,
-            subvolume_y_min,
-            subvolume_y_max,
-            subvolume_z_min,
-            subvolume_z_max,
-        ),
+        # 保留旧参数签名，但禁用子体积时不把无效坐标提交给 CST。
+        subvolume=None,
         use_subvolume=False,
     )
 

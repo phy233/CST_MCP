@@ -245,11 +245,11 @@ def rebuild_structure(project_path: str) -> dict[str, Any]:
     result = _single_vba_pops(
         project_path,
         "Rebuild",
-        'If Not Application.Rebuild Then ReportError "Application.Rebuild returned False"',
+        'If Not Rebuild Then ReportError "Rebuild returned False"',
     )
     if result.get("status") != "error":
         result["results_deleted"] = True
-        result["warning"] = "Application.Rebuild 会删除当前工程中的全部求解结果"
+        result["warning"] = "Rebuild 会删除当前工程中的全部求解结果"
     return result
 
 

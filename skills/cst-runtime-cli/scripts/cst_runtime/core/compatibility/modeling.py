@@ -655,7 +655,7 @@ def monitor_vba(
                 ]
             )
         lines.append(f'    .UseSubvolume "{_bool(use_subvolume)}"')
-        if subvolume is not None:
+        if use_subvolume and subvolume is not None:
             lines.append('    .SetSubvolume ' + ", ".join(f'"{value}"' for value in subvolume))
         if enable_nearfield is not None:
             lines.append(f'    .EnableNearfieldCalculation "{_bool(enable_nearfield)}"')
@@ -687,7 +687,7 @@ def monitor_vba(
             f'    .UseSubvolume "{_bool(use_subvolume)}"',
         ]
     )
-    if subvolume is not None:
+    if use_subvolume and subvolume is not None:
         lines.append('    .SetSubvolume ' + ", ".join(f'"{value}"' for value in subvolume))
     if enable_nearfield is not None:
         lines.append(f'    .EnableNearfieldCalculation "{_bool(enable_nearfield)}"')

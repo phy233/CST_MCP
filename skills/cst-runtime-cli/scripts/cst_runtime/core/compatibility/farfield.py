@@ -40,8 +40,7 @@ def legacy_farfield_query_vba(
     lines = [
         f'If Not SelectTreeItem("{escaped_tree_path}") Then',
         f'Print #cstRtQueryFile, "__CST_TREE_SELECTION_FAILED__{escaped_tree_path}"',
-        "Exit Sub",
-        "End If",
+        "Else",
         "FarfieldPlot.Reset",
         'FarfieldPlot.SetScaleLinear "False"',
         'FarfieldPlot.DBUnit "0"',
@@ -65,6 +64,7 @@ def legacy_farfield_query_vba(
             "For cstRtIndex = LBound(cstRtValues) To UBound(cstRtValues)",
             "Print #cstRtQueryFile, CStr(cstRtTheta(cstRtIndex)) & vbTab & CStr(cstRtPhi(cstRtIndex)) & vbTab & CStr(cstRtValues(cstRtIndex))",
             "Next cstRtIndex",
+            "End If",
         ]
     )
     return lines
