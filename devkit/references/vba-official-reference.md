@@ -64,7 +64,7 @@ Set mws = app.OpenFile("C:\project.cst")  ' 打开已有工程
 | `EndHide()` | 恢复 UI 更新 |
 | `ScreenUpdating(bool switch)` | 主视图刷新开关 |
 | `SetLock(bool switch)` | 禁止用户交互 |
-| `Rebuild() → bool` | 强制重建几何模型 |
+| `Rebuild() → bool` | 强制重建几何模型；会删除全部结果，返回是否重建成功 |
 | `RebuildOnParametricChange(bool bfullRebuild, bool bShowErrorMsgBox) → bool` | 参数变更后重建 |
 
 #### 文件操作
@@ -110,6 +110,8 @@ Set mws = app.OpenFile("C:\project.cst")  ' 打开已有工程
 | `GetNumberOfSelectedTreeItems() → long` | 已选树节点数 |
 | `GetSelectedTreeItem() → string` | 当前选中节点路径 |
 | `GetNextSelectedTreeItem() → string` | 下一个选中节点 |
+
+`SelectTreeItem` 是 CST 2022 的 Application/VBA 全局方法，不是 `cst.interface.Project.model3d` 的必要条件。Python Project 没有 `model3d` 时，兼容层应通过即时 VBA 调用 `SelectTreeItem(path)`，并检查其布尔返回值；返回 `False` 表示节点没有成功选中。History 操作应继续使用现有 `ReportError` 状态文件网关上报失败；即时查询则把失败标记写入同一临时文本传输通道，由 Python 解析后返回验证错误，不另建错误协议。
 
 #### CST 2022 兼容用法
 
@@ -286,7 +288,7 @@ With Units
     .Geometry "mm"          ' 替代 .SetUnit "Length", "mm"
     .Frequency "GHz"        ' 替代 .SetUnit "Frequency", "GHz"
     .Time "ns"              ' 替代 .SetUnit "Time", "ns"
-    .TemperatureUnit "K"    ' 替代 .SetUnit "Temperature", "K"
+    .TemperatureUnit "kelvin"    ' 替代 .SetUnit "Temperature", "K"
 End With
 
 ' 读取时也按类别调用：
@@ -301,6 +303,8 @@ lengthUnit = Units.GetGeometryUnit
 | `GetUnit("Frequency")` | `GetFrequencyUnit()` |
 | `GetGeometrySIToUnit()` | `GetGeometrySIToUnit()`（相同） |
 | `GetTimeUnitToSI()` / `GetFrequencyUnitToSI()` | 同名方法（相同） |
+
+`TemperatureUnit` 在 CST 2022 帮助中列出的枚举必须使用小写完整名称：`"celsius"`、`"kelvin"`、`"fahrenheit"`。不能把 2026 `SetUnit` 所用的 `"K"`，也不能把首字母大写的显示名称直接拼入 2022 VBA。
 
 ---
 
@@ -1219,7 +1223,7 @@ WCS.AlignWCSWithGlobalCoordinates
 |----------|------|--------|
 | `Mesh.MeshType(enum {"HexahedralFIT","HexahedralTLM","Tetrahedral","Surface","SurfaceML","Planar"} type)` | 网格类型 | `"HexahedralFIT"` |
 | `Mesh.LinesPerWavelength(int val)` | 每波长线数 | `10` |
-| `Mesh.MinimumLineNumber(int val)` | 最小线数 | — |
+| `Mesh.MinimumLineNumber(int val)` | 仅为向后兼容保留；新代码应使用 `MinimumStepNumber` | — |
 | `Mesh.MinimumStepNumber(int val)` | 最小步数 | `10` |
 | `Mesh.RatioLimit(double val)` | 比例限制 | `10` |
 | `Mesh.UseRatioLimit(bool flag)` | 启用比例限制 | `True` |
@@ -1289,6 +1293,8 @@ WCS.AlignWCSWithGlobalCoordinates
 | `Mesh.DensityTransitions(double val)` | `0.5` |
 | `Mesh.VolumeMeshMethod(enum {"Delaunay","Advancing Front"} type)` | `"Delaunay"` |
 | `Mesh.SelfIntersectionCheck(bool flag)` | `True` |
+
+CST 2022 只有一个现行的六面体网格下限入口 `MinimumStepNumber`。兼容层若接收新版 `StepsPerBoxNear/StepsPerBoxFar` 两个参数，只能把近场参数映射到 `MinimumStepNumber`；远场参数没有文档中的等价方法，必须标记为未应用，不能反向写入 `MinimumStepNumber`，也不能继续调用已弃用的 `MinimumLineNumber`。
 
 #### 并行网格
 
@@ -1439,8 +1445,6 @@ WCS.AlignWCSWithGlobalCoordinates
 | `Monitor.SetSubVolume(double x1, x2, y1, y2, z1, z2)` | 子体积 | — |
 | `Monitor.SetSubVolumeOffset(double d1..d6)` | 偏移 | — |
 | `Monitor.UseSubvolume(bool flag)` | 启用子体积 | — |
-
-在 CST 2022 中，调用 `Monitor.Create` 前必须先提供非空的 `.Name`。频率范围、场类型和采样数都合法也不能替代名称；生成器应在 Python 参数验证阶段拒绝空名称，不能提交缺少 `.Name` 的 VBA。
 | `Monitor.SamplingStrategy(enum {"Linear","Logarithmic"})` | 采样策略 | `"Linear"` |
 | `Monitor.Samples(int n)` | 采样数 | — |
 | `Monitor.MaxOrder(int n)` | 最大阶数 | `1` |
@@ -1454,6 +1458,12 @@ WCS.AlignWCSWithGlobalCoordinates
 | `Monitor.Tstart(double val)` | 开始时间 | — |
 | `Monitor.Tstep(double val)` | 时间步长 | — |
 | `Monitor.Tend(double val)` | 结束时间 | — |
+
+在 CST 2022 中，调用 `Monitor.Create` 前必须先提供非空的 `.Name`。频率范围、场类型和采样数都合法也不能替代名称；生成器应在 Python 参数验证阶段拒绝空名称，不能提交缺少 `.Name` 的 VBA。
+
+CST 2022 的频域 `Efield`/`Hfield` 监视器使用 `Frequency(double freq)`，官方示例也是单频 `.Frequency 2.5`。`FrequencyRange` 的说明限定为 field source monitor，`FrequencySamples` 的说明限定为 broadband farfield monitor；因此不得为 E/H 监视器拼接这两个方法。上层若传入不同的起止频率，兼容层必须返回不支持，不能把范围伪装成单频成功。
+
+监视器定义名和求解后的结果树名不是同一层级。`Monitor.Name` 的官方示例为 `e-field (f=2.5)`，不含激励后缀；结果树示例则为 `e-field (f=0.1) [1]`、`farfield (f=16) [1]`。`[1]` 是求解结果的激励编号，不应预先写进 `Monitor.Name`，更不能使用非官方的 `_1` 代替。
 
 ### 查询
 
@@ -1504,6 +1514,10 @@ With Monitor
     .Create
 End With
 ```
+
+### Probe 字段类型
+
+CST 2022 `Probe.Field` 的枚举为 `"efield"`、`"hfield"`、`"efarfield"`、`"hfarfield"`、`"rcs"`。当前 Runtime 的近场探针入口只暴露 E/H，因此应把输入 `E`、`H` 分别归一化为小写的 `efield`、`hfield`，并在拼接 VBA 前拒绝其他输入；不得直接执行 `field_type + "field"`。
 
 ---
 
@@ -1803,6 +1817,8 @@ End With
 | `ASCIIExport.Execute()` | 执行导出 |
 
 **注意：** ASCIExport 必须在 `SelectTreeItem` 选中结果树节点之后调用。
+
+CST 2022 的结果树后缀由激励产生，不等于 Monitor.Name。官方 `Result3D` 示例使用 `2D/3D Results\E-Field\e-field (f=0.1) [1]`，而 `VoltageMonitor` 示例定义名为 `voltage1`。因此端口激励的 E-field 导出不能硬编码 `[pw]`；电压监视器路径也不应凭空追加 `[pw]`。表面电流帮助页未给出可核验的完整树路径，兼容层不得在没有依据时猜测或改写它。
 
 #### CST 2022 兼容用法
 

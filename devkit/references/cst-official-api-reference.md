@@ -220,7 +220,7 @@ de.close()              # 关闭 DE 进程
 de.set_quiet_mode(bool) # 静默模式（抑制对话框）
 de.in_quiet_mode()      # → bool
 
-# 上下文管理器（自动恢复）
+# 下列上下文管理器只在较新封装中使用，不属于 CST 2022 官方接口
 with de.quiet_mode_enabled():   # 临时开启静默
     ...
 with de.quiet_mode_disabled():  # 临时关闭静默
@@ -232,6 +232,8 @@ de.archive(path)        # 归档（打包 .cst）
 de.print_version()      # 打印版本
 de.print_command_line_options()
 ```
+
+> CST 2022 的 `DesignEnvironment` 只记录 `in_quiet_mode()` 与 `set_quiet_mode(flag)`。兼容代码不得探测不存在的 `quiet_mode_enabled()`；若只读取状态，应调用 `in_quiet_mode()`。
 
 ---
 
@@ -261,7 +263,7 @@ prj = Project.connect("project_name")  # 只连接（项目已在 DE 中打开�
 prj.project_type        # → ProjectType: 项目类型
 prj.design_environment  # → DesignEnvironment: 父 DE
 prj.modeler             # → COM Modeler 接口
-prj.model3d             # → Model3D（历史记录开关）
+prj.model3d             # → Model3D（较新封装；CST 2022 Project 不提供）
 prj.schematic           # → CS/DS 原理图接口
 prj.pcbs                # → PCBSApi
 ```
@@ -327,6 +329,8 @@ prj.modeler.add_to_history("Op1", "...")
 prj.modeler.add_to_history("Op2", "...")
 prj.model3d.allow_history_commands()
 ```
+
+> CST 2022 的 `Modeler.run_solver(timeout=None)` 会阻塞到求解结束，并返回求解是否成功。调用方必须检查该布尔值；返回 `False` 时不得报告“simulation completed”。`start_solver()` 只负责异步启动，后续运行状态由 `is_solver_running()` 查询，这与同步调用的最终成功判定不是同一语义。
 
 > **注意：** `project.modeler.add_to_history("name", "VBA")` 是执行所有建模、端口、网格、仿真控制操作的**唯一统一入口**。它同步完成 COM 提交，但不会返回 VBA 的执行完成状态；返回 `True` 仅表示命令已送达 CST。`execute_vba_code()` 在 CST 2026 已移除。
 
@@ -975,7 +979,7 @@ cst_runtime 的源码按四层职责分离，不混在单目录：
 | `read-touchstone` | `_cst_circuits.touchstone.read()` | 中 | 中 | 离线读 .sNp 做 S11 分析 |
 | `get-project-type` | `prj.project_type` | 中 | 低 | 增强 `inspect-project`，区分 MWS/PCB/EMC |
 | `get-cst-version` | `de.version` | 中 | 低 | 增强 `get-version-info`，增加在线版本 |
-| `set-quiet-mode` | `de.quiet_mode_enabled/disabled` | 中 | 低 | 批量操作压制 GUI 弹窗 |
+| `set-quiet-mode` | `de.set_quiet_mode(flag)` / `de.in_quiet_mode()` | 中 | 低 | CST 2022 用显式设置与查询；上下文管理器仅限较新封装 |
 | `connect-or-open-project` | `Project.connect_or_open()` | 中 | 低 | 智能打开——已有则 attach，无则新建 |
 | `manage-library-path` | `de.add/remove_library_path()` | 中 | 低 | 材料库/宏库路径管理 |
 | `check-license-features` | `cst_project_info_reader` (solver features) | 中 | 中 | 仿真前检查 HPC/许可容量 |
