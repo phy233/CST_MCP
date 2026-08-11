@@ -15,6 +15,9 @@ Usage:
 """
 from __future__ import annotations
 
+import json
+import math
+from pathlib import Path
 from typing import Any
 
 from ..core.results import get_1d_result as _get_1d_result
@@ -27,6 +30,122 @@ from ..core.results import result_item_exists as _result_item_exists
 from ..core import results as _core_results
 from ._facade import call_core, wrap_core
 from .contracts import OperationResult, error_result, success_result
+
+
+def _finite_number(value: Any, *, field: str, index: int) -> float:
+    """把结果 JSON 中的标量转换为有限浮点数。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field}[{index}] 不是数值")
+    normalized = float(value)
+    if not math.isfinite(normalized):
+        raise ValueError(f"{field}[{index}] 不是有限数值")
+    return normalized
+
+
+def _complex_parts(value: Any, *, index: int) -> tuple[float, float]:
+    """解析 core.serialize_value 写出的复数或实数结果。"""
+    if isinstance(value, dict):
+        if "real" not in value or "imag" not in value:
+            raise ValueError(f"ydata[{index}] 缺少 real/imag")
+        return (
+            _finite_number(value["real"], field="ydata.real", index=index),
+            _finite_number(value["imag"], field="ydata.imag", index=index),
+        )
+    return _finite_number(value, field="ydata", index=index), 0.0
+
+
+def _hydrate_sparam_export(result: OperationResult) -> OperationResult:
+    """读取 get-1d-result 的本地 JSON，并恢复工作流需要的复数数据。"""
+    export_path = result.get("export_path")
+    if not isinstance(export_path, str) or not export_path.strip():
+        return error_result(
+            "result_export_missing",
+            "get-1d-result 未返回有效的 export_path",
+            treepath=result.get("treepath"),
+        )
+    export_file = Path(export_path)
+    try:
+        payload = json.loads(export_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return error_result(
+            "result_export_invalid",
+            f"无法读取结果 JSON: {exc}",
+            export_path=str(export_file),
+            treepath=result.get("treepath"),
+        )
+
+    xdata = payload.get("xdata")
+    ydata = payload.get("ydata")
+    if not isinstance(xdata, list) or not isinstance(ydata, list):
+        return error_result(
+            "result_data_invalid",
+            "S 参数结果的 xdata/ydata 必须是数组",
+            export_path=str(export_file),
+            treepath=result.get("treepath"),
+        )
+    if not xdata or not ydata:
+        return error_result(
+            "result_data_empty",
+            "S 参数结果中没有数据点",
+            export_path=str(export_file),
+            treepath=result.get("treepath"),
+        )
+    if len(xdata) != len(ydata):
+        return error_result(
+            "result_data_length_mismatch",
+            "S 参数结果的频率与复数数据点数量不一致",
+            x_count=len(xdata),
+            y_count=len(ydata),
+            export_path=str(export_file),
+            treepath=result.get("treepath"),
+        )
+
+    try:
+        points = []
+        for index, (frequency, value) in enumerate(zip(xdata, ydata)):
+            real, imag = _complex_parts(value, index=index)
+            points.append(
+                {
+                    "frequency": _finite_number(
+                        frequency,
+                        field="xdata",
+                        index=index,
+                    ),
+                    "real": real,
+                    "imag": imag,
+                }
+            )
+    except ValueError as exc:
+        return error_result(
+            "result_data_invalid",
+            str(exc),
+            export_path=str(export_file),
+            treepath=result.get("treepath"),
+        )
+
+    points.sort(key=lambda point: point["frequency"])
+    duplicate = next(
+        (
+            points[index]["frequency"]
+            for index in range(1, len(points))
+            if points[index]["frequency"] == points[index - 1]["frequency"]
+        ),
+        None,
+    )
+    if duplicate is not None:
+        return error_result(
+            "duplicate_result_frequency",
+            f"S 参数结果包含重复频点: {duplicate}",
+            frequency=duplicate,
+            export_path=str(export_file),
+            treepath=result.get("treepath"),
+        )
+
+    hydrated = OperationResult(result)
+    hydrated["xdata"] = [point["frequency"] for point in points]
+    hydrated["ydata"] = points
+    hydrated["point_count"] = len(points)
+    return hydrated
 
 
 def get_sparam(project_path: str, treepath: str, run_id: int = 0) -> OperationResult:
@@ -43,7 +162,10 @@ def get_sparam(project_path: str, treepath: str, run_id: int = 0) -> OperationRe
     Raises:
         RuntimeError: If result cannot be read
     """
-    return call_core(_get_1d_result, project_path, treepath, run_id=run_id)
+    result = call_core(_get_1d_result, project_path, treepath, run_id=run_id)
+    if result.get("status") == "error":
+        return result
+    return _hydrate_sparam_export(result)
 
 
 def get_sparam_at_freq(project_path: str, treepath: str, freq_ghz: float, run_id: int = 0) -> OperationResult:
@@ -64,30 +186,60 @@ def get_sparam_at_freq(project_path: str, treepath: str, freq_ghz: float, run_id
     result = get_sparam(project_path, treepath, run_id=run_id)
     if result.get("status") == "error":
         return result
-    ydata = result.get("ydata", [])
-    if not ydata:
-        return error_result("result_data_empty", "结果中没有数据点", treepath=treepath)
+    if isinstance(freq_ghz, bool):
+        return error_result("invalid_frequency", "目标频率必须是有限数值")
+    try:
+        target = float(freq_ghz)
+    except (TypeError, ValueError):
+        return error_result("invalid_frequency", "目标频率必须是有限数值")
+    if not math.isfinite(target):
+        return error_result("invalid_frequency", "目标频率必须是有限数值")
 
-    # Extract frequency and S-parameter data
-    freqs = [d.get("frequency", 0) for d in ydata]
-    reals = [d.get("real", 0) for d in ydata]
-    imags = [d.get("imag", 0) for d in ydata]
+    ydata = result["ydata"]
+    frequencies = [point["frequency"] for point in ydata]
+    lower = frequencies[0]
+    upper = frequencies[-1]
+    if target < lower or target > upper:
+        return error_result(
+            "frequency_out_of_range",
+            f"目标频率 {target} GHz 超出结果范围 [{lower}, {upper}] GHz",
+            frequency_ghz=target,
+            min_frequency_ghz=lower,
+            max_frequency_ghz=upper,
+            treepath=treepath,
+        )
 
-    # Linear interpolation
-    import numpy as np
-    re_interp = float(np.interp(freq_ghz, freqs, reals))
-    im_interp = float(np.interp(freq_ghz, freqs, imags))
-    mag = float(np.sqrt(re_interp**2 + im_interp**2))
-    phase = float(np.arctan2(im_interp, re_interp))
+    upper_index = next(
+        (index for index, frequency in enumerate(frequencies) if frequency >= target),
+        len(frequencies) - 1,
+    )
+    if frequencies[upper_index] == target or upper_index == 0:
+        re_interp = ydata[upper_index]["real"]
+        im_interp = ydata[upper_index]["imag"]
+    else:
+        lower_point = ydata[upper_index - 1]
+        upper_point = ydata[upper_index]
+        ratio = (
+            (target - lower_point["frequency"])
+            / (upper_point["frequency"] - lower_point["frequency"])
+        )
+        re_interp = lower_point["real"] + ratio * (
+            upper_point["real"] - lower_point["real"]
+        )
+        im_interp = lower_point["imag"] + ratio * (
+            upper_point["imag"] - lower_point["imag"]
+        )
+    mag = math.hypot(re_interp, im_interp)
+    phase = math.atan2(im_interp, re_interp)
 
     return success_result(
-        frequency_ghz=freq_ghz,
+        frequency_ghz=target,
         real=re_interp,
         imag=im_interp,
         magnitude=mag,
-        magnitude_db=float(20 * np.log10(max(mag, 1e-30))),
+        magnitude_db=float(20 * math.log10(max(mag, 1e-30))),
         phase_rad=phase,
-        phase_deg=float(np.degrees(phase)),
+        phase_deg=float(math.degrees(phase)),
     )
 
 

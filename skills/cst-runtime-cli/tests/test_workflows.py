@@ -10,6 +10,7 @@ def test_sweep_restores_parameters_and_serializes(monkeypatch, tmp_path) -> None
     from cst_runtime.workflows import sweep
 
     restored: list[tuple[str, float]] = []
+    monkeypatch.setattr(sweep, "reattach_project", lambda project_path: {"status": "success"})
     monkeypatch.setattr(sweep, "param_exists", lambda project_path, name: True)
     monkeypatch.setattr(sweep, "get_param", lambda project_path, name: 9.0)
     monkeypatch.setattr(
@@ -56,6 +57,7 @@ def test_sweep_restores_parameters_and_serializes(monkeypatch, tmp_path) -> None
 def test_sweep_can_continue_after_failure(monkeypatch, tmp_path) -> None:
     from cst_runtime.workflows import sweep
 
+    monkeypatch.setattr(sweep, "reattach_project", lambda project_path: {"status": "success"})
     monkeypatch.setattr(sweep, "param_exists", lambda project_path, name: True)
     monkeypatch.setattr(sweep, "get_param", lambda project_path, name: 0.0)
     monkeypatch.setattr(sweep, "set_param", lambda *args, **kwargs: None)
@@ -70,7 +72,18 @@ def test_sweep_can_continue_after_failure(monkeypatch, tmp_path) -> None:
     def run_step(params, sparam_dir, step):
         if step == 1:
             raise RuntimeError("测试失败")
-        return {"params": params, "sparams": {}}
+        return {
+            "params": params,
+            "sparams": {
+                runner.result_paths[0]: {
+                    "magnitude": 1.0,
+                    "magnitude_db": 0.0,
+                    "phase_deg": 0.0,
+                    "real": 1.0,
+                    "imag": 0.0,
+                }
+            },
+        }
 
     monkeypatch.setattr(runner, "_run_single_step", run_step)
     result = runner.run(output_dir=tmp_path, save_lut=False, save_csv=False)
@@ -104,6 +117,109 @@ def test_sweep_records_sparameter_export(monkeypatch, tmp_path) -> None:
     )
     assert exported is not None
     assert exported.is_file()
+    assert list(pd.read_csv(exported).columns) == ["frequency", "real", "imag"]
+
+
+def test_sweep_rejects_unopened_project_without_side_effects(monkeypatch, tmp_path) -> None:
+    from cst_runtime.lib.contracts import CSTOperationError
+    from cst_runtime.workflows import sweep
+
+    output_dir = tmp_path / "should-not-exist"
+    monkeypatch.setattr(
+        sweep,
+        "reattach_project",
+        lambda project_path: {
+            "status": "error",
+            "error_type": "project_not_open",
+            "message": "工程未打开",
+        },
+    )
+    monkeypatch.setattr(
+        sweep,
+        "param_exists",
+        lambda *args: (_ for _ in ()).throw(AssertionError("不得读取参数")),
+    )
+    runner = sweep.ParameterSweep(
+        project_path="model.cst",
+        parameters=["width"],
+        ranges=[[1.0]],
+        target_freq_ghz=8.0,
+    )
+
+    try:
+        runner.run(output_dir=output_dir)
+    except CSTOperationError as exc:
+        assert exc.result["error_type"] == "project_not_open"
+    else:
+        raise AssertionError("工程未打开时必须拒绝扫描")
+    assert not output_dir.exists()
+
+
+def test_sweep_normalizes_missing_session_to_project_not_open(monkeypatch) -> None:
+    from cst_runtime.lib.contracts import CSTOperationError
+    from cst_runtime.workflows import sweep
+
+    monkeypatch.setattr(
+        sweep,
+        "reattach_project",
+        lambda project_path: {
+            "status": "error",
+            "error_type": "no_cst_session",
+            "message": "没有 CST 会话",
+        },
+    )
+    runner = sweep.ParameterSweep(
+        project_path="model.cst",
+        parameters=["width"],
+        ranges=[[1.0]],
+        target_freq_ghz=8.0,
+    )
+
+    try:
+        runner._require_open_project()
+    except CSTOperationError as exc:
+        assert exc.result["error_type"] == "project_not_open"
+        assert exc.result["cause_error_type"] == "no_cst_session"
+    else:
+        raise AssertionError("没有 CST 会话时必须报告工程未打开")
+
+
+def test_sweep_result_failure_is_not_counted_as_success(monkeypatch, tmp_path) -> None:
+    from cst_runtime.workflows import sweep
+
+    callbacks: list[int] = []
+    monkeypatch.setattr(sweep, "reattach_project", lambda project_path: {"status": "success"})
+    monkeypatch.setattr(sweep, "param_exists", lambda project_path, name: True)
+    monkeypatch.setattr(sweep, "get_param", lambda project_path, name: 9.0)
+    monkeypatch.setattr(sweep, "set_param", lambda *args: None)
+    monkeypatch.setattr(sweep, "rebuild", lambda project_path: None)
+    runner = sweep.ParameterSweep(
+        project_path="model.cst",
+        parameters=["width"],
+        ranges=[[1.0]],
+        target_freq_ghz=8.0,
+        callback=lambda step, params, results: callbacks.append(step),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_run_single_step",
+        lambda params, sparam_dir, step: {
+            "params": params,
+            "sparams": {
+                runner.result_paths[0]: {
+                    "status": "error",
+                    "message": "结果缺失",
+                }
+            },
+        },
+    )
+
+    result = runner.run(output_dir=tmp_path, save_lut=False, save_csv=False)
+
+    assert result.successful_steps == 0
+    assert result.failed_steps == 1
+    assert callbacks == []
+    assert pd.isna(result.lut.iloc[0]["S1,1_mag"])
 
 
 def test_cross_process_reuses_sweep(monkeypatch, tmp_path) -> None:

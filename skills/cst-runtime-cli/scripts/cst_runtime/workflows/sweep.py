@@ -4,7 +4,11 @@ This module provides parameter sweep functionality similar to MATLAB's crossProc
 It allows scanning multiple parameters and building lookup tables (LUT).
 
 Usage:
+    from cst_runtime.lib.session import open_project
     from cst_runtime.workflows.sweep import ParameterSweep
+
+    # 工程生命周期由调用方管理，扫描不会自动打开或关闭工程
+    open_project("C:\\path\\to\\model.cst").raise_for_error()
 
     # Create a parameter sweep
     sweep = ParameterSweep(
@@ -35,7 +39,9 @@ import pandas as pd
 
 from ..lib.parameters import get_param, param_exists, set_param
 from ..lib.results import get_sparam, get_sparam_at_freq
-from ..lib.solver import delete_results, rebuild, start, wait
+from ..lib.session import reattach_project
+from ..lib.solver import delete_results, rebuild, start
+from ..lib.contracts import CSTOperationError
 
 
 def _raise_if_error(result: Any) -> Any:
@@ -165,6 +171,19 @@ class ParameterSweep:
             if not bool(exists):
                 raise ValueError(f"Parameter '{param}' does not exist in project")
 
+    def _require_open_project(self) -> None:
+        """确认工程已由调用方打开，不在扫描中隐式管理会话。"""
+        result = reattach_project(self.project_path)
+        if result.get("status") == "error":
+            payload = dict(result)
+            if payload.get("error_type") in {"no_cst_session", "project_not_open"}:
+                payload["cause_error_type"] = payload.get("error_type")
+                payload["error_type"] = "project_not_open"
+                payload["message"] = (
+                    "参数扫描要求调用方先通过 open_project() 打开指定工程"
+                )
+            raise CSTOperationError(payload)
+
     def _generate_grid(self) -> list[dict[str, float]]:
         """Generate parameter grid for sweep.
 
@@ -205,18 +224,17 @@ class ParameterSweep:
 
         # Run simulation
         _raise_if_error(start(self.project_path))
-        _raise_if_error(wait(self.project_path))
 
         # Extract results
         results = {
             "params": params,
             "sparams": {},
             "exported_files": [],
-            "errors": [],
         }
 
-        for result_path in self.result_paths:
-            try:
+        created_files: list[Path] = []
+        try:
+            for result_path in self.result_paths:
                 # Get S-parameter at target frequency
                 sparam_result = get_sparam_at_freq(
                     self.project_path,
@@ -230,15 +248,12 @@ class ParameterSweep:
                 exported_path = self._save_sparam_data(
                     result_path, params, sparam_dir
                 )
-                if exported_path is not None:
-                    results["exported_files"].append(exported_path)
-
-            except Exception as e:
-                logger.warning(f"Failed to read {result_path}: {e}")
-                results["sparams"][result_path] = {"error": str(e)}
-                results["errors"].append(
-                    {"result_path": result_path, "message": str(e)}
-                )
+                results["exported_files"].append(exported_path)
+                created_files.append(exported_path)
+        except Exception:
+            for path in created_files:
+                path.unlink(missing_ok=True)
+            raise
 
         return results
 
@@ -247,7 +262,7 @@ class ParameterSweep:
         result_path: str,
         params: dict[str, float],
         sparam_dir: Path,
-    ) -> Path | None:
+    ) -> Path:
         """Save full S-parameter data to file.
 
         Args:
@@ -255,28 +270,25 @@ class ParameterSweep:
             params: Parameter values
             sparam_dir: Directory for exports
         """
-        try:
-            # Read full S-parameter data
-            sparam_data = get_sparam(self.project_path, result_path)
-            _raise_if_error(sparam_data)
+        sparam_data = get_sparam(self.project_path, result_path)
+        _raise_if_error(sparam_data)
+        ydata = sparam_data.get("ydata")
+        if not isinstance(ydata, list) or not ydata:
+            raise RuntimeError(f"S 参数结果为空: {result_path}")
 
-            # Create filename from result path and parameters
-            safe_name = result_path.replace("\\", "_").replace(" ", "_")
-            param_str = "_".join(f"{k}{v:.4f}" for k, v in params.items())
-            filename = f"{safe_name}_{param_str}.csv"
-            filepath = sparam_dir / filename
-
-            # Save to CSV
-            ydata = sparam_data.get("ydata", [])
-            if ydata:
-                df = pd.DataFrame(ydata)
-                df.to_csv(filepath, index=False)
-                logger.debug(f"Saved S-parameter data to {filepath}")
-                return filepath
-
-        except Exception as e:
-            logger.warning(f"Failed to save S-parameter data: {e}")
-        return None
+        safe_name = result_path.replace("\\", "_").replace(" ", "_")
+        param_str = "_".join(f"{k}{v:.4f}" for k, v in params.items())
+        filename = f"{safe_name}_{param_str}.csv"
+        filepath = sparam_dir / filename
+        dataframe = pd.DataFrame(ydata)
+        required_columns = ["frequency", "real", "imag"]
+        if list(dataframe.columns) != required_columns:
+            raise RuntimeError(
+                f"S 参数列不完整: 期望 {required_columns}，实际 {list(dataframe.columns)}"
+            )
+        dataframe.to_csv(filepath, index=False)
+        logger.debug("Saved S-parameter data to %s", filepath)
+        return filepath
 
     def run(
         self,
@@ -297,6 +309,13 @@ class ParameterSweep:
         Raises:
             RuntimeError: If sweep fails
         """
+        self._require_open_project()
+        self._validate_parameters()
+        original_values = {
+            name: _result_value(get_param(self.project_path, name), "value")
+            for name in self.parameters
+        }
+        grid = self._generate_grid()
         result_dir = (
             Path.cwd() / f"sweep_results_{time.strftime('%Y%m%d_%H%M%S')}"
             if output_dir is None
@@ -305,13 +324,6 @@ class ParameterSweep:
         result_dir.mkdir(parents=True, exist_ok=True)
         sparam_dir = result_dir / "S_Parameters"
         sparam_dir.mkdir(exist_ok=True)
-
-        self._validate_parameters()
-        original_values = {
-            name: _result_value(get_param(self.project_path, name), "value")
-            for name in self.parameters
-        }
-        grid = self._generate_grid()
         logger.info("开始参数扫描，共 %s 步", self.total_steps)
 
         lut_rows: list[dict[str, Any]] = []
@@ -325,25 +337,25 @@ class ParameterSweep:
             for step, params in enumerate(grid, 1):
                 try:
                     results = self._run_single_step(params, sparam_dir, step)
-                    exported_files.extend(results.get("exported_files", []))
-                    for error in results.get("errors", []):
-                        errors.append(
-                            {
-                                "step": step,
-                                "parameters": dict(params),
-                                **error,
-                            }
+                    missing_results = [
+                        path for path in self.result_paths
+                        if path not in results.get("sparams", {})
+                    ]
+                    if missing_results:
+                        raise RuntimeError(
+                            "扫描步骤缺少结果: " + ", ".join(missing_results)
                         )
                     row: dict[str, Any] = dict(params)
-                    for result_path, sparam_result in results["sparams"].items():
-                        if "error" in sparam_result:
-                            continue
+                    for result_path in self.result_paths:
+                        sparam_result = results["sparams"][result_path]
+                        _raise_if_error(sparam_result)
                         safe_name = result_path.split("\\")[-1]
-                        row[f"{safe_name}_mag"] = sparam_result.get("magnitude", 0)
-                        row[f"{safe_name}_mag_db"] = sparam_result.get("magnitude_db", 0)
-                        row[f"{safe_name}_phase_deg"] = sparam_result.get("phase_deg", 0)
-                        row[f"{safe_name}_real"] = sparam_result.get("real", 0)
-                        row[f"{safe_name}_imag"] = sparam_result.get("imag", 0)
+                        row[f"{safe_name}_mag"] = sparam_result["magnitude"]
+                        row[f"{safe_name}_mag_db"] = sparam_result["magnitude_db"]
+                        row[f"{safe_name}_phase_deg"] = sparam_result["phase_deg"]
+                        row[f"{safe_name}_real"] = sparam_result["real"]
+                        row[f"{safe_name}_imag"] = sparam_result["imag"]
+                    exported_files.extend(results.get("exported_files", []))
                     lut_rows.append(row)
                     successful_steps += 1
                     if self.callback:
