@@ -82,6 +82,10 @@ def set_per_face(
 def set_unit_cell(project_path: str, periodic_angle: float = 0) -> None:
     """Set unit cell boundary for periodic simulation.
 
+    待完善：当前实现只覆盖历史使用的基础边界设置，尚未完整核对周期角、
+    Floquet 端口、开放边界扩展距离等高级组合。调用成功不代表完整的
+    Unit Cell 配置已经完成；高级需求应由用户在 CST 图形界面中手动设置。
+
     Args:
         project_path: Path to .cst file
         periodic_angle: Periodic phase angle in degrees

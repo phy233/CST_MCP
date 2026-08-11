@@ -64,6 +64,10 @@ def define_floquet(
 ) -> None:
     """Define Floquet ports for periodic/metasurface simulation.
 
+    待完善：当前实现仅覆盖部分初始化和历史需求，尚未完整核对 CST 2022
+    的高级极化、模式列表、参考面与扫描角组合。调用成功不代表完整的
+    Floquet 配置已经完成；高级需求应由用户在 CST 图形界面中手动设置。
+
     Args:
         project_path: Path to .cst file
         zmin_modes: Number of modes at zmin port

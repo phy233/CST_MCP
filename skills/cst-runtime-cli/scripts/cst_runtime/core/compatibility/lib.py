@@ -22,6 +22,8 @@ def boundary_per_face_vba(
     periodic_angle: float,
     profile: CompatibilityProfile | None = None,
 ) -> CompatibleVBA:
+    # 待完善：该方法只是逐面边界的历史实现，不能视为完整 Unit Cell/Floquet
+    # 配置。高级周期角和开放边界需求应由用户在 CST 图形界面中手动完成。
     resolved = _profile(profile)
     lines = ["With Boundary"]
     for name, value in zip(("Xmin", "Xmax", "Ymin", "Ymax", "Zmin", "Zmax"), faces):
@@ -338,6 +340,8 @@ def floquet_port_vba(
     polarization_type: str,
     profile: CompatibilityProfile | None = None,
 ) -> CompatibleVBA:
+    # 待完善：该历史模板并未覆盖 FloquetPort 的全部高级组合。后续扩展前必须
+    # 重新核对目标 CST 版本本地手册和实际工程；本轮仅保留现有行为。
     resolved = _profile(profile)
     if not resolved.is_2022:
         return CompatibleVBA(

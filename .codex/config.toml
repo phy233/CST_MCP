@@ -1,0 +1,57 @@
+[mcp_servers.cst-runtime]
+command = 'D:\My_Program\Python\CST_MCP\.venv\Scripts\cst-mcp.exe'
+args = []
+startup_timeout_sec = 120
+tool_timeout_sec = 3600
+
+[mcp_servers.cst-runtime.env]
+CST_MCP_CONFIG = 'D:\My_Program\Python\CST_MCP\.cst_config.json'
+CST_WORKER_PYTHON = 'C:\Users\14163\miniconda3\envs\cst39\python.exe'
+
+[mcp_servers.cst-runtime.tools.create-blank-project]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-units]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-frequency-range]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-material-from-mtd]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-background]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.set-background-with-space]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-boundary]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-brick]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.boolean-add]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.cst-session-open]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-extrude-curve]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.boolean-subtract]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-port]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.set-farfield-monitor]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-polygon-3d]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.save-project]
+approval_mode = "approve"

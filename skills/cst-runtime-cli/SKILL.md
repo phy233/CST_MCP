@@ -263,6 +263,13 @@ CLI 命令：`cst-session-inspect` / `cst-session-open` / `cst-session-reattach`
 - 仿真完成后调用 `close_project(kill_processes=True)` 释放工程并清理关联 DE 进程。下次 `open_project()` 自动获得干净 DE。
 - 关闭 project 的正确做法：`save=True` 时先 `project.save()`，再调用 `close_project()`。远场导出后 `close_project(save=False)`。
 
+## Floquet Port 与 Unit Cell 能力限制
+
+- 当前 Runtime 中的 Floquet Port 和 Unit Cell 方法标记为待完善，仅保留部分初始化和历史行为。
+- `define-boundary` 是通用逐面边界工具，不是完整的 Unit Cell/Floquet 自动化入口。
+- 遇到高级极化、模式列表、参考面、扫描角或开放边界扩展距离需求时，agent 必须说明当前能力不完整，并让用户在 CST 图形界面中手动完成。
+- 不得自行拼接未经目标 CST 版本本地手册验证的 VBA，不得宣称工具提交成功就代表高级周期配置完整。
+
 ## 错误处理
 
 - `workspace_not_initialized`：先 `init-workspace`。
