@@ -109,6 +109,40 @@ def test_existing_geometry_api_no_longer_throws_business_error(monkeypatch) -> N
         result.raise_for_error()
 
 
+@pytest.mark.parametrize("operation", ["cylinder", "cone"])
+def test_geometry_axial_solid_forwards_coordinates_by_keyword(monkeypatch, operation: str) -> None:
+    """几何门面必须显式转发轴向范围和两个横向中心。"""
+    from cst_runtime.lib import geometry
+
+    received = {}
+
+    def fake_define(*args, **kwargs):
+        received["args"] = args
+        received.update(kwargs)
+        return {"status": "success"}
+
+    if operation == "cylinder":
+        monkeypatch.setattr(geometry, "_define_cylinder", fake_define)
+        result = geometry.cylinder(
+            "model.cst", "component1", "solid", "PEC", "x",
+            (2, 3), 4, (1, 9),
+        )
+    else:
+        monkeypatch.setattr(geometry, "_define_cone", fake_define)
+        result = geometry.cone(
+            "model.cst", "component1", "solid", "PEC", "x",
+            (2, 3), 4, 1, (1, 9),
+        )
+
+    assert result["status"] == "success"
+    assert received["args"] == ()
+    assert received["axis"] == "x"
+    assert received["axis_min"] == 1
+    assert received["axis_max"] == 9
+    assert received["center1"] == 2
+    assert received["center2"] == 3
+
+
 def test_wrap_public_preserves_nested_error_envelope() -> None:
     from cst_runtime.lib._facade import wrap_public
     from cst_runtime.lib.contracts import raise_result_error

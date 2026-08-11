@@ -110,9 +110,17 @@ def cylinder(
         RuntimeError: 如果无法创建圆柱体时抛出
     """
     result = _define_cylinder(
-        project_path, name, component, material,
-        radius, inner_radius, axis,
-        z_range[0], z_range[1], center[0], center[1]
+        project_path=project_path,
+        name=name,
+        component=component,
+        material=material,
+        outer_radius=radius,
+        inner_radius=inner_radius,
+        axis=axis,
+        axis_min=z_range[0],
+        axis_max=z_range[1],
+        center1=center[0],
+        center2=center[1],
     )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to create cylinder")
@@ -146,9 +154,17 @@ def cone(
         RuntimeError: 如果无法创建圆锥体时抛出
     """
     result = _define_cone(
-        project_path, name, component, material,
-        bottom_radius, top_radius, axis,
-        z_range[0], z_range[1], center[0], center[1]
+        project_path=project_path,
+        name=name,
+        component=component,
+        material=material,
+        bottom_radius=bottom_radius,
+        top_radius=top_radius,
+        axis=axis,
+        axis_min=z_range[0],
+        axis_max=z_range[1],
+        center1=center[0],
+        center2=center[1],
     )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to create cone")

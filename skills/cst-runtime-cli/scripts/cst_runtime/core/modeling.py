@@ -322,28 +322,30 @@ def define_cylinder(
     outer_radius: float | str,
     inner_radius: float | str,
     axis: str,
+    axis_min: float | str | None = None,
+    axis_max: float | str | None = None,
     range_min: float | str | None = None,
     range_max: float | str | None = None,
     z_min: float | str | None = None,
     z_max: float | str | None = None,
-    center1: float | str = 0.0,
-    center2: float | str = 0.0,
+    center1: float | str | None = None,
+    center2: float | str | None = None,
     x_center: float | str | None = None,
     y_center: float | str | None = None,
     segments: int = 0,
 ) -> dict[str, Any]:
-    if range_min is None and z_min is not None:
-        range_min = z_min
-    if range_max is None and z_max is not None:
-        range_max = z_max
-    if center1 is None and x_center is not None:
-        center1 = x_center
-    if center2 is None and y_center is not None:
-        center2 = y_center
-    if range_min is None or range_max is None:
+    if axis_min is None:
+        axis_min = range_min if range_min is not None else z_min
+    if axis_max is None:
+        axis_max = range_max if range_max is not None else z_max
+    if center1 is None:
+        center1 = x_center if x_center is not None else 0.0
+    if center2 is None:
+        center2 = y_center if y_center is not None else 0.0
+    if axis_min is None or axis_max is None:
         return error_response(
             "missing_argument",
-            "range_min or z_min (and range_max or z_max) is required",
+            "axis_min and axis_max are required",
         )
 
     return _submit_versioned_vba(
@@ -356,8 +358,8 @@ def define_cylinder(
         outer_radius=outer_radius,
         inner_radius=inner_radius,
         axis=axis,
-        range_min=range_min,
-        range_max=range_max,
+        range_min=axis_min,
+        range_max=axis_max,
         center1=center1,
         center2=center2,
         segments=segments,
@@ -372,28 +374,30 @@ def define_cone(
     bottom_radius: float | str,
     top_radius: float | str,
     axis: str,
+    axis_min: float | str | None = None,
+    axis_max: float | str | None = None,
     range_min: float | str | None = None,
     range_max: float | str | None = None,
     z_min: float | str | None = None,
     z_max: float | str | None = None,
-    center1: float | str = 0.0,
-    center2: float | str = 0.0,
+    center1: float | str | None = None,
+    center2: float | str | None = None,
     x_center: float | str | None = None,
     y_center: float | str | None = None,
     segments: int = 0,
 ) -> dict[str, Any]:
-    if range_min is None and z_min is not None:
-        range_min = z_min
-    if range_max is None and z_max is not None:
-        range_max = z_max
-    if center1 is None and x_center is not None:
-        center1 = x_center
-    if center2 is None and y_center is not None:
-        center2 = y_center
-    if range_min is None or range_max is None:
+    if axis_min is None:
+        axis_min = range_min if range_min is not None else z_min
+    if axis_max is None:
+        axis_max = range_max if range_max is not None else z_max
+    if center1 is None:
+        center1 = x_center if x_center is not None else 0.0
+    if center2 is None:
+        center2 = y_center if y_center is not None else 0.0
+    if axis_min is None or axis_max is None:
         return error_response(
             "missing_argument",
-            "range_min or z_min (and range_max or z_max) is required",
+            "axis_min and axis_max are required",
         )
 
     return _submit_versioned_vba(
@@ -406,8 +410,8 @@ def define_cone(
         bottom_radius=bottom_radius,
         top_radius=top_radius,
         axis=axis,
-        range_min=range_min,
-        range_max=range_max,
+        range_min=axis_min,
+        range_max=axis_max,
         center1=center1,
         center2=center2,
         segments=segments,

@@ -607,6 +607,61 @@ def test_cylinder_uses_version_specific_radius_properties() -> None:
     assert 'Solid.Subtract "component1:tube"' in modern
 
 
+@pytest.mark.parametrize("operation", ["cylinder", "cone"])
+@pytest.mark.parametrize(
+    ("axis", "range_name", "center_names"),
+    [
+        ("x", "Xrange", ("Ycenter", "Zcenter")),
+        ("y", "Yrange", ("Xcenter", "Zcenter")),
+        ("z", "Zrange", ("Xcenter", "Ycenter")),
+    ],
+)
+def test_public_axial_solid_maps_fields_to_axis_specific_vba(
+    monkeypatch,
+    operation: str,
+    axis: str,
+    range_name: str,
+    center_names: tuple[str, str],
+) -> None:
+    """公开旧字段必须按轴向生成 CST 2022 要求的 VBA 参数名。"""
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(core_modeling, "detect_compatibility_profile", lambda: CST2022)
+
+    def fake_add_vba_history(_project_path, _history_name, vba_lines):
+        captured["vba"] = "\n".join(vba_lines)
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_add_vba_history", fake_add_vba_history)
+    arguments = {
+        "project_path": "D:/project.cst",
+        "name": operation,
+        "component": "component1",
+        "material": "PEC",
+        "axis": axis,
+        "axis_min": 1,
+        "axis_max": 9,
+        "x_center": 2,
+        "y_center": 3,
+    }
+    if operation == "cylinder":
+        result = core_modeling.define_cylinder(
+            outer_radius=4,
+            inner_radius=0,
+            **arguments,
+        )
+    else:
+        result = core_modeling.define_cone(
+            bottom_radius=4,
+            top_radius=1,
+            **arguments,
+        )
+
+    assert result["status"] == "success"
+    assert f'.{range_name} "1", "9"' in captured["vba"]
+    assert f'.{center_names[0]} "2"' in captured["vba"]
+    assert f'.{center_names[1]} "3"' in captured["vba"]
+
+
 def test_solid_axis_is_validated_in_compatibility_layer() -> None:
     with pytest.raises(ValidationError, match="axis"):
         cylinder_vba(
