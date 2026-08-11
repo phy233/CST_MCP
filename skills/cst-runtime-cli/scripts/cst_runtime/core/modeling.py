@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import difflib
+import math
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -1318,7 +1320,12 @@ def define_loft(project_path: str, name: str, component: str, material: str, tan
 
 def _ascii_export(project_path: str, tree_path: str, file_path: str, history_name: str) -> dict[str, Any]:
     escaped_tree_path = vba_string(tree_path)
-    escaped_file_path = vba_string(file_path)
+    output_path = Path(file_path).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = output_path.with_name(
+        f".{output_path.stem}.{uuid.uuid4().hex}.tmp{output_path.suffix}"
+    )
+    escaped_file_path = vba_string(str(temporary_path))
     vba = (
         f'If Not SelectTreeItem("{escaped_tree_path}") Then\n'
         f'    ReportError "ASCIIExport: tree item was not selected: {escaped_tree_path}"\n'
@@ -1327,7 +1334,33 @@ def _ascii_export(project_path: str, tree_path: str, file_path: str, history_nam
         f'ASCIIExport.FileName "{escaped_file_path}"\n'
         "ASCIIExport.Execute"
     )
-    return _single_vba(project_path, history_name, vba)
+    result = _single_vba(project_path, history_name, vba)
+    if result.get("status") == "error":
+        temporary_path.unlink(missing_ok=True)
+        return result
+    if not temporary_path.is_file() or temporary_path.stat().st_size <= 0:
+        temporary_path.unlink(missing_ok=True)
+        return error_response(
+            "export_file_missing",
+            "CST 已执行 ASCIIExport，但导出文件不存在或为空",
+            project_path=str(Path(project_path).expanduser().resolve()),
+            tree_path=tree_path,
+            output_file=str(output_path),
+        )
+    try:
+        temporary_path.replace(output_path)
+    except OSError as exc:
+        temporary_path.unlink(missing_ok=True)
+        return error_response(
+            "export_file_replace_failed",
+            f"导出文件生成成功，但无法替换目标文件: {exc}",
+            output_file=str(output_path),
+        )
+    return {
+        **result,
+        "output_file": str(output_path),
+        "file_size": output_path.stat().st_size,
+    }
 
 
 def export_e_field(project_path: str, frequency: str, file_path: str) -> dict[str, Any]:
@@ -1353,11 +1386,13 @@ def capture_3d_view(
     output_dir: str = "",
     filename_prefix: str = "view",
     view_type: str = "preset",
-    preset_name: str = "Isometric",
-    azimuth: float = 45.0,
-    elevation: float = 30.0,
+    preset_name: str = "Perspective",
+    horizontal_rotation_deg: float | None = None,
+    vertical_rotation_deg: float | None = None,
     zoom: float = 1.0,
     return_image_data: bool = False,
+    azimuth: float | None = None,
+    elevation: float | None = None,
 ) -> dict[str, Any]:
     """Capture 3D view of CST model as PNG + JSON metadata.
     
@@ -1366,10 +1401,10 @@ def capture_3d_view(
         output_dir: Output directory (default: <project_dir>/exports/screenshots/)
         filename_prefix: Filename prefix (default: "view")
         view_type: "custom" or "preset"
-        preset_name: Preset view name (Front/Back/Top/Bottom/Left/Right/Isometric)
-        azimuth: Azimuth angle in degrees (0=+X, 90=+Y, CCW positive)
-        elevation: Elevation angle in degrees (0=horizontal, 90=+Z top view)
-        zoom: Zoom scale (1.0=default, 0.5=2x closer, 2.0=2x farther)
+        preset_name: CST reserved view name
+        horizontal_rotation_deg: Custom view rotation from Front; positive is left
+        vertical_rotation_deg: Custom view rotation from Front; positive is up
+        zoom: Compatibility field; CST 2022 supports only automatic fit (1.0)
         return_image_data: If True, include base64-encoded image data in response
     
     Returns:
@@ -1383,21 +1418,33 @@ def capture_3d_view(
     if not project_path:
         return error_response("project_path_required", "project_path is required")
 
-    if zoom <= 0:
-        return error_response("invalid_zoom", f"zoom must be > 0, got {zoom}")
+    if not math.isclose(float(zoom), 1.0, rel_tol=0.0, abs_tol=1e-12):
+        return error_response(
+            "unsupported_zoom",
+            "CST 2022 Plot 仅记录了自动填充结构，不支持数值缩放倍数；zoom 必须为 1.0",
+            phase="compatibility",
+        )
 
-    valid_presets = {"Front", "Back", "Top", "Bottom", "Left", "Right", "Isometric"}
-    if preset_name not in valid_presets:
-        return error_response("invalid_preset_name", f"preset_name must be one of {sorted(valid_presets)}")
+    horizontal_rotation = (
+        float(horizontal_rotation_deg)
+        if horizontal_rotation_deg is not None
+        else float(azimuth) if azimuth is not None else 45.0
+    )
+    vertical_rotation = (
+        float(vertical_rotation_deg)
+        if vertical_rotation_deg is not None
+        else float(elevation) if elevation is not None else 30.0
+    )
+    if not math.isfinite(horizontal_rotation) or not math.isfinite(vertical_rotation):
+        return error_response("invalid_rotation", "rotation angles must be finite")
 
     if view_type not in {"custom", "preset"}:
         return error_response("invalid_view_type", f"view_type must be 'custom' or 'preset'")
-    if view_type == "custom":
-        return error_response(
-            "unsupported_feature",
-            "custom 视角尚无经过 CST 2022/2026 官方接口验证的安全实现",
-            phase="compatibility",
-        )
+    valid_presets = {
+        "Front", "Back", "Top", "Bottom", "Left", "Right", "Perspective", "Isometric"
+    }
+    if view_type == "preset" and preset_name not in valid_presets:
+        return error_response("invalid_preset_name", f"preset_name must be one of {sorted(valid_presets)}")
 
     p = Path(project_path)
     if not p.exists():
@@ -1415,7 +1462,7 @@ def capture_3d_view(
     
     # Generate timestamp and filenames
     ts = datetime.now()
-    ts_str = ts.strftime("%Y%m%d_%H%M%S")
+    ts_str = ts.strftime("%Y%m%d_%H%M%S_%f")
     png_path = out_dir / f"{filename_prefix}_{ts_str}.png"
     json_path = out_dir / f"{filename_prefix}_{ts_str}.json"
     
@@ -1438,13 +1485,16 @@ def capture_3d_view(
             generated = plot_export_vba(
                 preset_name=preset_name,
                 output_path=str(png_path),
+                view_type=view_type,
+                horizontal_rotation_deg=horizontal_rotation,
+                vertical_rotation_deg=vertical_rotation,
                 width=1920,
                 height=1080,
                 profile=profile,
             )
             history_result = _add_vba_history(
                 str(p),
-                f"Capture 3D View:{preset_name}",
+                f"Capture 3D View:{preset_name if view_type == 'preset' else 'custom'}",
                 list(generated.lines),
                 project=prj,
             )
@@ -1463,10 +1513,9 @@ def capture_3d_view(
                     "timestamp": ts.isoformat(timespec="seconds"),
                     "view_type": view_type,
                     "view_params": {
-                        "azimuth": None,
-                        "elevation": None,
-                        "zoom": zoom,
-                        "preset_name": preset_name,
+                        "horizontal_rotation_deg": horizontal_rotation if view_type == "custom" else None,
+                        "vertical_rotation_deg": vertical_rotation if view_type == "custom" else None,
+                        "preset_name": preset_name if view_type == "preset" else None,
                     },
                     "image_path": str(png_path.resolve()),
                     "metadata_path": str(json_path.resolve()),

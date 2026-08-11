@@ -740,6 +740,9 @@ def plot_export_vba(
     *,
     preset_name: str,
     output_path: str,
+    view_type: str = "preset",
+    horizontal_rotation_deg: float = 0.0,
+    vertical_rotation_deg: float = 0.0,
     width: int = 1920,
     height: int = 1080,
     profile: CompatibilityProfile | None = None,
@@ -753,21 +756,46 @@ def plot_export_vba(
         "Bottom": "Bottom",
         "Left": "Left",
         "Right": "Right",
+        "Perspective": "Perspective",
         "Isometric": "Perspective",
     }
-    if preset_name not in view_names:
+    if view_type not in {"preset", "custom"}:
+        raise ValidationError("view_type 必须为 preset 或 custom")
+    if view_type == "preset" and preset_name not in view_names:
         raise ValidationError(f"不支持的三维视图预设: {preset_name}")
     if width <= 0 or height <= 0:
         raise ValidationError("图像宽度和高度必须大于零")
+    if not math.isfinite(horizontal_rotation_deg) or not math.isfinite(vertical_rotation_deg):
+        raise ValidationError("旋转角度必须为有限数值")
 
-    escaped_view = vba_string(view_names[preset_name])
     escaped_path = vba_string(output_path)
-    return CompatibleVBA(
+    if view_type == "preset":
+        lines = [f'Plot.RestoreView "{vba_string(view_names[preset_name])}"']
+    else:
+        lines = ['Plot.RestoreView "Front"']
+        rotations = (
+            (horizontal_rotation_deg, "left", "right"),
+            (vertical_rotation_deg, "up", "down"),
+        )
+        for angle, positive_direction, negative_direction in rotations:
+            if abs(angle) <= 1e-12:
+                continue
+            direction = positive_direction if angle > 0 else negative_direction
+            lines.extend(
+                (
+                    f"Plot.RotationAngle {abs(float(angle)):g}",
+                    f'Plot.Rotate "{direction}"',
+                )
+            )
+    lines.extend(
         (
-            f'Plot.RestoreView "{escaped_view}"',
             "Plot.ZoomToStructure",
+            "Plot.Update",
             f'Plot.ExportImage "{escaped_path}", {width}, {height}',
-        ),
+        )
+    )
+    return CompatibleVBA(
+        tuple(lines),
         resolved.label,
     )
 

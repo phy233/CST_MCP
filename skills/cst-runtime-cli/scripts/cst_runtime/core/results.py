@@ -326,8 +326,12 @@ def _get_1d_result_from_module(
         run_id=resolved_run_id,
         load_impedances=load_impedances,
     )
-    xdata = result_item.get_xdata()
     ydata = result_item.get_ydata()
+    if isinstance(ydata, (int, float, complex)):
+        # CST 2022 手册明确说明 0D 结果的 ydata 是单个标量。
+        xdata = None
+    else:
+        xdata = result_item.get_xdata()
 
     # 参数组合只是辅助元数据。CST 2022 对非参数化 Run 0 会在这里误报
     # “run id does not exist: 0”，但曲线数据本身已经成功读取。
@@ -342,19 +346,33 @@ def _get_1d_result_from_module(
         export_file.parent.mkdir(parents=True, exist_ok=True)
         export_file = export_file.resolve()
     else:
+        leaf_name = treepath.rsplit("\\", 1)[-1].strip()
+        if leaf_name.lower() == "s1,1":
+            export_stem = "s11"
+        else:
+            export_stem = re.sub(r"[^0-9A-Za-z._-]+", "_", leaf_name).strip("._-")
+            export_stem = export_stem or "result_0d1d"
         export_file = (
             Path(context["fullpath"]).parent.parent
             / "exports"
-            / f"s11_run{resolved_run_id}.json"
+            / f"{export_stem}_run{resolved_run_id}.json"
         ).resolve()
         export_file.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        point_count = int(result_item.length)
+    except (AttributeError, TypeError, ValueError):
+        try:
+            point_count = len(ydata)
+        except TypeError:
+            point_count = 1
 
     payload = {
         "treepath": result_item.treepath,
         "title": result_item.title,
         "xlabel": result_item.xlabel,
         "ylabel": result_item.ylabel,
-        "length": result_item.length,
+        "length": point_count,
         "requested_run_id": requested_run_id,
         "run_id": result_item.run_id,
         "parameter_combination": parameter_combination,
@@ -375,7 +393,7 @@ def _get_1d_result_from_module(
         "treepath": result_item.treepath,
         "requested_run_id": requested_run_id,
         "run_id": result_item.run_id,
-        "point_count": len(xdata),
+        "point_count": point_count,
         "export_path": str(export_file),
         "runtime_module": "cst_runtime.results",
     }
