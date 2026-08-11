@@ -463,7 +463,34 @@ def boolean_insert(project_path: str, shape1: str, shape2: str) -> dict[str, Any
 
 
 def delete_entity(project_path: str, component: str, name: str) -> dict[str, Any]:
-    full_name = f"{component}:{name}"
+    normalized_component = str(component or "").strip()
+    normalized_name = str(name or "").strip()
+    if not normalized_name:
+        return error_response(
+            "invalid_arguments",
+            "实体名称不能为空",
+            phase="validation",
+            project_path=_abs_project_path(project_path),
+        )
+    if normalized_component:
+        if ":" in normalized_name:
+            return error_response(
+                "invalid_arguments",
+                "component 非空时，name 必须是未包含组件前缀的裸实体名",
+                phase="validation",
+                project_path=_abs_project_path(project_path),
+            )
+        full_name = f"{normalized_component}:{normalized_name}"
+    else:
+        parts = normalized_name.split(":")
+        if len(parts) != 2 or not all(part.strip() for part in parts):
+            return error_response(
+                "invalid_arguments",
+                "component 为空时，name 必须是完整的 component:name",
+                phase="validation",
+                project_path=_abs_project_path(project_path),
+            )
+        full_name = f"{parts[0].strip()}:{parts[1].strip()}"
     vba = f'Solid.Delete "{full_name}"'
     return _single_vba(project_path, f"delete entity: {full_name}", vba)
 

@@ -23,7 +23,7 @@ def _raise_if_failed(result: Any) -> None:
 
 @dataclass(frozen=True)
 class ArrayElement:
-    """阵列中的一个实例。"""
+    """阵列中的一个实例；x/y/z 是参考模板的相对平移量。"""
 
     code: str
     x: float
@@ -134,7 +134,7 @@ def _build_brick(
     code: str,
     parameters: Mapping[str, Any],
 ) -> BuildResult:
-    """内置方块 builder。"""
+    """内置方块 builder；origin 是最小角点，size 沿三个正方向延伸。"""
     component = str(parameters.get("component", "array"))
     name = str(parameters.get("name", f"brick_{code}"))
     material = str(parameters.get("material", "PEC"))
@@ -209,7 +209,11 @@ def build_array(
     *,
     registry: UnitBuilderRegistry | None = None,
 ) -> ArrayBuildResult:
-    """按 code 分组构建并复制阵列单元。"""
+    """按 code 分组构建并复制阵列单元。
+
+    ``code`` 是不透明的 builder 查询键，字符串 ``"0"`` 没有空单元含义。
+    ``elements`` 中的坐标是相对平移量，不是实体中心或绝对角点。
+    """
     normalized_elements = _coerce_elements(elements)
     normalized_units = _coerce_units(units)
     if not normalized_elements:

@@ -256,10 +256,6 @@ def delete_entity(project_path: str, name: str, component: str = "") -> None:
     Raises:
         RuntimeError: 如果无法删除实体时抛出
     """
-    if component:
-        full_name = f"{component}:{name}"
-    else:
-        full_name = name
     result = _delete_entity(project_path, component or "", name)
     if result.get("status") == "error":
         raise_result_error(result, "Failed to delete entity")

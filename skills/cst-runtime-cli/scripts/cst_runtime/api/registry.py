@@ -142,7 +142,11 @@ def _workflow_operations() -> dict[str, OperationSpec]:
         "array.build": OperationSpec(
             name="array.build",
             tool_name="build-array",
-            description="按 code 和受控 builder 构建 CST 阵列。",
+            description=(
+                "按普通 code 和受控 builder 批量构建 CST 阵列；"
+                "元素坐标是参考模板的相对平移量。brick-v1 的 origin 是最小角点，"
+                "如使用中心坐标应由调用方预先换算。"
+            ),
             risk="write",
             input_schema=_object_schema(
                 {
@@ -153,7 +157,13 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                             "type": "object",
                             "properties": {
                                 "builder_id": {"type": "string", "minLength": 1},
-                                "parameters": {"type": "object"},
+                                "parameters": {
+                                    "type": "object",
+                                    "description": (
+                                        "builder 参数；brick-v1 的 origin 为最小角点，"
+                                        "size 沿 X/Y/Z 正方向延伸。"
+                                    ),
+                                },
                             },
                             "required": ["builder_id"],
                             "additionalProperties": False,
@@ -165,10 +175,13 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "code": {"type": "string"},
-                                "x": {"type": "number"},
-                                "y": {"type": "number"},
-                                "z": {"type": "number"},
+                                "code": {
+                                    "type": "string",
+                                    "description": "普通 builder 查询键；字符串 0 不表示空单元。",
+                                },
+                                "x": {"type": "number", "description": "X 方向相对平移量。"},
+                                "y": {"type": "number", "description": "Y 方向相对平移量。"},
+                                "z": {"type": "number", "description": "Z 方向相对平移量。"},
                             },
                             "required": ["code", "x", "y", "z"],
                             "additionalProperties": False,

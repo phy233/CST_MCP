@@ -87,6 +87,19 @@ def test_array_rolls_back_on_unknown_builder(monkeypatch) -> None:
     assert events == ["begin", "discard"]
 
 
+def test_zero_code_is_an_ordinary_unknown_builder_key() -> None:
+    from cst_runtime.workflows import array
+
+    result = array.build_array(
+        "model.cst",
+        units={"1": {"builder_id": "brick-v1"}},
+        elements=[{"code": "0", "x": 0, "y": 0, "z": 0}],
+    )
+
+    assert result.status == "error"
+    assert "code 0 缺少 UnitSpec" in result.message
+
+
 def test_array_keeps_batch_when_flush_fails(monkeypatch) -> None:
     events = _fake_batch(monkeypatch)
     monkeypatch.setattr(
