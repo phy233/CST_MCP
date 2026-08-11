@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -76,6 +77,51 @@ def test_start_simulation_accepts_true_solver_result(monkeypatch):
 
     assert result["status"] == "success"
     assert result["message"] == "simulation completed"
+
+
+def test_fdsolver_stimulation_matches_cst2022_manual() -> None:
+    from cst_runtime.core.compatibility.base import CompatibilityProfile
+    from cst_runtime.core.compatibility.modeling import fdsolver_stimulation_vba
+
+    profile = CompatibilityProfile(major=2022, version="2022", source="test")
+    generated = fdsolver_stimulation_vba(port="All", mode="All", profile=profile)
+
+    assert generated.lines == (
+        "FDSolver.Reset",
+        'FDSolver.Stimulation "All", "All"',
+    )
+
+
+def test_fdsolver_stimulation_supports_manual_plane_wave_rule() -> None:
+    from cst_runtime.core.compatibility.base import CompatibilityProfile
+    from cst_runtime.core.compatibility.modeling import fdsolver_stimulation_vba
+
+    profile = CompatibilityProfile(major=2022, version="2022", source="test")
+    generated = fdsolver_stimulation_vba(port="Plane Wave", mode=1, profile=profile)
+
+    assert generated.lines[-1] == 'FDSolver.Stimulation "Plane Wave", 1'
+
+
+@pytest.mark.parametrize(
+    ("port", "mode"),
+    [
+        (0, 1),
+        ("unknown", 1),
+        ("Plane Wave", 2),
+        ("List", 1),
+        (1, "Plane Wave"),
+        ('All"\nReportError "x', "All"),
+    ],
+)
+def test_fdsolver_stimulation_rejects_invalid_manual_arguments(port, mode) -> None:
+    from cst_runtime.core.compatibility.base import CompatibilityProfile
+    from cst_runtime.core.compatibility.modeling import fdsolver_stimulation_vba
+    from cst_runtime.core.errors import ValidationError
+
+    profile = CompatibilityProfile(major=2022, version="2022", source="test")
+
+    with pytest.raises(ValidationError):
+        fdsolver_stimulation_vba(port=port, mode=mode, profile=profile)
 
 
 def test_rebuild_warns_that_results_are_deleted_and_checks_return(monkeypatch):

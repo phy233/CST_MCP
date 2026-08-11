@@ -64,6 +64,46 @@ def test_connect_never_creates_environment_during_read_only_lookup(monkeypatch):
         raise AssertionError("没有现有环境时应明确失败")
 
 
+def test_create_environment_prefers_documented_constructor(monkeypatch):
+    calls: list[str] = []
+    expected = object()
+
+    class DesignEnvironment:
+        def __new__(cls):
+            calls.append("constructor")
+            return expected
+
+        @staticmethod
+        def new():
+            calls.append("new")
+            return object()
+
+    monkeypatch.setattr(session, "_interface", lambda: SimpleNamespace(DesignEnvironment=DesignEnvironment))
+
+    assert session.create_design_environment() is expected
+    assert calls == ["constructor"]
+
+
+def test_create_environment_falls_back_to_documented_new(monkeypatch):
+    calls: list[str] = []
+    expected = object()
+
+    class DesignEnvironment:
+        def __new__(cls):
+            calls.append("constructor")
+            raise RuntimeError("构造器不可用")
+
+        @staticmethod
+        def new():
+            calls.append("new")
+            return expected
+
+    monkeypatch.setattr(session, "_interface", lambda: SimpleNamespace(DesignEnvironment=DesignEnvironment))
+
+    assert session.create_design_environment() is expected
+    assert calls == ["constructor", "new"]
+
+
 def test_active_project_supports_property_and_method_forms():
     project = SimpleNamespace(filename=lambda: "demo.cst")
 

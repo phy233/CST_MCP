@@ -560,6 +560,70 @@ def solver_acceleration_vba(
     return CompatibleVBA(tuple(lines), resolved.label, not_applied=not_applied)
 
 
+_FDSOLVER_STIMULATION_ENUMS = {
+    "all": "All",
+    "all+floquet": "All+Floquet",
+    "plane wave": "Plane Wave",
+    "list": "List",
+    "cma": "CMA",
+}
+
+
+def _fdsolver_stimulation_value(value: int | str, *, parameter: str) -> int | str:
+    """按 CST 2022 FDSolver.Stimulation 手册校验单个参数。"""
+    if isinstance(value, bool):
+        raise ValidationError(f"{parameter} 必须是正整数或手册允许的枚举")
+    if isinstance(value, int):
+        if value < 1:
+            raise ValidationError(f"{parameter} 的端口或模式编号必须大于零")
+        return value
+    if not isinstance(value, str):
+        raise ValidationError(f"{parameter} 必须是正整数或手册允许的枚举")
+    normalized = _FDSOLVER_STIMULATION_ENUMS.get(value.strip().casefold())
+    if normalized is None:
+        allowed = "、".join(_FDSOLVER_STIMULATION_ENUMS.values())
+        raise ValidationError(f"{parameter} 枚举必须是：{allowed}")
+    return normalized
+
+
+def fdsolver_stimulation_vba(
+    *,
+    port: int | str,
+    mode: int | str,
+    profile: CompatibilityProfile | None = None,
+) -> CompatibleVBA:
+    """生成 CST 2022 手册定义的 FDSolver.Stimulation 命令。"""
+    resolved = _profile(profile)
+    if not resolved.is_2022:
+        raise unsupported_feature(
+            "fdsolver.stimulation",
+            required_capability="cst2022_fdsolver_stimulation",
+            next_action="当前仅依据本机 CST 2022 手册实现，请先核对目标版本手册。",
+        )
+    normalized_port = _fdsolver_stimulation_value(port, parameter="port")
+    normalized_mode = _fdsolver_stimulation_value(mode, parameter="mode")
+    if normalized_port == "Plane Wave" and normalized_mode != 1:
+        raise ValidationError('port 为 "Plane Wave" 时，手册要求 mode 必须为 1')
+    if normalized_mode == "Plane Wave":
+        raise ValidationError('"Plane Wave" 只能作为 port，mode 必须为 1')
+    if (normalized_port == "List") != (normalized_mode == "List"):
+        raise ValidationError('使用 "List" 时，port 和 mode 必须同时为 "List"')
+
+    def _argument(value: int | str) -> str:
+        return str(value) if isinstance(value, int) else f'"{value}"'
+
+    return CompatibleVBA(
+        (
+            "FDSolver.Reset",
+            (
+                "FDSolver.Stimulation "
+                f"{_argument(normalized_port)}, {_argument(normalized_mode)}"
+            ),
+        ),
+        "cst2022",
+    )
+
+
 def port_vba(
     *,
     port_number: str,
@@ -1118,6 +1182,7 @@ __all__ = [
     "background_vba",
     "extrude_curve_vba",
     "change_solver_type_vba",
+    "fdsolver_stimulation_vba",
     "loft_vba",
     "mesh_vba",
     "monitor_vba",

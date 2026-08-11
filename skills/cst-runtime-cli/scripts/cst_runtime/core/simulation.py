@@ -14,6 +14,7 @@ from .compatibility import (
     get_project_solver_type,
 )
 from .compatibility.modeling import (
+    fdsolver_stimulation_vba,
     mesh_fpbavoid_nonreg_unite_vba,
     solver_acceleration_vba,
 )
@@ -204,6 +205,21 @@ def set_solver_acceleration(
 
 def set_fdsolver_extrude_open_bc(project_path: str, enable: bool = True) -> dict[str, Any]:
     return _single_vba_pops(project_path, "set FDSolver ExtrudeOpenBC", f'FDSolver.ExtrudeOpenBC {"True" if enable else "False"}')
+
+
+def define_fdsolver_stimulation(
+    project_path: str,
+    port: int | str,
+    mode: int | str,
+) -> dict[str, Any]:
+    """依据 CST 2022 手册重置频域求解器设置并配置激励源。"""
+    return _submit_versioned_vba(
+        project_path,
+        "Define FDSolver Stimulation",
+        fdsolver_stimulation_vba,
+        port=port,
+        mode=mode,
+    )
 
 
 def set_mesh_fpbavoid_nonreg_unite(project_path: str, enable: bool = True) -> dict[str, Any]:

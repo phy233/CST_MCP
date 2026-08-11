@@ -50,15 +50,15 @@ def connect_to_any_design_environment() -> Any:
 
 
 def create_design_environment() -> Any:
-    """创建新的 DesignEnvironment，兼容静态 new 与直接构造两种形态。"""
+    """按 CST 2022 Python 手册优先直接构造，失败后兼容静态 new。"""
     design_environment = _interface().DesignEnvironment
-    creator = getattr(design_environment, "new", None)
-    if callable(creator):
-        try:
+    try:
+        return design_environment()
+    except Exception as constructor_error:
+        creator = getattr(design_environment, "new", None)
+        if callable(creator):
             return creator()
-        except Exception:
-            pass
-    return design_environment()
+        raise constructor_error
 
 
 def design_environment_pid(environment: Any) -> int | None:

@@ -94,7 +94,10 @@ TOOL_DEFS = {
 "define-boundary": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Set boundary conditions for all faces and symmetries.",
+    "description": (
+        "设置全部面的通用边界和对称性；该工具不等价于完整的 Unit Cell 或 "
+        "Floquet 配置。高级周期边界需求应由用户在 CST 图形界面中手动完成。"
+    ),
     "handler": "tool_define_boundary",
     "json_schema": {
         "type": "object",
@@ -632,6 +635,53 @@ TOOL_DEFS = {
     },
 },
 
+"define-fdsolver-stimulation": {
+    "category": "project_ops",
+    "risk": "write",
+    "description": (
+        "依据本机 CST 2022 手册先执行 FDSolver.Reset（会重置此前的频域求解器"
+        "设置），再设置激励。当前仅完成离线命令生成和参数校验，尚未经过本轮 "
+        "CST 实机验收。"
+    ),
+    "handler": "tool_define_fdsolver_stimulation",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {
+                "type": "string",
+                "examples": [
+                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
+                ]
+            },
+            "port": {
+                "description": "正整数端口号或 CST 2022 手册允许的激励枚举。",
+                "type": ["integer", "string"],
+                "anyOf": [
+                    {"type": "integer", "minimum": 1},
+                    {
+                        "type": "string",
+                        "enum": ["All", "All+Floquet", "Plane Wave", "List", "CMA"]
+                    }
+                ],
+                "examples": [1]
+            },
+            "mode": {
+                "description": "正整数模式号或 CST 2022 手册允许的激励枚举。",
+                "type": ["integer", "string"],
+                "anyOf": [
+                    {"type": "integer", "minimum": 1},
+                    {
+                        "type": "string",
+                        "enum": ["All", "All+Floquet", "List", "CMA"]
+                    }
+                ],
+                "examples": [1]
+            }
+        },
+        "required": ["project_path", "port", "mode"]
+    },
+},
+
 "set-mesh-fpbavoid-nonreg-unite": {
     "category": "project_ops",
     "risk": "write",
@@ -1106,6 +1156,10 @@ def tool_set_solver_acceleration(args: dict) -> dict:
 
 def tool_set_fdsolver_extrude_open_bc(args: dict) -> dict:
     return _sim.set_fdsolver_extrude_open_bc(**args)
+
+
+def tool_define_fdsolver_stimulation(args: dict) -> dict:
+    return _sim.define_fdsolver_stimulation(**args)
 
 
 def tool_set_mesh_fpbavoid_nonreg_unite(args: dict) -> dict:

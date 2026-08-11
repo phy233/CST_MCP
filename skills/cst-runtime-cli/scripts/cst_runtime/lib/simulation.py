@@ -13,6 +13,7 @@ _PUBLIC_OPERATIONS = (
     "pause_simulation",
     "resume_simulation",
     "set_solver_acceleration",
+    "define_fdsolver_stimulation",
     "set_fdsolver_extrude_open_bc",
     "set_mesh_fpbavoid_nonreg_unite",
     "set_mesh_minimum_step_number",

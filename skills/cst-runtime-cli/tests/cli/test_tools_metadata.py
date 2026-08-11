@@ -33,6 +33,7 @@ _CST_REQUIRED_TOOLS = {
     "set-field-monitor", "set-probe", "delete-probe", "delete-monitor",
     "set-background-with-space", "set-farfield-plot-cuts", "show-bounding-box",
     "create-mesh-group", "set-solver-acceleration",
+    "define-fdsolver-stimulation",
     "set-fdsolver-extrude-open-bc", "set-mesh-fpbavoid-nonreg-unite",
     "set-mesh-minimum-step-number", "define-polygon-3d",
     "define-analytical-curve", "define-extrude-curve",
