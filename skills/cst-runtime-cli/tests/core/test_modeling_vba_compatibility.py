@@ -473,31 +473,37 @@ def test_export_paths_follow_2022_documented_result_names(monkeypatch) -> None:
     ]
 
 
-def test_ascii_export_checks_tree_selection_before_export(monkeypatch) -> None:
+def test_ascii_export_checks_tree_selection_and_output_file(tmp_path, monkeypatch) -> None:
     captured: dict[str, str] = {}
 
     def fake_single(project_path, history_name, vba, project=None):
         captured["vba"] = vba
+        export_line = next(line for line in vba.splitlines() if line.startswith("ASCIIExport.FileName"))
+        output = core_modeling.Path(export_line.split('"', 2)[1].replace('""', '"'))
+        output.write_text("x y z Ex Ey Ez\n", encoding="utf-8")
         return {"status": "success"}
 
     monkeypatch.setattr(core_modeling, "_single_vba", fake_single)
 
-    core_modeling._ascii_export(
+    result = core_modeling._ascii_export(
         "D:/project.cst",
         "2D/3D Results\\E-Field\\e-field (f=8) [1]",
-        'D:/exports/e-field "8".txt',
+        str(tmp_path / "e-field 8.txt"),
         "ExportEField",
     )
 
+    assert result["status"] == "success"
+    assert result["file_size"] > 0
+    assert core_modeling.Path(result["output_file"]).name == "e-field 8.txt"
     assert "If Not SelectTreeItem" in captured["vba"]
     assert "ReportError" in captured["vba"]
-    assert 'ASCIIExport.FileName "D:/exports/e-field ""8"".txt"' in captured["vba"]
+    assert ".e-field 8." in captured["vba"]
 
 
 def test_2022_plot_export_uses_vba_global_object() -> None:
     text = _text(
         plot_export_vba(
-            preset_name="Isometric",
+            preset_name="Perspective",
             output_path='D:/exports/model "view".png',
             profile=CST2022,
         )
@@ -505,8 +511,29 @@ def test_2022_plot_export_uses_vba_global_object() -> None:
 
     assert 'Plot.RestoreView "Perspective"' in text
     assert "Plot.ZoomToStructure" in text
+    assert "Plot.Update" in text
     assert 'Plot.ExportImage "D:/exports/model ""view"".png", 1920, 1080' in text
     assert "modeler.Plot" not in text
+
+
+def test_2022_custom_plot_view_uses_documented_relative_rotations() -> None:
+    text = _text(
+        plot_export_vba(
+            preset_name="Perspective",
+            view_type="custom",
+            horizontal_rotation_deg=45.0,
+            vertical_rotation_deg=-30.0,
+            output_path="D:/exports/custom.png",
+            profile=CST2022,
+        )
+    )
+
+    assert 'Plot.RestoreView "Front"' in text
+    assert "Plot.RotationAngle 45" in text
+    assert 'Plot.Rotate "left"' in text
+    assert "Plot.RotationAngle 30" in text
+    assert 'Plot.Rotate "down"' in text
+    assert text.index("Plot.Update") < text.index("Plot.ExportImage")
 
 
 def test_capture_3d_view_submits_plot_vba_through_history_gateway(
@@ -545,11 +572,11 @@ def test_capture_3d_view_submits_plot_vba_through_history_gateway(
     result = core_modeling.capture_3d_view(
         project_path=str(project_path),
         output_dir=str(output_dir),
-        preset_name="Isometric",
+        preset_name="Perspective",
     )
 
     assert result["status"] == "success"
-    assert captured["history_name"] == "Capture 3D View:Isometric"
+    assert captured["history_name"] == "Capture 3D View:Perspective"
     assert any(
         line.startswith("Plot.ExportImage") for line in captured["vba_lines"]
     )

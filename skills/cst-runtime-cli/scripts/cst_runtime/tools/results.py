@@ -6,7 +6,7 @@ TOOL_DEFS = {
 "export-run-results": {
     "category": "results",
     "risk": "filesystem-write",
-    "description": "Export S11, 2D, and farfield results to the exports directory after simulation.",
+    "description": "Export S1,1 JSON and farfield grids. 2D JSON is added only when the installed results API supports it.",
     "handler": "tool_export_run_results",
     "json_schema": {
         "type": "object",
@@ -19,6 +19,7 @@ TOOL_DEFS = {
             },
             "farfield_names": {
                 "type": "array",
+                "description": "Exact Farfields child names; pass [] for automatic discovery",
                 "items": {
                     "type": "string"
                 },
@@ -109,7 +110,7 @@ TOOL_DEFS = {
 "get-1d-result": {
     "category": "results",
     "risk": "filesystem-write",
-    "description": "Export a 0D/1D result item to JSON from a project path.",
+    "description": "Read an exact 0D/1D result-tree path with cst.results and serialize its saved data to JSON.",
     "handler": "tool_get_1d_result",
     "json_schema": {
         "type": "object",
@@ -153,6 +154,7 @@ TOOL_DEFS = {
             },
             "allow_interactive": {
                 "type": "boolean",
+                "description": "If true, CST returns only the last saved project state",
                 "examples": [
                     False
                 ]
@@ -173,7 +175,7 @@ TOOL_DEFS = {
 "get-2d-result": {
     "category": "results",
     "risk": "filesystem-write",
-    "description": "Export a 2D result item to JSON from a project path.",
+    "description": "Serialize 2D data only when the installed cst.results API exposes get_result2d_item; CST 2022 does not document it.",
     "handler": "tool_get_2d_result",
     "json_schema": {
         "type": "object",

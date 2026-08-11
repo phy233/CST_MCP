@@ -1358,7 +1358,7 @@ TOOL_DEFS = {
 "export-e-field": {
     "category": "modeling",
     "risk": "filesystem-write",
-    "description": "Export E-field data at a given frequency to ASCII.",
+    "description": "Select the exact E-Field result node for the given frequency and export its current plot with CST ASCIIExport.",
     "handler": "tool_export_e_field",
     "json_schema": {
         "type": "object",
@@ -1393,7 +1393,7 @@ TOOL_DEFS = {
 "export-surface-current": {
     "category": "modeling",
     "risk": "filesystem-write",
-    "description": "Export surface current data at a given frequency to ASCII.",
+    "description": "Select the exact Surface Current result node for the given frequency and export it with CST ASCIIExport.",
     "handler": "tool_export_surface_current",
     "json_schema": {
         "type": "object",
@@ -1428,7 +1428,7 @@ TOOL_DEFS = {
 "export-voltage": {
     "category": "modeling",
     "risk": "filesystem-write",
-    "description": "Export voltage monitor data to ASCII.",
+    "description": "Select the exact voltage monitor result node and export the current 1D plot with CST ASCIIExport.",
     "handler": "tool_export_voltage",
     "json_schema": {
         "type": "object",

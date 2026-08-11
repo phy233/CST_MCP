@@ -173,6 +173,49 @@ def test_get_1d_result_ignores_missing_nonparametric_combination(mocker, tmp_pat
     assert payload["xdata"] == [2.45]
 
 
+def test_get_1d_result_serializes_documented_0d_scalar(mocker, tmp_path):
+    """CST 2022 的 0D 标量没有可用 x 轴时仍应正常导出。"""
+    result_item = mocker.MagicMock()
+    result_item.treepath = "0D Results\\Value"
+    result_item.title = "Value"
+    result_item.xlabel = ""
+    result_item.ylabel = "Value"
+    result_item.length = 1
+    result_item.run_id = 0
+    result_item.get_xdata.side_effect = RuntimeError("0D result has no x-axis")
+    result_item.get_ydata.return_value = 3.5
+    result_item.get_parameter_combination.return_value = {}
+
+    result_module = mocker.MagicMock()
+    result_module.get_run_ids.return_value = [0]
+    result_module.get_result_item.return_value = result_item
+    mocker.patch(
+        "cst_runtime.core.results._load_project",
+        return_value=(
+            mocker.MagicMock(),
+            {"fullpath": str(tmp_path / "working.cst"), "active_subproject": None},
+        ),
+    )
+    mocker.patch(
+        "cst_runtime.core.results._get_result_module",
+        return_value=(result_module, "3d"),
+    )
+
+    from cst_runtime.core.results import get_1d_result
+    export_path = tmp_path / "value.json"
+    result = get_1d_result(
+        str(tmp_path / "working.cst"),
+        treepath="0D Results\\Value",
+        export_path=str(export_path),
+    )
+
+    assert result["status"] == "success"
+    assert result["point_count"] == 1
+    payload = __import__("json").loads(export_path.read_text(encoding="utf-8"))
+    assert payload["xdata"] is None
+    assert payload["ydata"] == 3.5
+
+
 def test_get_parameter_combination_resolves_zero_to_latest_run_id(mocker):
     """参数组合接口也应遵守 run_id=0 的公开契约。"""
     result_module = mocker.MagicMock()

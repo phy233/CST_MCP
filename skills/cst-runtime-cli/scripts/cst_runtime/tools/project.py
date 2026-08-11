@@ -851,8 +851,8 @@ TOOL_DEFS = {
 
 "capture-3d-view": {
     "category": "project_ops",
-    "risk": "read",
-    "description": "Capture 3D view of CST model as PNG + JSON metadata. Supports preset views (Front/Top/Isometric) or custom azimuth/elevation/zoom.",
+    "risk": "filesystem-write",
+    "description": "Export the current 3D sheet to PNG. Use a CST reserved view or relative horizontal/vertical rotations from Front.",
     "handler": "tool_capture_3d_view",
     "json_schema": {
         "type": "object",
@@ -875,92 +875,27 @@ TOOL_DEFS = {
             },
             "view_type": {
                 "type": "string",
-                "description": "View type: custom (custom angles) or preset (named view)",
+                "description": "preset uses a reserved view; custom rotates from Front",
                 "enum": ["custom", "preset"],
                 "default": "preset"
             },
             "preset_name": {
                 "type": "string",
-                "description": "Preset view name (used when view_type=preset)",
-                "enum": ["Front", "Back", "Top", "Bottom", "Left", "Right", "Isometric"],
-                "default": "Isometric"
+                "description": "CST reserved view used by preset",
+                "enum": ["Front", "Back", "Top", "Bottom", "Left", "Right", "Perspective"],
+                "default": "Perspective"
             },
-            "azimuth": {
+            "horizontal_rotation_deg": {
                 "type": "number",
-                "description": "Azimuth angle in degrees (0=+X, 90=+Y, CCW positive; used when view_type=custom)",
+                "description": "Custom rotation from Front; positive is left, negative is right",
                 "default": 45.0,
-                "examples": [0, 45, 90, 180]
+                "examples": [45]
             },
-            "elevation": {
+            "vertical_rotation_deg": {
                 "type": "number",
-                "description": "Elevation angle in degrees (0=horizontal, 90=+Z top view; used when view_type=custom)",
+                "description": "Custom rotation after horizontal rotation; positive is up, negative is down",
                 "default": 30.0,
-                "examples": [0, 30, 45, 90]
-            },
-            "zoom": {
-                "type": "number",
-                "description": "Zoom scale (1.0=default, 0.5=2x closer, 2.0=2x farther)",
-                "default": 1.0,
-                "examples": [0.5, 1.0, 1.5, 2.0]
-            }
-        },
-        "required": ["project_path"]
-    },
-},
-
-"capture-3d-view": {
-    "category": "project_ops",
-    "risk": "read",
-    "description": "Capture 3D view of CST model as PNG + JSON metadata. Supports preset views (Front/Top/Isometric) or custom azimuth/elevation/zoom.",
-    "handler": "tool_capture_3d_view",
-    "json_schema": {
-        "type": "object",
-        "properties": {
-            "project_path": {
-                "type": "string",
-                "description": "CST project file path (must point to specific .cst file)",
-                "examples": ["C:/path/to/tasks/task_xxx/runs/run_001/projects/working.cst"]
-            },
-            "output_dir": {
-                "type": "string",
-                "description": "Output directory for screenshots (default: <project_dir>/exports/screenshots/)",
-                "examples": ["C:/path/to/exports/screenshots/"]
-            },
-            "filename_prefix": {
-                "type": "string",
-                "description": "Filename prefix for output files",
-                "default": "view",
-                "examples": ["model_snapshot", "antenna_v1"]
-            },
-            "view_type": {
-                "type": "string",
-                "description": "View type: custom (custom angles) or preset (named view)",
-                "enum": ["custom", "preset"],
-                "default": "preset"
-            },
-            "preset_name": {
-                "type": "string",
-                "description": "Preset view name (used when view_type=preset)",
-                "enum": ["Front", "Back", "Top", "Bottom", "Left", "Right", "Isometric"],
-                "default": "Isometric"
-            },
-            "azimuth": {
-                "type": "number",
-                "description": "Azimuth angle in degrees (0=+X, 90=+Y, CCW positive; used when view_type=custom)",
-                "default": 45.0,
-                "examples": [0, 45, 90, 180]
-            },
-            "elevation": {
-                "type": "number",
-                "description": "Elevation angle in degrees (0=horizontal, 90=+Z top view; used when view_type=custom)",
-                "default": 30.0,
-                "examples": [0, 30, 45, 90]
-            },
-            "zoom": {
-                "type": "number",
-                "description": "Zoom scale (1.0=default, 0.5=2x closer, 2.0=2x farther)",
-                "default": 1.0,
-                "examples": [0.5, 1.0, 1.5, 2.0]
+                "examples": [30]
             },
             "return_image_data": {
                 "type": "boolean",
@@ -974,8 +909,8 @@ TOOL_DEFS = {
 
 "inspect-model-view": {
     "category": "project_ops",
-    "risk": "read",
-    "description": "Capture 3D view and return base64-encoded image data for agent visual analysis. Use this to let the agent 'see' the model.",
+    "risk": "filesystem-write",
+    "description": "Export a documented preset or Front-relative 3D view and return the PNG as base64.",
     "handler": "tool_inspect_model_view",
     "json_schema": {
         "type": "object",
@@ -997,13 +932,25 @@ TOOL_DEFS = {
             },
             "view_type": {
                 "type": "string",
+                "description": "preset uses a reserved view; custom rotates from Front",
                 "enum": ["custom", "preset"],
                 "default": "preset"
             },
             "preset_name": {
                 "type": "string",
-                "enum": ["Front", "Back", "Top", "Bottom", "Left", "Right", "Isometric"],
-                "default": "Isometric"
+                "description": "CST reserved view used by preset",
+                "enum": ["Front", "Back", "Top", "Bottom", "Left", "Right", "Perspective"],
+                "default": "Perspective"
+            },
+            "horizontal_rotation_deg": {
+                "type": "number",
+                "description": "Custom rotation from Front; positive is left, negative is right",
+                "default": 45.0
+            },
+            "vertical_rotation_deg": {
+                "type": "number",
+                "description": "Custom rotation after horizontal rotation; positive is up, negative is down",
+                "default": 30.0
             }
         },
         "required": ["project_path"]
@@ -1236,10 +1183,9 @@ def tool_capture_3d_view(args: dict) -> dict:
         output_dir=args.get("output_dir", ""),
         filename_prefix=args.get("filename_prefix", "view"),
         view_type=args.get("view_type", "preset"),
-        preset_name=args.get("preset_name", "Isometric"),
-        azimuth=args.get("azimuth", 45.0),
-        elevation=args.get("elevation", 30.0),
-        zoom=args.get("zoom", 1.0),
+        preset_name=args.get("preset_name", "Perspective"),
+        horizontal_rotation_deg=args.get("horizontal_rotation_deg"),
+        vertical_rotation_deg=args.get("vertical_rotation_deg"),
         return_image_data=args.get("return_image_data", False),
     )
 
@@ -1250,9 +1196,11 @@ def tool_inspect_model_view(args: dict) -> dict:
     return _md.capture_3d_view(
         project_path=args.get("project_path", ""),
         output_dir=args.get("output_dir", ""),
-        filename_prefix=args.get("filename_prefix", "view"),
+        filename_prefix=args.get("filename_prefix", "inspect"),
         view_type=args.get("view_type", "preset"),
-        preset_name=args.get("preset_name", "Isometric"),
+        preset_name=args.get("preset_name", "Perspective"),
+        horizontal_rotation_deg=args.get("horizontal_rotation_deg"),
+        vertical_rotation_deg=args.get("vertical_rotation_deg"),
         return_image_data=True,  # Always include base64 image data
     )
 

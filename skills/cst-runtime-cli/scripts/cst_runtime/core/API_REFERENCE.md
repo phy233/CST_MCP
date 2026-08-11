@@ -1009,9 +1009,9 @@ result = define_brick(
 
 | 函数 | 签名（简化） | 功能 |
 |------|-------------|------|
-| `export_e_field` 🟢 | `(project_path, frequency, file_path)` | ASCII 导出 E 场结果 |
-| `export_surface_current` 🟢 | `(project_path, frequency, file_path)` | ASCII 导出表面电流 |
-| `export_voltage` 🟢 | `(project_path, voltage_index, file_path)` | ASCII 导出电压监视器结果 |
+| `export_e_field` 🟢 | `(project_path, frequency, file_path)` | 选择精确结果树节点并以 ASCII 导出 E 场；校验文件非空 |
+| `export_surface_current` 🟢 | `(project_path, frequency, file_path)` | 选择精确结果树节点并以 ASCII 导出表面电流；校验文件非空 |
+| `export_voltage` 🟢 | `(project_path, voltage_index, file_path)` | 选择精确结果树节点并以 ASCII 导出电压结果；校验文件非空 |
 
 #### 历史与拾取
 
@@ -1026,12 +1026,14 @@ result = define_brick(
 
 | 项 | 说明 |
 |---|---|
-| **签名** | `capture_3d_view(project_path="", output_dir="", filename_prefix="view", view_type="preset", preset_name="Isometric", azimuth=45.0, elevation=30.0, zoom=1.0, return_image_data=False) -> dict` |
+| **签名** | `capture_3d_view(project_path="", output_dir="", filename_prefix="view", view_type="preset", preset_name="Perspective", horizontal_rotation_deg=None, vertical_rotation_deg=None, zoom=1.0, return_image_data=False, azimuth=None, elevation=None) -> dict` |
 | **参数** | `view_type` — `"preset"` 或 `"custom"` |
-| | `preset_name` — `Front`, `Back`, `Top`, `Bottom`, `Left`, `Right`, `Isometric` |
+| | `preset_name` — `Front`, `Back`, `Top`, `Bottom`, `Left`, `Right`, `Perspective` |
+| | `horizontal_rotation_deg` / `vertical_rotation_deg` — 从 `Front` 开始依次相对旋转；正值分别为 left/up |
+| | `zoom` — 兼容字段，CST 2022 仅允许 `1.0` 并调用 `ZoomToStructure` |
 | | `return_image_data` — 若 `True`，返回 base64 编码的图像数据 |
 | **返回值** | 包含 PNG 路径和 JSON 元数据的字典 |
-| **功能** | 捕获 CST 模型的 3D 视图为 1920×1080 PNG + JSON 元数据 |
+| **功能** | 调用 CST 2022 `Plot` 的保留视图或相对旋转，更新视图后导出 1920×1080 PNG，并校验文件非空 |
 
 ---
 
@@ -1176,7 +1178,7 @@ for tp in items["items"]:
 | 项 | 说明 |
 |---|---|
 | **签名** | `get_1d_result(project_path, treepath, module_type="3d", run_id=0, load_impedances=True, export_path="", allow_interactive=False, subproject_treepath="") -> dict` |
-| **功能** | 提取 1D 结果数据（x/y 数组）并导出为 `.json` 文件 |
+| **功能** | 按精确结果树路径提取已保存的 0D/1D 数据并导出 `.json`；0D 标量不要求 x 轴 |
 
 ```python
 from cst_runtime.core.results import get_1d_result
@@ -1184,12 +1186,12 @@ from cst_runtime.core.results import get_1d_result
 result = get_1d_result("C:/models/antenna.cst", "1D Results\\S-Parameters\\S1,1")
 ```
 
-#### `get_2d_result` 🟢
+#### `get_2d_result` 🟡
 
 | 项 | 说明 |
 |---|---|
 | **签名** | `get_2d_result(project_path, treepath, module_type="3d", export_path="", allow_interactive=False, subproject_treepath="", include_data=False) -> dict` |
-| **功能** | 提取 2D 结果数据（色图/网格）并导出为 `.json` 文件 |
+| **功能** | 仅在已安装 `cst.results` 提供 `get_result2d_item` 时导出 2D JSON；CST 2022 手册未记录该接口 |
 
 #### `plot_project_result` 🟢
 
@@ -1203,7 +1205,7 @@ result = get_1d_result("C:/models/antenna.cst", "1D Results\\S-Parameters\\S1,1"
 | 项 | 说明 |
 |---|---|
 | **签名** | `export_run_results(project_path, farfield_names=None, farfield_plot_mode="Realized Gain", farfield_theta_step=2.0, farfield_phi_step=2.0, run_id=None) -> dict` |
-| **功能** | 批量导出 S 参数、2D 色图和远场网格。自动发现远场监视器 |
+| **功能** | 批量导出 S1,1 与远场网格；仅在结果 API 支持时附加 2D JSON |
 
 #### `generate_report` / `plot_exported_file` 🟢
 

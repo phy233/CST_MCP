@@ -140,6 +140,49 @@ def test_12_boolean_add_consumes_operand_and_result_can_be_deleted(cst_case: Any
     cst_case.shared.delete_entity(COMPONENT, first)
 
 
+def test_13_custom_view_exports_nonempty_png(cst_case: Any) -> None:
+    """手册记录的 Front 相对旋转必须在真机生成非空 PNG。"""
+    name = cst_case.name("capture")
+    cst_case.require_success(
+        "define-brick",
+        _project_arguments(
+            cst_case,
+            name=name,
+            component=COMPONENT,
+            material="PEC",
+            x_min=100,
+            x_max=102,
+            y_min=100,
+            y_max=101,
+            z_min=100,
+            z_max=103,
+        ),
+    )
+    cst_case.shared.register_entity(COMPONENT, name)
+    assert cst_case.shared.entity_exists(COMPONENT, name)
+
+    output_dir = Path(cst_case.shared.temp_root) / "screenshots"
+    result = cst_case.require_success(
+        "capture-3d-view",
+        _project_arguments(
+            cst_case,
+            output_dir=str(output_dir),
+            filename_prefix=cst_case.name("custom_view"),
+            view_type="custom",
+            horizontal_rotation_deg=35,
+            vertical_rotation_deg=20,
+        ),
+        timeout=120,
+    )
+    image_path = Path(result["image_path"])
+    assert image_path.is_file(), result
+    assert image_path.stat().st_size > 0, result
+    assert result["view_params"]["horizontal_rotation_deg"] == 35
+    assert result["view_params"]["vertical_rotation_deg"] == 20
+
+    cst_case.shared.delete_entity(COMPONENT, name)
+
+
 def test_20_array_batch_creates_and_deletes_every_instance(cst_case: Any) -> None:
     """公开阵列工作流应真实提交批次，全部新增实体随后逐个删除。"""
     reference_name = cst_case.name("array_ref")
