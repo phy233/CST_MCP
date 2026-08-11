@@ -111,7 +111,11 @@ TOOL_DEFS = {
 "boolean-subtract": {
     "category": "modeling",
     "risk": "write",
-    "description": "Subtract one solid from another (boolean difference).",
+    "description": (
+        "Subtract one solid from another (boolean difference). CST may accept "
+        "a subtraction between non-intersecting solids without changing the target, "
+        "so confirm geometric overlap from the modeled coordinates before calling."
+    ),
     "handler": "tool_boolean_subtract",
     "json_schema": {
         "type": "object",
@@ -124,12 +128,17 @@ TOOL_DEFS = {
             },
             "target": {
                 "type": "string",
+                "description": "Target solid that must geometrically overlap the subtraction tool.",
                 "examples": [
                     "Component1:outer"
                 ]
             },
             "tool": {
                 "type": "string",
+                "description": (
+                    "Cutting solid. Ensure its coordinate ranges overlap the target; "
+                    "a successful command alone does not prove that material was removed."
+                ),
                 "examples": [
                     "Component1:inner"
                 ]
@@ -209,7 +218,7 @@ TOOL_DEFS = {
 "create-hollow-sweep": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a hollow loft sweep with outer and inner walls.",
+    "description": "Create a hollow loft between two rectangular profiles in active X/Y/Z or local U/V/W coordinates.",
     "handler": "tool_create_hollow_sweep",
     "json_schema": {
         "type": "object",
@@ -240,60 +249,70 @@ TOOL_DEFS = {
             },
             "x_min1": {
                 "type": "number",
+                "description": "Lower X or U bound of profile 1.",
                 "examples": [
                     -10
                 ]
             },
             "x_max1": {
                 "type": "number",
+                "description": "Upper X or U bound of profile 1.",
                 "examples": [
                     10
                 ]
             },
             "y_min1": {
                 "type": "number",
+                "description": "Lower Y or V bound of profile 1.",
                 "examples": [
                     -10
                 ]
             },
             "y_max1": {
                 "type": "number",
+                "description": "Upper Y or V bound of profile 1.",
                 "examples": [
                     10
                 ]
             },
             "z1": {
                 "type": "number",
+                "description": "Z or W position of profile 1.",
                 "examples": [
                     0
                 ]
             },
             "x_min2": {
                 "type": "number",
+                "description": "Lower X or U bound of profile 2.",
                 "examples": [
                     -35
                 ]
             },
             "x_max2": {
                 "type": "number",
+                "description": "Upper X or U bound of profile 2.",
                 "examples": [
                     35
                 ]
             },
             "y_min2": {
                 "type": "number",
+                "description": "Lower Y or V bound of profile 2.",
                 "examples": [
                     -35
                 ]
             },
             "y_max2": {
                 "type": "number",
+                "description": "Upper Y or V bound of profile 2.",
                 "examples": [
                     35
                 ]
             },
             "z2": {
                 "type": "number",
+                "description": "Z or W position of profile 2.",
                 "examples": [
                     50
                 ]
@@ -328,7 +347,7 @@ TOOL_DEFS = {
 "create-horn-segment": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a horn segment (outer cone - inner cone).",
+    "description": "Create a Z-axis horn segment; Z means W when a local WCS is active.",
     "handler": "tool_create_horn_segment",
     "json_schema": {
         "type": "object",
@@ -359,12 +378,14 @@ TOOL_DEFS = {
             },
             "z_min": {
                 "type": "number",
+                "description": "Lower Z or W axis bound.",
                 "examples": [
                     0
                 ]
             },
             "z_max": {
                 "type": "number",
+                "description": "Upper Z or W axis bound.",
                 "examples": [
                     30
                 ]
@@ -384,7 +405,7 @@ TOOL_DEFS = {
 "create-loft-sweep": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a loft sweep between two 2D profiles in one step.",
+    "description": "Create a loft between two rectangular profiles in active X/Y/Z or local U/V/W coordinates.",
     "handler": "tool_create_loft_sweep",
     "json_schema": {
         "type": "object",
@@ -415,60 +436,70 @@ TOOL_DEFS = {
             },
             "x_min1": {
                 "type": "number",
+                "description": "Lower X or U bound of profile 1.",
                 "examples": [
                     -10
                 ]
             },
             "x_max1": {
                 "type": "number",
+                "description": "Upper X or U bound of profile 1.",
                 "examples": [
                     10
                 ]
             },
             "y_min1": {
                 "type": "number",
+                "description": "Lower Y or V bound of profile 1.",
                 "examples": [
                     -10
                 ]
             },
             "y_max1": {
                 "type": "number",
+                "description": "Upper Y or V bound of profile 1.",
                 "examples": [
                     10
                 ]
             },
             "z1": {
                 "type": "number",
+                "description": "Z or W position of profile 1.",
                 "examples": [
                     0
                 ]
             },
             "x_min2": {
                 "type": "number",
+                "description": "Lower X or U bound of profile 2.",
                 "examples": [
                     -35
                 ]
             },
             "x_max2": {
                 "type": "number",
+                "description": "Upper X or U bound of profile 2.",
                 "examples": [
                     35
                 ]
             },
             "y_min2": {
                 "type": "number",
+                "description": "Lower Y or V bound of profile 2.",
                 "examples": [
                     -35
                 ]
             },
             "y_max2": {
                 "type": "number",
+                "description": "Upper Y or V bound of profile 2.",
                 "examples": [
                     35
                 ]
             },
             "z2": {
                 "type": "number",
+                "description": "Z or W position of profile 2.",
                 "examples": [
                     50
                 ]
@@ -537,7 +568,7 @@ TOOL_DEFS = {
 "define-analytical-curve": {
     "category": "modeling",
     "risk": "write",
-    "description": "Define an analytical curve using parametric equations.",
+    "description": "Create a parametric curve in active X/Y/Z or local U/V/W coordinates; each law must be differentiable over the parameter range.",
     "handler": "tool_define_analytical_curve",
     "json_schema": {
         "type": "object",
@@ -562,18 +593,21 @@ TOOL_DEFS = {
             },
             "law_x": {
                 "type": "string",
+                "description": "X(t), or U(t) with a local WCS.",
                 "examples": [
                     "C1*exp(R*t)+C2"
                 ]
             },
             "law_y": {
                 "type": "string",
+                "description": "Y(t), or V(t) with a local WCS.",
                 "examples": [
                     "0"
                 ]
             },
             "law_z": {
                 "type": "string",
+                "description": "Z(t), or W(t) with a local WCS.",
                 "examples": [
                     "t"
                 ]
@@ -607,7 +641,7 @@ TOOL_DEFS = {
 "define-brick": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a rectangular brick in the CST project.",
+    "description": "Create a brick in active X/Y/Z or local U/V/W coordinates.",
     "handler": "tool_define_brick",
     "json_schema": {
         "type": "object",
@@ -638,36 +672,42 @@ TOOL_DEFS = {
             },
             "x_min": {
                 "type": ["number", "string"],
+                "description": "Lower X or U bound.",
                 "examples": [
                     -10
                 ]
             },
             "x_max": {
                 "type": ["number", "string"],
+                "description": "Upper X or U bound.",
                 "examples": [
                     10
                 ]
             },
             "y_min": {
                 "type": ["number", "string"],
+                "description": "Lower Y or V bound.",
                 "examples": [
                     -10
                 ]
             },
             "y_max": {
                 "type": ["number", "string"],
+                "description": "Upper Y or V bound.",
                 "examples": [
                     10
                 ]
             },
             "z_min": {
                 "type": ["number", "string"],
+                "description": "Lower Z or W bound.",
                 "examples": [
                     0
                 ]
             },
             "z_max": {
                 "type": ["number", "string"],
+                "description": "Upper Z or W bound.",
                 "examples": [
                     20
                 ]
@@ -691,7 +731,11 @@ TOOL_DEFS = {
 "define-cone": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a cone in the CST project.",
+    "description": (
+        "Create a cone along an active X/U, Y/V, or Z/W axis. axis_min/axis_max set the axial range; "
+        "the two transverse centers are mapped to axis-specific VBA setters. "
+        "bottom_radius is at the lower bound and top_radius at the upper bound."
+    ),
     "handler": "tool_define_cone",
     "json_schema": {
         "type": "object",
@@ -734,30 +778,35 @@ TOOL_DEFS = {
             },
             "axis": {
                 "type": "string",
+                "description": "Axis X/U, Y/V, or Z/W in the active coordinate system.",
                 "examples": [
                     "z"
                 ]
             },
-            "z_min": {
+            "axis_min": {
                 "type": ["number", "string"],
+                "description": "Lower bound along the selected axis.",
                 "examples": [
                     0
                 ]
             },
-            "z_max": {
+            "axis_max": {
                 "type": ["number", "string"],
+                "description": "Upper bound along the selected axis.",
                 "examples": [
                     30
                 ]
             },
             "x_center": {
                 "type": ["number", "string"],
+                "description": "First transverse center: Ycenter for axis x; Xcenter for axis y/z.",
                 "examples": [
                     0
                 ]
             },
             "y_center": {
                 "type": ["number", "string"],
+                "description": "Second transverse center: Zcenter for axis x/y; Ycenter for axis z.",
                 "examples": [
                     0
                 ]
@@ -771,8 +820,8 @@ TOOL_DEFS = {
             "bottom_radius",
             "top_radius",
             "axis",
-            "z_min",
-            "z_max",
+            "axis_min",
+            "axis_max",
             "x_center",
             "y_center"
         ]
@@ -782,7 +831,10 @@ TOOL_DEFS = {
 "define-cylinder": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a cylinder in the CST project.",
+    "description": (
+        "Create a cylinder along an active X/U, Y/V, or Z/W axis. axis_min/axis_max set the axial "
+        "range; the two transverse centers are mapped to axis-specific VBA setters."
+    ),
     "handler": "tool_define_cylinder",
     "json_schema": {
         "type": "object",
@@ -825,30 +877,35 @@ TOOL_DEFS = {
             },
             "axis": {
                 "type": "string",
+                "description": "Axis X/U, Y/V, or Z/W in the active coordinate system.",
                 "examples": [
                     "z"
                 ]
             },
-            "z_min": {
+            "axis_min": {
                 "type": ["number", "string"],
+                "description": "Lower bound along the selected axis.",
                 "examples": [
                     0
                 ]
             },
-            "z_max": {
+            "axis_max": {
                 "type": ["number", "string"],
+                "description": "Upper bound along the selected axis.",
                 "examples": [
                     20
                 ]
             },
             "x_center": {
                 "type": ["number", "string"],
+                "description": "First transverse center: Ycenter for axis x; Xcenter for axis y/z.",
                 "examples": [
                     0
                 ]
             },
             "y_center": {
                 "type": ["number", "string"],
+                "description": "Second transverse center: Zcenter for axis x/y; Ycenter for axis z.",
                 "examples": [
                     0
                 ]
@@ -862,8 +919,8 @@ TOOL_DEFS = {
             "outer_radius",
             "inner_radius",
             "axis",
-            "z_min",
-            "z_max",
+            "axis_min",
+            "axis_max",
             "x_center",
             "y_center"
         ]
@@ -873,7 +930,10 @@ TOOL_DEFS = {
 "define-extrude-curve": {
     "category": "modeling",
     "risk": "write",
-    "description": "Extrude a curve profile into a solid.",
+    "description": (
+        "Extrude a closed planar curve. Positive thickness follows its ordered normal "
+        "(CST 2022 real-machine verified); negative reverses it. Compute the normal and sign first."
+    ),
     "handler": "tool_define_extrude_curve",
     "json_schema": {
         "type": "object",
@@ -904,12 +964,14 @@ TOOL_DEFS = {
             },
             "curve": {
                 "type": "string",
+                "description": "Full 'curve:item' name of a closed planar curve; CST 2022 consumes it on success.",
                 "examples": [
                     "curve1:my_polygon"
                 ]
             },
             "thickness": {
                 "type": ["number", "string"],
+                "description": "Signed distance: positive along n=(P2-P1) cross (P3-P1), negative along -n; compare directions in one coordinate system.",
                 "examples": [
                     5
                 ]
@@ -929,7 +991,7 @@ TOOL_DEFS = {
 "define-loft": {
     "category": "modeling",
     "risk": "write",
-    "description": "Execute a loft between pre-picked faces.",
+    "description": "Connect two pre-picked surfaces; CST 2022 defines no separate plane-normal argument.",
     "handler": "tool_define_loft",
     "json_schema": {
         "type": "object",
@@ -1013,7 +1075,10 @@ TOOL_DEFS = {
 "define-polygon-3d": {
     "category": "modeling",
     "risk": "write",
-    "description": "Define a 3D polygon curve from a list of points.",
+    "description": (
+        "Create ordered points in active X/Y/Z or local U/V/W coordinates. For extrusion, "
+        "close the loop, verify coplanarity, and compute its ordered normal."
+    ),
     "handler": "tool_define_polygon_3d",
     "json_schema": {
         "type": "object",
@@ -1038,6 +1103,7 @@ TOOL_DEFS = {
             },
             "points": {
                 "type": "array",
+                "description": "Ordered active-coordinate points. Repeat the first point to close; verify n dot (Pi-P1)=0 before extrusion.",
                 "items": {
                     "type": "array",
                     "items": {
@@ -1089,7 +1155,7 @@ TOOL_DEFS = {
 "define-rectangle": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a 2D rectangle on a curve in the CST project.",
+    "description": "Create a rectangle in the active XY or local UV plane; calculate bounds in that coordinate system first.",
     "handler": "tool_define_rectangle",
     "json_schema": {
         "type": "object",
@@ -1114,24 +1180,28 @@ TOOL_DEFS = {
             },
             "x_min": {
                 "type": ["number", "string"],
+                "description": "Minimum x bound, or minimum u bound when a local coordinate system is active.",
                 "examples": [
                     -10
                 ]
             },
             "x_max": {
                 "type": ["number", "string"],
+                "description": "Maximum x bound, or maximum u bound when a local coordinate system is active.",
                 "examples": [
                     10
                 ]
             },
             "y_min": {
                 "type": ["number", "string"],
+                "description": "Minimum y bound, or minimum v bound when a local coordinate system is active.",
                 "examples": [
                     -5
                 ]
             },
             "y_max": {
                 "type": ["number", "string"],
+                "description": "Maximum y bound, or maximum v bound when a local coordinate system is active.",
                 "examples": [
                     5
                 ]
@@ -1510,7 +1580,7 @@ TOOL_DEFS = {
 "set-background-with-space": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set background space distances on all six sides.",
+    "description": "Add distances to the global X/Y/Z bounds of the calculation volume.",
     "handler": "tool_set_background_with_space",
     "json_schema": {
         "type": "object",
@@ -1742,7 +1812,7 @@ TOOL_DEFS = {
 "set-probe": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set a field probe at a specified position.",
+    "description": "Set an internal E/H-field probe at a global X/Y/Z position.",
     "handler": "tool_set_probe",
     "json_schema": {
         "type": "object",
@@ -1762,18 +1832,21 @@ TOOL_DEFS = {
             },
             "x_pos": {
                 "type": "string",
+                "description": "Global X position.",
                 "examples": [
                     "0"
                 ]
             },
             "y_pos": {
                 "type": "string",
+                "description": "Global Y position.",
                 "examples": [
                     "0"
                 ]
             },
             "z_pos": {
                 "type": "string",
+                "description": "Global Z position.",
                 "examples": [
                     "5"
                 ]
@@ -1813,7 +1886,7 @@ TOOL_DEFS = {
 "transform-curve": {
     "category": "modeling",
     "risk": "write",
-    "description": "Mirror a curve.",
+    "description": "Mirror a curve using Center and PlaneNormal in active X/Y/Z or local U/V/W coordinates; compute both first.",
     "handler": "tool_transform_curve",
     "json_schema": {
         "type": "object",
@@ -1832,36 +1905,42 @@ TOOL_DEFS = {
             },
             "center_x": {
                 "type": "string",
+                "description": "Mirror center X or U component.",
                 "examples": [
                     "0"
                 ]
             },
             "center_y": {
                 "type": "string",
+                "description": "Mirror center Y or V component.",
                 "examples": [
                     "0"
                 ]
             },
             "center_z": {
                 "type": "string",
+                "description": "Mirror center Z or W component.",
                 "examples": [
                     "0"
                 ]
             },
             "plane_normal_x": {
                 "type": "string",
+                "description": "Mirror-plane normal X or U component.",
                 "examples": [
                     "0"
                 ]
             },
             "plane_normal_y": {
                 "type": "string",
+                "description": "Mirror-plane normal Y or V component.",
                 "examples": [
                     "1"
                 ]
             },
             "plane_normal_z": {
                 "type": "string",
+                "description": "Mirror-plane normal Z or W component.",
                 "examples": [
                     "0"
                 ]
@@ -1883,7 +1962,10 @@ TOOL_DEFS = {
 "transform-shape": {
     "category": "modeling",
     "risk": "write",
-    "description": "Mirror or rotate a geometry shape.",
+    "description": (
+        "Mirror uses PlaneNormal; rotate uses Angle. Center and components use active X/Y/Z "
+        "or local U/V/W coordinates. Required plane_normal fields do not define a rotate axis."
+    ),
     "handler": "tool_transform_shape",
     "json_schema": {
         "type": "object",
@@ -1902,36 +1984,42 @@ TOOL_DEFS = {
             },
             "transform_type": {
                 "type": "string",
+                "description": "Use 'mirror' for plane reflection or 'rotate' for angle-based rotation.",
                 "examples": [
                     "mirror"
                 ]
             },
             "center_x": {
                 "type": "string",
+                "description": "Free center X or U component.",
                 "examples": [
                     "0"
                 ]
             },
             "center_y": {
                 "type": "string",
+                "description": "Free center Y or V component.",
                 "examples": [
                     "0"
                 ]
             },
             "center_z": {
                 "type": "string",
+                "description": "Free center Z or W component.",
                 "examples": [
                     "0"
                 ]
             },
             "plane_normal_x": {
                 "type": "string",
+                "description": "Mirror normal X or U component; unused for rotate.",
                 "examples": [
                     "0"
                 ]
             },
             "plane_normal_y": {
                 "type": "string",
+                "description": "Mirror normal Y or V component; unused for rotate.",
                 "examples": [
                     "1"
                 ]
@@ -1939,22 +2027,23 @@ TOOL_DEFS = {
             "plane_normal_z": {
                 "type": "string",
                 "default": "0",
+                "description": "Mirror normal Z or W component; unused for rotate.",
                 "examples": ["0"]
             },
             "angle_x": {
                 "type": "string",
                 "default": "0",
-                "description": "Rotation angle around X axis (for rotate)."
+                "description": "Rotation angle in degrees around x, or u when a WCS is active; use for rotate only."
             },
             "angle_y": {
                 "type": "string",
                 "default": "0",
-                "description": "Rotation angle around Y axis (for rotate)."
+                "description": "Rotation angle in degrees around y, or v when a WCS is active; use for rotate only."
             },
             "angle_z": {
                 "type": "string",
                 "default": "0",
-                "description": "Rotation angle around Z axis (for rotate)."
+                "description": "Rotation angle in degrees around z, or w when a WCS is active; use for rotate only."
             },
             "multiple_objects": {
                 "type": "boolean",

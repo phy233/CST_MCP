@@ -159,3 +159,85 @@ def test_all_schema_examples_and_defaults_validate() -> None:
                     failures.append(f"{tool_name}.{field_name}: {exc}")
 
     assert failures == []
+
+
+def test_coordinate_metadata_is_concise_and_actionable() -> None:
+    """坐标说明应覆盖调用前计算要点，同时保持简短。"""
+    definitions = all_defs()
+    coordinate_fields = {
+        "create-hollow-sweep": (
+            "x_min1", "x_max1", "y_min1", "y_max1", "z1",
+            "x_min2", "x_max2", "y_min2", "y_max2", "z2",
+        ),
+        "create-horn-segment": ("z_min", "z_max"),
+        "create-loft-sweep": (
+            "x_min1", "x_max1", "y_min1", "y_max1", "z1",
+            "x_min2", "x_max2", "y_min2", "y_max2", "z2",
+        ),
+        "define-analytical-curve": ("law_x", "law_y", "law_z"),
+        "define-brick": ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max"),
+        "define-cone": ("axis", "axis_min", "axis_max", "x_center", "y_center"),
+        "define-cylinder": ("axis", "axis_min", "axis_max", "x_center", "y_center"),
+        "define-extrude-curve": ("curve", "thickness"),
+        "define-polygon-3d": ("points",),
+        "define-rectangle": ("x_min", "x_max", "y_min", "y_max"),
+        "set-background-with-space": (
+            "x_min_space", "x_max_space", "y_min_space", "y_max_space",
+            "z_min_space", "z_max_space",
+        ),
+        "set-probe": ("x_pos", "y_pos", "z_pos"),
+        "transform-curve": (
+            "center_x", "center_y", "center_z",
+            "plane_normal_x", "plane_normal_y", "plane_normal_z",
+        ),
+        "transform-shape": (
+            "center_x", "center_y", "center_z",
+            "plane_normal_x", "plane_normal_y", "plane_normal_z",
+            "angle_x", "angle_y", "angle_z",
+        ),
+        "define-port": ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max", "orientation"),
+    }
+
+    for tool_name, field_names in coordinate_fields.items():
+        definition = definitions[tool_name]
+        assert len(definition["description"]) <= 240
+        assert "example" not in definition["description"].lower()
+        properties = definition["json_schema"]["properties"]
+        for field_name in field_names:
+            field_description = properties[field_name].get("description", "")
+            assert field_description
+            assert len(field_description) <= 140
+            assert "example" not in field_description.lower()
+
+    polygon = definitions["define-polygon-3d"]
+    assert "active X/Y/Z or local U/V/W" in polygon["description"]
+    assert "verify coplanarity" in polygon["description"]
+    assert "n dot (Pi-P1)=0" in polygon["json_schema"]["properties"]["points"]["description"]
+
+    extrude = definitions["define-extrude-curve"]
+    assert "closed planar curve" in extrude["description"]
+    assert "Positive thickness follows its ordered normal" in extrude["description"]
+    assert "Compute the normal and sign first" in extrude["description"]
+    assert "negative along -n" in extrude["json_schema"]["properties"]["thickness"]["description"]
+    assert "consumes it on success" in extrude["json_schema"]["properties"]["curve"]["description"]
+
+    assert "differentiable" in definitions["define-analytical-curve"]["description"]
+    assert "active X/Y/Z or local U/V/W" in definitions["define-brick"]["description"]
+    for tool_name in ("define-cone", "define-cylinder"):
+        properties = definitions[tool_name]["json_schema"]["properties"]
+        required = definitions[tool_name]["json_schema"]["required"]
+        assert "axis_min/axis_max set the axial" in definitions[tool_name]["description"]
+        assert "mapped to axis-specific VBA setters" in definitions[tool_name]["description"]
+        assert "axis_min" in properties and "axis_max" in properties
+        assert "z_min" not in properties and "z_max" not in properties
+        assert "axis_min" in required and "axis_max" in required
+    assert "bottom_radius is at the lower bound" in definitions["define-cone"]["description"]
+
+    assert "global X/Y/Z position" in definitions["set-probe"]["description"]
+    assert "global X/Y/Z bounds" in definitions["set-background-with-space"]["description"]
+    assert "*min radiates +axis" in definitions["define-port"]["description"]
+
+    transform_shape = definitions["transform-shape"]
+    assert "Mirror uses PlaneNormal; rotate uses Angle" in transform_shape["description"]
+    assert "do not define a rotate axis" in transform_shape["description"]
+    assert "no separate plane-normal argument" in definitions["define-loft"]["description"]

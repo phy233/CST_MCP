@@ -298,7 +298,10 @@ TOOL_DEFS = {
 "define-port": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Define a waveguide port.",
+    "description": (
+        "Define an internal axis-aligned waveguide port from global X/Y/Z ranges. "
+        "Collapse the normal-axis range to the port plane; *min radiates +axis and *max radiates -axis."
+    ),
     "handler": "tool_define_port",
     "json_schema": {
         "type": "object",
@@ -317,42 +320,49 @@ TOOL_DEFS = {
             },
             "x_min": {
                 "type": "number",
+                "description": "Global lower X bound.",
                 "examples": [
                     -10
                 ]
             },
             "x_max": {
                 "type": "number",
+                "description": "Global upper X bound.",
                 "examples": [
                     10
                 ]
             },
             "y_min": {
                 "type": "number",
+                "description": "Global lower Y bound.",
                 "examples": [
                     -10
                 ]
             },
             "y_max": {
                 "type": "number",
+                "description": "Global upper Y bound.",
                 "examples": [
                     10
                 ]
             },
             "z_min": {
                 "type": "number",
+                "description": "Global lower Z bound.",
                 "examples": [
                     0
                 ]
             },
             "z_max": {
                 "type": "number",
+                "description": "Global upper Z bound.",
                 "examples": [
                     5
                 ]
             },
             "orientation": {
                 "type": "string",
+                "description": "Port normal side and radiation direction: xmin/xmax/ymin/ymax/zmin/zmax.",
                 "examples": [
                     "zmin"
                 ]

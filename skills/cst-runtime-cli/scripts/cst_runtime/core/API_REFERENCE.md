@@ -856,15 +856,15 @@ result = define_brick(
 
 | 项 | 说明 |
 |---|---|
-| **签名** | `define_cylinder(project_path, name, component, material, outer_radius, inner_radius, axis, range_min=None, range_max=None, z_min=None, z_max=None, center1=0.0, center2=0.0, x_center=None, y_center=None, segments=0) -> dict` |
-| **功能** | 创建圆柱体。支持轴向参数别名（`z_min`/`z_max` → `range_min`/`range_max`） |
+| **签名** | `define_cylinder(project_path, name, component, material, outer_radius, inner_radius, axis, axis_min=None, axis_max=None, range_min=None, range_max=None, z_min=None, z_max=None, center1=None, center2=None, x_center=None, y_center=None, segments=0) -> dict` |
+| **功能** | 创建圆柱体。公开工具使用 `axis_min`/`axis_max`；其余范围字段仅作为底层兼容别名保留。 |
 
 ##### `define_cone` 🟢
 
 | 项 | 说明 |
 |---|---|
-| **签名** | `define_cone(project_path, name, component, material, bottom_radius, top_radius, axis, range_min=None, range_max=None, z_min=None, z_max=None, center1=0.0, center2=0.0, x_center=None, y_center=None, segments=0) -> dict` |
-| **功能** | 创建圆锥/截锥体 |
+| **签名** | `define_cone(project_path, name, component, material, bottom_radius, top_radius, axis, axis_min=None, axis_max=None, range_min=None, range_max=None, z_min=None, z_max=None, center1=None, center2=None, x_center=None, y_center=None, segments=0) -> dict` |
+| **功能** | 创建圆锥/截锥体。公开工具使用 `axis_min`/`axis_max`。 |
 
 ##### `define_rectangle` 🟢
 
