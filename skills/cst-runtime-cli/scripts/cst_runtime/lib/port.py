@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core.modeling import define_floquet_port as _define_floquet_port
+from ..core.em_setup import define_floquet_port as _define_floquet_port
 from ..core.modeling import define_waveguide_port as _define_waveguide_port
 from ._facade import wrap_public
 from .contracts import raise_result_error
@@ -64,9 +64,8 @@ def define_floquet(
 ) -> None:
     """Define Floquet ports for periodic/metasurface simulation.
 
-    待完善：当前实现仅覆盖部分初始化和历史需求，尚未完整核对 CST 2022
-    的高级极化、模式列表、参考面与扫描角组合。调用成功不代表完整的
-    Floquet 配置已经完成；高级需求应由用户在 CST 图形界面中手动设置。
+    兼容映射：两个端口使用 automatic 模式，旧模式数量作为
+    modes_considered。显式模式、排序频率和扫描角应调用 em_setup 中的新接口。
 
     Args:
         project_path: Path to .cst file
@@ -79,13 +78,26 @@ def define_floquet(
     Raises:
         RuntimeError: If Floquet port cannot be defined
     """
+    # 旧接口映射为两个 automatic 端口，不再按模式数量猜测固定模式表。
     result = _define_floquet_port(
         project_path,
-        zmin_modes=zmin_modes,
-        zmax_modes=zmax_modes,
-        zmin_reference_distance=zmin_reference_distance,
-        zmax_reference_distance=zmax_reference_distance,
-        polarization_type=polarization_type,
+        ports=[
+            {
+                "position": "Zmin",
+                "mode_strategy": "automatic",
+                "modes": [],
+                "modes_considered": zmin_modes,
+                "reference_distance": zmin_reference_distance,
+            },
+            {
+                "position": "Zmax",
+                "mode_strategy": "automatic",
+                "modes": [],
+                "modes_considered": zmax_modes,
+                "reference_distance": zmax_reference_distance,
+            },
+        ],
+        polarization_basis=polarization_type,
     )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to define Floquet port")

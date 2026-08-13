@@ -212,7 +212,7 @@ def define_fdsolver_stimulation(
     port: int | str,
     mode: int | str,
 ) -> dict[str, Any]:
-    """依据 CST 2022 手册重置频域求解器设置并配置激励源。"""
+    """依据 CST 2022 手册仅配置激励源，不执行 FDSolver.Reset。"""
     return _submit_versioned_vba(
         project_path,
         "Define FDSolver Stimulation",
