@@ -49,7 +49,7 @@ class TestCliFunctional:
         assert "scan" in p
 
     def test_health_check_reports_status(self) -> None:
-        r = run_cli("health-check", "--auto-fix", "true")
+        r = run_cli("health-check")
         assert r.returncode == 0, r.stderr
         p = json.loads(r.stdout)
         assert p["status"] == "success"
@@ -59,12 +59,13 @@ class TestCliFunctional:
         assert "workspace" in p
         assert "platform" in p
 
-    def test_health_check_without_auto_fix(self) -> None:
-        r = run_cli("health-check", "--auto-fix", "false")
-        assert r.returncode == 0, r.stderr
-        p = json.loads(r.stdout)
-        assert p["status"] == "success"
-        assert "overall" in p
+    def test_health_repair_is_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            r = run_cli("health-repair", "--workspace", tmpdir)
+            assert r.returncode == 0, r.stderr
+            p = json.loads(r.stdout)
+            assert p["status"] == "success"
+            assert "fixes_applied" in p
 
     def test_plot_exported_file_with_s11_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

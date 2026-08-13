@@ -43,7 +43,6 @@ WORKSPACE_OPTIONAL_TOOLS = {
     "init-task",
     "cst-session-inspect",
     "cst-session-quit",
-    "export-run-results",
     "generate-report",
     "plot-exported-file",
     "inspect-farfield-monitors",
@@ -51,6 +50,7 @@ WORKSPACE_OPTIONAL_TOOLS = {
     "list-materials",
     "install-cst-libraries",
     "health-check",
+    "health-repair",
     "stage-evidence",
     "analyze-metasurface-sparameters",
 }
@@ -87,11 +87,10 @@ CST_INTERFACE_TOOLS = {
     "define-mesh",
     "define-solver",
     "define-port",
-    "define-monitor",
     "rename-entity",
     "set-entity-color",
     "define-units",
-    "set-farfield-monitor",
+    "define-farfield-monitor",
     "set-efield-monitor",
     "set-field-monitor",
     "set-probe",
@@ -119,7 +118,13 @@ CST_INTERFACE_TOOLS = {
     "define-loft",
     "export-e-field",
     "export-surface-current",
-    "export-voltage",
+    "list-field-results",
+    "export-h-field",
+    "export-power-flow",
+    "export-current-density",
+    "export-power-loss-density",
+    "export-voltage-result",
+    "export-touchstone",
     "define-parameters",
     "pause-simulation",
     "resume-simulation",
@@ -147,6 +152,8 @@ CST_RESULTS_TOOLS = {
     "get-2d-result",
     "get-version-info",
     "list-result-items",
+    "list-sparameter-results",
+    "export-sparameter",
 }
 CST_FARFIELD_TOOLS = {
     "export-farfield-grid",
@@ -154,7 +161,7 @@ CST_FARFIELD_TOOLS = {
 }
 
 TOP_LEVEL_HELP = """Examples:
-  python <skill-root>\\scripts\\cst_runtime_cli.py health-check --auto-fix false
+  python <skill-root>\\scripts\\cst_runtime_cli.py health-check --workspace C:\\path\\to\\workspace
   python <skill-root>\\scripts\\cst_runtime_cli.py init-workspace --workspace C:\\path\\to\\workspace
   python <skill-root>\\scripts\\cst_runtime_cli.py list-tools
   python <skill-root>\\scripts\\cst_runtime_cli.py describe-tool --tool get-1d-result
@@ -354,7 +361,7 @@ def _usage_guide() -> dict[str, Any]:
             "resolution_order": ["--workspace", "CST_WORKSPACE", "ancestor marker", "current directory"],
         },
         "agent_steps": [
-            "Run health-check --auto-fix false first when using a new shell, machine, IDE agent, or migrated workspace.",
+            "Run read-only health-check first when using a new shell, machine, IDE agent, or migrated workspace.",
             "Run list-tools to discover tool names.",
             "Run list-pipelines to discover known pipeable chains before inventing one.",
             "Run describe-pipeline --pipeline <pipeline> before using a multi-tool chain.",
@@ -372,7 +379,7 @@ def _usage_guide() -> dict[str, Any]:
             "merge": "When using stdin together with --args-file/--args-json, add --args-stdin. Stdin JSON is loaded first; explicit args override same-name fields.",
         },
         "safe_discovery_commands": [
-            _cmd("health-check --auto-fix false"),
+            _cmd("health-check --workspace <workspace>"),
             _cmd("usage-guide"),
             _cmd("list-tools"),
             _cmd("list-pipelines"),
@@ -387,14 +394,14 @@ def _usage_guide() -> dict[str, Any]:
             "available": sorted(PIPELINES),
         },
         "tool_families": {
-            "workspace": ["init-workspace", "init-task", "install-cst-libraries", "health-check"],
+            "workspace": ["init-workspace", "init-task", "install-cst-libraries", "health-check", "health-repair"],
             "run": ["prepare-run", "get-run-context"],
             "audit": ["record-stage", "update-status", "stage-evidence"],
             "project_identity": ["infer-run-dir", "wait-project-unlocked", "verify-project-identity", "list-open-projects"],
             "session_manager": ["cst-session-inspect", "cst-session-open", "cst-session-reattach", "cst-session-close", "cst-session-quit", "create-blank-project", "save-project"],
-            "project_ops": ["list-parameters", "change-parameter", "define-parameters", "define-frequency-range", "define-background", "define-boundary", "define-mesh", "define-solver", "define-port", "define-monitor", "change-solver-type", "start-simulation-async", "is-simulation-running", "wait-simulation", "pause-simulation", "resume-simulation", "stop-simulation", "set-solver-acceleration", "define-fdsolver-stimulation", "set-fdsolver-extrude-open-bc", "set-mesh-fpbavoid-nonreg-unite", "set-mesh-minimum-step-number"],
-            "modeling": ["define-brick", "define-cylinder", "define-cone", "define-rectangle", "define-units", "define-polygon-3d", "define-analytical-curve", "define-extrude-curve", "define-loft", "transform-shape", "transform-curve", "create-horn-segment", "create-loft-sweep", "create-hollow-sweep", "boolean-add", "boolean-subtract", "boolean-intersect", "boolean-insert", "create-component", "delete-entity", "rename-entity", "set-entity-color", "change-material", "define-material-from-mtd", "list-materials", "list-entities", "set-farfield-monitor", "set-efield-monitor", "set-field-monitor", "set-probe", "delete-probe", "delete-monitor", "set-background-with-space", "set-farfield-plot-cuts", "show-bounding-box", "create-mesh-group", "pick-face", "export-e-field", "export-surface-current", "export-voltage"],
-            "results": ["open-results-project", "list-subprojects", "list-run-ids", "get-parameter-combination", "get-1d-result", "get-2d-result", "export-run-results", "generate-report", "plot-exported-file"],
+            "project_ops": ["list-parameters", "change-parameter", "define-parameters", "define-frequency-range", "define-background", "define-boundary", "define-mesh", "define-solver", "define-port", "change-solver-type", "start-simulation-async", "is-simulation-running", "wait-simulation", "pause-simulation", "resume-simulation", "stop-simulation", "set-solver-acceleration", "define-fdsolver-stimulation", "set-fdsolver-extrude-open-bc", "set-mesh-fpbavoid-nonreg-unite", "set-mesh-minimum-step-number"],
+            "modeling": ["define-brick", "define-cylinder", "define-cone", "define-rectangle", "define-units", "define-polygon-3d", "define-analytical-curve", "define-extrude-curve", "define-loft", "transform-shape", "transform-curve", "create-horn-segment", "create-loft-sweep", "create-hollow-sweep", "boolean-add", "boolean-subtract", "boolean-intersect", "boolean-insert", "create-component", "delete-entity", "rename-entity", "set-entity-color", "change-material", "define-material-from-mtd", "list-materials", "list-entities", "define-farfield-monitor", "set-efield-monitor", "set-field-monitor", "set-probe", "delete-probe", "delete-monitor", "set-background-with-space", "set-farfield-plot-cuts", "show-bounding-box", "create-mesh-group", "pick-face"],
+            "results": ["open-results-project", "list-subprojects", "list-run-ids", "get-parameter-combination", "get-1d-result", "get-2d-result", "list-sparameter-results", "export-sparameter", "list-field-results", "export-e-field", "export-h-field", "export-surface-current", "export-power-flow", "export-current-density", "export-power-loss-density", "export-voltage-result", "export-touchstone", "generate-report", "plot-exported-file"],
             "farfield": ["export-farfield-grid", "export-farfield-cut", "inspect-farfield-monitors"],
         },
         "hard_rules": [
