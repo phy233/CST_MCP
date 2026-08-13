@@ -9,6 +9,8 @@ import subprocess
 import sys
 import time
 import uuid
+import ctypes
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -156,7 +158,8 @@ def _design_environment_processes() -> list[dict[str, Any]]:
         "$items = @(Get-Process -ErrorAction SilentlyContinue | "
         "Where-Object { $_.ProcessName -like 'CST DESIGN ENVIRONMENT*' } | "
         "ForEach-Object { [pscustomobject]@{ pid = $_.Id; name = $_.ProcessName; "
-        "title = $_.MainWindowTitle } }); $items | ConvertTo-Json -Depth 3"
+        "title = $_.MainWindowTitle; window_handle = [int64]$_.MainWindowHandle } }); "
+        "$items | ConvertTo-Json -Depth 3"
     )
     completed = subprocess.run(
         [
@@ -183,6 +186,118 @@ def _design_environment_processes() -> list[dict[str, Any]]:
     return [item for item in value if isinstance(item, dict)]
 
 
+def _window_state(process: dict[str, Any]) -> dict[str, Any]:
+    """读取指定 CST DE 主窗口是否可见、是否仍处于最小化状态。"""
+    state = dict(process)
+    handle = int(process.get("window_handle") or 0)
+    state["window_handle"] = handle
+    if os.name != "nt" or handle <= 0:
+        state["window_visible"] = False
+        state["window_minimized"] = False
+        return state
+
+    user32 = ctypes.windll.user32
+    window_handle = ctypes.c_void_p(handle)
+    state["window_visible"] = bool(user32.IsWindowVisible(window_handle))
+    state["window_minimized"] = bool(user32.IsIconic(window_handle))
+    return state
+
+
+def _restore_design_environment_window(process: dict[str, Any]) -> dict[str, Any]:
+    """恢复并显示 pytest 本次新建的 CST DE 主窗口。"""
+    state = _window_state(process)
+    handle = int(state.get("window_handle") or 0)
+    if os.name != "nt" or handle <= 0:
+        return state
+
+    user32 = ctypes.windll.user32
+    window_handle = ctypes.c_void_p(handle)
+    user32.ShowWindowAsync(window_handle, 9)  # 恢复并显示窗口
+    user32.BringWindowToTop(window_handle)
+    user32.SetForegroundWindow(window_handle)
+    time.sleep(0.1)
+    return _window_state(process)
+
+
+def _new_design_environment_processes(
+    baseline_pids: set[int],
+) -> list[dict[str, Any]]:
+    return [
+        _window_state(item)
+        for item in _design_environment_processes()
+        if int(item["pid"]) not in baseline_pids
+    ]
+
+
+def _open_project_with_visible_window(
+    proxy: Any,
+    project_path: Path,
+    baseline_pids: set[int],
+    *,
+    timeout_seconds: int = 300,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """调用正式 session 工具，并在其阻塞期间恢复测试 DE 的可见窗口。"""
+    deadline = time.monotonic() + timeout_seconds
+    completion_time: float | None = None
+    observed_processes: list[dict[str, Any]] = []
+    visible_process: dict[str, Any] | None = None
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="cst-test-open") as executor:
+        future = executor.submit(
+            proxy.call_tool,
+            "cst-session-open",
+            {"project_path": str(project_path)},
+            timeout=timeout_seconds,
+        )
+        while time.monotonic() < deadline:
+            if visible_process is None:
+                observed_processes = _new_design_environment_processes(baseline_pids)
+                for process in observed_processes:
+                    restored = _restore_design_environment_window(process)
+                    if restored["window_visible"] and not restored["window_minimized"]:
+                        visible_process = restored
+                        print(
+                            json.dumps(
+                                {"event": "cst_test_window_visible", **restored},
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        break
+
+            if future.done():
+                try:
+                    opened = future.result()
+                except Exception as exc:
+                    raise RuntimeError(
+                        "cst-session-open 在等待测试窗口期间失败；"
+                        f"观察到的 DE：{observed_processes}"
+                    ) from exc
+                if opened.get("status") != "success":
+                    return opened, visible_process or {}
+                if visible_process is not None:
+                    return opened, visible_process
+                if completion_time is None:
+                    completion_time = time.monotonic()
+                elif time.monotonic() - completion_time >= 30:
+                    break
+            time.sleep(0.5)
+
+        if not future.done():
+            raise RuntimeError(
+                f"cst-session-open 在 {timeout_seconds} 秒内未返回；"
+                f"观察到的 DE：{observed_processes}"
+            )
+        opened = future.result()
+
+    if opened.get("status") != "success":
+        return opened, visible_process or {}
+    raise RuntimeError(
+        "CST 工程已经打开，但 30 秒内没有取得可恢复的可见主窗口；"
+        f"观察到的 DE：{observed_processes}"
+    )
+
+
 def _stop_design_environment(pid: int) -> None:
     """只终止本次 fixture 新创建且已确认归属测试的精确进程。"""
     completed = subprocess.run(
@@ -205,6 +320,20 @@ def _stop_design_environment(pid: int) -> None:
         )
 
 
+def _stop_new_design_environments(baseline_pids: set[int]) -> list[str]:
+    """只终止不在基线中的测试 DE，并返回全部清理错误。"""
+    cleanup_errors: list[str] = []
+    for item in _design_environment_processes():
+        pid = int(item["pid"])
+        if pid in baseline_pids:
+            continue
+        try:
+            _stop_design_environment(pid)
+        except Exception as exc:
+            cleanup_errors.append(str(exc))
+    return cleanup_errors
+
+
 @dataclass
 class SharedCSTProject:
     """整个真机测试会话共享的唯一 CST 工程和 Worker。"""
@@ -214,6 +343,7 @@ class SharedCSTProject:
     source_path: Path
     temp_root: Path
     source_snapshot: dict[str, str]
+    design_environment_pid: int
     resources: list[tuple[str, str]] = field(default_factory=list)
     tainted: bool = False
 
@@ -244,7 +374,22 @@ class SharedCSTProject:
     ) -> dict[str, Any]:
         result = self.call(tool, arguments, timeout=timeout)
         assert result.get("status") == "success", result
+        assert result.get("ok") is True, result
         return result
+
+    def require_visible_window(self) -> dict[str, Any]:
+        """确认共享工程仍位于可见且未最小化的测试 DE 窗口中。"""
+        matches = [
+            _window_state(item)
+            for item in _design_environment_processes()
+            if int(item["pid"]) == self.design_environment_pid
+        ]
+        assert len(matches) == 1, matches
+        state = matches[0]
+        assert state["window_handle"] > 0, state
+        assert state["window_visible"] is True, state
+        assert state["window_minimized"] is False, state
+        return state
 
     def list_entities(self, component: str = "") -> list[dict[str, str]]:
         result = self.require_success(
@@ -366,24 +511,19 @@ def shared_cst_project(
 
     baseline_pids = {int(item["pid"]) for item in existing_environments}
     try:
-        opened = proxy.call_tool(
-            "cst-session-open",
-            {"project_path": str(working)},
-            timeout=300,
+        opened, window_state = _open_project_with_visible_window(
+            proxy,
+            working,
+            baseline_pids,
+            timeout_seconds=300,
         )
         if opened.get("status") != "success":
             raise RuntimeError(f"唯一 CST 测试工程打开失败：{opened}")
+        if not window_state:
+            raise RuntimeError("CST 工程已打开，但测试没有取得可见窗口证据")
     except Exception as exc:
         proxy.shutdown()
-        cleanup_errors: list[str] = []
-        for item in _design_environment_processes():
-            pid = int(item["pid"])
-            if pid in baseline_pids:
-                continue
-            try:
-                _stop_design_environment(pid)
-            except Exception as cleanup_exc:
-                cleanup_errors.append(str(cleanup_exc))
+        cleanup_errors = _stop_new_design_environments(baseline_pids)
         if not cleanup_errors:
             shutil.rmtree(temp_root, ignore_errors=True)
         detail = f"；兜底清理失败：{'；'.join(cleanup_errors)}" if cleanup_errors else ""
@@ -395,41 +535,82 @@ def shared_cst_project(
         source_path=source,
         temp_root=temp_root,
         source_snapshot=source_snapshot,
+        design_environment_pid=int(window_state["pid"]),
     )
-    visible = shared.require_success("list-open-projects", {})
-    visible_paths = {
-        _normalized_path(item.get("project_path", ""))
-        for item in visible.get("open_projects", [])
-    }
-    assert visible_paths == {_normalized_path(shared.project_path)}, visible
+    try:
+        visible = shared.require_success("list-open-projects", {})
+        visible_paths = {
+            _normalized_path(item.get("project_path", ""))
+            for item in visible.get("open_projects", [])
+        }
+        assert visible_paths == {_normalized_path(shared.project_path)}, visible
+        assert visible.get("design_environment_count") == 1, visible
+        assert {
+            int(item["pid"])
+            for item in _design_environment_processes()
+            if int(item["pid"]) not in baseline_pids
+        } == {shared.design_environment_pid}
+        shared.require_visible_window()
+    except Exception as exc:
+        proxy.shutdown()
+        cleanup_errors = _stop_new_design_environments(baseline_pids)
+        if not cleanup_errors:
+            shutil.rmtree(temp_root, ignore_errors=True)
+        detail = f"；兜底清理失败：{'；'.join(cleanup_errors)}" if cleanup_errors else ""
+        pytest.fail(f"真实 CST 启动后验证失败：{exc}{detail}", pytrace=False)
 
     teardown_errors: list[str] = []
     try:
         yield shared
     finally:
+        solver_safe_to_modify = False
         try:
             running = shared.call(
                 "is-simulation-running",
                 {"project_path": shared.project_path},
             )
-            if running.get("status") == "success" and running.get("running"):
+            if running.get("status") != "success":
+                teardown_errors.append(f"无法确认求解器状态：{running}")
+            elif running.get("running") is False:
+                solver_safe_to_modify = True
+            else:
                 stopped = shared.call(
                     "stop-simulation",
                     {"project_path": shared.project_path},
                 )
                 if stopped.get("status") != "success":
                     teardown_errors.append(f"求解器停止失败：{stopped}")
+                else:
+                    deadline = time.monotonic() + 30
+                    while time.monotonic() < deadline:
+                        state = shared.call(
+                            "is-simulation-running",
+                            {"project_path": shared.project_path},
+                        )
+                        if state.get("status") != "success":
+                            teardown_errors.append(f"停止后无法确认求解器状态：{state}")
+                            break
+                        if state.get("running") is False:
+                            solver_safe_to_modify = True
+                            break
+                        time.sleep(0.25)
+                    if not solver_safe_to_modify and not any(
+                        "停止后无法确认求解器状态" in error
+                        for error in teardown_errors
+                    ):
+                        teardown_errors.append("求解器停止后 30 秒内仍未确认 running=False")
         except Exception as exc:
             teardown_errors.append(f"求解器兜底检查失败：{exc}")
 
-        for component, name in reversed(shared.resources.copy()):
-            try:
-                if shared.entity_exists(component, name):
-                    shared.delete_entity(component, name)
-                else:
-                    shared.forget_entity(component, name)
-            except Exception as exc:
-                teardown_errors.append(f"实体兜底删除失败 {component}:{name}：{exc}")
+        if solver_safe_to_modify:
+            for component, name in reversed(shared.resources.copy()):
+                try:
+                    if shared.entity_exists(component, name):
+                        shared.delete_entity(component, name)
+                    else:
+                        shared.forget_entity(component, name)
+                except Exception as exc:
+                    teardown_errors.append(f"实体兜底删除失败 {component}:{name}：{exc}")
 
         try:
             closed = shared.call(
