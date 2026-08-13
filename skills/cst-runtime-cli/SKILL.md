@@ -263,12 +263,15 @@ CLI 命令：`cst-session-inspect` / `cst-session-open` / `cst-session-reattach`
 - 仿真完成后调用 `close_project(kill_processes=True)` 释放工程并清理关联 DE 进程。下次 `open_project()` 自动获得干净 DE。
 - 关闭 project 的正确做法：`save=True` 时先 `project.save()`，再调用 `close_project()`。远场导出后 `close_project(save=False)`。
 
-## Floquet Port 与 Unit Cell 能力限制
+## 超表面基本闭环与验收边界
 
-- 当前 Runtime 中的 Floquet Port 和 Unit Cell 方法标记为待完善，仅保留部分初始化和历史行为。
-- `define-boundary` 是通用逐面边界工具，不是完整的 Unit Cell/Floquet 自动化入口。
-- 遇到高级极化、模式列表、参考面、扫描角或开放边界扩展距离需求时，agent 必须说明当前能力不完整，并让用户在 CST 图形界面中手动完成。
-- 不得自行拼接未经目标 CST 版本本地手册验证的 VBA，不得宣称工具提交成功就代表高级周期配置完整。
+- `define-unit-cell-boundary` 配置六面边界、theta、phi 和传播方向；任何 Unit Cell 或 Periodic 非法配对都会在生成 VBA 前被拒绝。
+- `define-floquet-port` 支持 Zmin/Zmax、显式或自动模式、参考面、线/圆极化基础和 CST 2022 排序参数。
+- `define-plane-wave` 会创建真实 PlaneWave 源。普通 Plane Wave 不产生 S 参数，适用于有限结构散射/RCS；无限周期单元应使用 Unit Cell + Floquet。
+- `configure-frequency-domain-solver` 只修改求解器类型、网格方法和激励，不执行 `FDSolver.Reset`，也不改精度、扫频、网格自适应或收敛阈值。
+- `inspect-boundary`、`inspect-floquet-ports`、`inspect-plane-wave` 和 `list-monitors` 使用 CST 2022 手册公开 getter 读回。Floquet 的参考面、排序和极化开关没有公开 getter，因此这些字段不会被伪造成已验证。
+- `analyze-metasurface-sparameters` 完全离线处理多个 `export-sparameter` JSON；它要求 Run ID 和严格递增频率网格一致，不执行隐式重采样。
+- 上述新工具在 CST 2022 真机验收前保持 `experimental`。History 提交成功只证明命令被提交，不能代替 getter、实体、结果或非空文件证据。
 
 ## 错误处理
 

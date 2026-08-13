@@ -37,6 +37,8 @@ __all__ = [
     "workspace",
     "environment",
     "experiments",
+    "em_setup",
+    "metasurface",
 ]
 
 from .contracts import (

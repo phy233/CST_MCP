@@ -33,7 +33,11 @@ def create_mcp_server():
         instructions=config.instructions,
     )
     proxy = get_proxy()
-    tool_descriptions = proxy.describe_tools()
+    tool_descriptions = [
+        tool for tool in proxy.describe_tools()
+        if tool.get("exposure") == "agent"
+    ]
+    agent_tool_names = {tool["name"] for tool in tool_descriptions}
 
     @server.list_tools()
     async def list_tools() -> list[types.Tool]:
@@ -45,7 +49,13 @@ def create_mcp_server():
                 outputSchema=tool.get("output_schema"),
                 annotations=types.ToolAnnotations(
                     readOnlyHint=tool.get("risk") == "read",
-                    destructiveHint=tool.get("risk") in {"write", "process-control"},
+                    destructiveHint=tool.get("risk") in {
+                        "write",
+                        "filesystem-write",
+                        "session",
+                        "process-control",
+                        "long-running",
+                    },
                 ),
             )
             for tool in tool_descriptions
@@ -53,6 +63,19 @@ def create_mcp_server():
 
     @server.call_tool(validate_input=True)
     async def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if name not in agent_tool_names:
+            return {
+                "ok": False,
+                "status": "error",
+                "error_type": "tool_not_exposed",
+                "message": f"工具未获准通过 MCP Agent 调用: {name}",
+                "error": {
+                    "type": "tool_not_exposed",
+                    "message": f"工具未获准通过 MCP Agent 调用: {name}",
+                    "phase": "validation",
+                },
+                "context": {},
+            }
         timeout = (
             config.simulation_timeout
             if name in {"quick-sweep", "cross-process-sweep", "wait-simulation"}

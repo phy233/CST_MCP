@@ -21,7 +21,109 @@ _TOOL_MODULES = (
     "workspace",
     "optimization",
     "doe",
+    "em_setup",
+    "metasurface",
 )
+
+
+def _output_schema(name: str) -> dict[str, Any]:
+    """返回以 OperationResult 为基础、并按新结果接口细化的输出 Schema。"""
+    properties: dict[str, Any] = {
+        "status": {"type": "string", "enum": ["success", "error"]},
+        "ok": {"type": "boolean"},
+        "error_type": {"type": "string"},
+        "message": {"type": "string"},
+        "error": {"type": "object"},
+        "context": {"type": "object"},
+    }
+    if name in {"list-sparameter-results", "list-field-results"}:
+        properties.update({
+            "project_path": {"type": "string"},
+            "count": {"type": "integer", "minimum": 0},
+            "results": {"type": "array", "items": {"type": "object"}},
+        })
+    elif name == "export-sparameter":
+        properties.update({
+            "project_path": {"type": "string"},
+            "result_path": {"type": "string"},
+            "run_id": {"type": "integer", "minimum": 0},
+            "output_path": {"type": "string"},
+            "point_count": {"type": "integer", "minimum": 0},
+            "result_metric": {"type": "object"},
+            "s11_metric": {"type": ["object", "null"]},
+        })
+    elif name == "run-experiment":
+        properties.update({
+            "project_path": {"type": "string"},
+            "run_id": {"type": "integer", "minimum": 0},
+            "completion_result_paths": {
+                "type": "array", "items": {"type": "string"},
+            },
+            "result_metrics": {"type": "array", "items": {"type": "object"}},
+            "s11_metric": {"type": ["object", "null"]},
+            "solver_completed": {"type": "boolean"},
+        })
+    elif name == "analyze-metasurface-sparameters":
+        properties.update({
+            "output_path": {"type": "string"},
+            "file_size": {"type": "integer", "minimum": 1},
+            "run_id": {"type": "integer", "minimum": 0},
+            "frequency_range_ghz": {
+                "type": "array", "minItems": 2, "maxItems": 2,
+                "items": {"type": "number"},
+            },
+            "frequency_count": {"type": "integer", "minimum": 1},
+            "channel_count": {"type": "integer", "minimum": 1},
+            "summary": {"type": "object"},
+            "warning_count": {"type": "integer", "minimum": 0},
+            "warnings": {"type": "array", "items": {"type": "object"}},
+        })
+    elif name in {"inspect-boundary", "inspect-floquet-ports", "inspect-plane-wave", "list-monitors"}:
+        properties.update({
+            "project_path": {"type": "string"},
+            "verification": {"type": "string"},
+            "faces": {"type": "object"},
+            "unit_cell_scan": {"type": "object"},
+            "ports": {"type": "array", "items": {"type": "object"}},
+            "plane_wave": {"type": "object"},
+            "monitors": {"type": "array", "items": {"type": "object"}},
+            "count": {"type": "integer", "minimum": 0},
+        })
+    elif name in {"define-unit-cell-boundary", "define-floquet-port", "define-plane-wave"}:
+        properties.update({
+            "project_path": {"type": "string"},
+            "submission": {"type": "string"},
+            "execution": {"type": "string"},
+            "verification": {"type": "string"},
+            "requested": {"type": "object"},
+            "actual": {"type": "object"},
+            "unverified_fields": {"type": "array", "items": {"type": "string"}},
+        })
+    elif name == "configure-frequency-domain-solver":
+        properties.update({
+            "project_path": {"type": "string"},
+            "submission": {"type": "string"},
+            "execution": {"type": "string"},
+            "verification": {"type": "string"},
+            "solver_type": {"type": "string"},
+            "mesh_method": {"type": "string"},
+            "excitation": {"type": "object"},
+            "untouched_settings": {"type": "string"},
+        })
+    elif name.startswith("export-"):
+        properties.update({
+            "project_path": {"type": "string"},
+            "output_path": {"type": "string"},
+            "output_file": {"type": "string"},
+            "file_size": {"type": "integer", "minimum": 0},
+        })
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": ["status"],
+        # OperationResult 允许各领域附加经过测试的业务字段。
+        "additionalProperties": True,
+    }
 
 
 @lru_cache(maxsize=1)
@@ -41,6 +143,7 @@ def atomic_handler_map() -> dict[str, Callable[[dict[str, Any]], dict[str, Any]]
 
 def atomic_definitions() -> list[dict[str, Any]]:
     """返回带 handler 的原子操作定义。"""
+    from .exposure import exposure_for, validate_exposure
     from ..tools import all_defs
 
     handlers = atomic_handler_map()
@@ -58,7 +161,11 @@ def atomic_definitions() -> list[dict[str, Any]]:
                 "name": name,
                 "description": str(definition.get("description", name)),
                 "risk": str(definition.get("risk", "read")),
+                "exposure": validate_exposure(
+                    str(definition.get("exposure", exposure_for(name)))
+                ),
                 "input_schema": definition["json_schema"],
+                "output_schema": definition.get("output_schema") or _output_schema(name),
                 "handler": handler,
             }
         )

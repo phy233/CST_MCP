@@ -7,7 +7,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_agent_skills_expose_manual_floquet_limit() -> None:
+def test_agent_skills_explain_metasurface_verification_limit() -> None:
     documents = [
         REPO_ROOT / "skills" / "cst-mcp" / "SKILL.md",
         REPO_ROOT / "skills" / "cst-runtime-cli" / "SKILL.md",
@@ -15,8 +15,8 @@ def test_agent_skills_expose_manual_floquet_limit() -> None:
 
     for document in documents:
         text = document.read_text(encoding="utf-8")
-        assert "Floquet Port 与 Unit Cell 能力限制" in text
-        assert "手动完成" in text
+        assert "超表面基本闭环" in text
+        assert "experimental" in text
 
 
 def test_generic_boundary_tool_disclaims_advanced_configuration() -> None:
@@ -27,9 +27,11 @@ def test_generic_boundary_tool_disclaims_advanced_configuration() -> None:
     assert "手动完成" in description
 
 
-def test_incomplete_periodic_methods_are_not_exposed_as_tools() -> None:
-    from cst_runtime.tools import all_defs
+def test_metasurface_tools_exist_but_are_not_agent_exposed() -> None:
+    from cst_runtime.api.atomic import atomic_definitions
 
-    tool_names = set(all_defs())
-    assert "define-floquet-port" not in tool_names
-    assert "define-unit-cell-boundary" not in tool_names
+    definitions = {item["name"]: item for item in atomic_definitions()}
+    assert definitions["define-floquet-port"]["exposure"] == "experimental"
+    assert definitions["define-unit-cell-boundary"]["exposure"] == "experimental"
+    assert definitions["inspect-floquet-ports"]["exposure"] == "experimental"
+    assert definitions["analyze-metasurface-sparameters"]["exposure"] == "experimental"

@@ -62,15 +62,16 @@ description: 通过已连接的 CST MCP 服务安全地检查、建模、改参�
 - 服务恢复后，重新读取工程状态、参数和结果，再决定是否重试。
 - 不要因 `add_to_history()` 或传输层成功而宣称模型已成功建立、仿真已完成或结果有效。
 
-## Floquet Port 与 Unit Cell 能力限制
+## 超表面基本闭环与能力边界
 
-- 当前 Floquet Port 和 Unit Cell 自动化方法仍是待完善能力，只覆盖部分初始化或历史需求。
-- 通用 `define-boundary` 不能替代完整的 Unit Cell/Floquet 配置；不得据此宣称高级周期边界已经完成。
-- 用户提出高级极化、模式列表、参考面、扫描角或开放边界扩展距离需求时，应明确说明自动化能力不完整，并请用户在 CST 图形界面中手动完成。
-- 不得自行拼接未经目标版本本地手册验证的 VBA，也不得用通用边界工具冒充高级配置。
+- Runtime CLI 已提供 `define-unit-cell-boundary`、`define-floquet-port`、`define-plane-wave` 和精简的 `configure-frequency-domain-solver`；不要用通用 `define-boundary` 冒充完整周期单元配置。
+- 普通 Plane Wave 不产生 S 参数，适用于有限结构散射/RCS；无限周期单元使用 Unit Cell + Floquet。
+- 配置工具提交后必须使用对应 inspect 工具或非空输出文件验收。Floquet 参考面、排序和极化开关没有 CST 2022 公开 getter，必须明确标记为未读回。
+- 所有新超表面工具在 CST 2022 真机验收前保持 `experimental`，不得因 History 返回成功就宣称设置正确。
+- 禁止自行猜测 VBA；新增命令必须先按目标 CST 版本本地手册核对。
 
 ## 与其他 Skill 的边界
 
 - 需要直接执行 `uv run python -m cst_runtime ...` 时，使用 `cst-runtime-cli` Skill。
 - 需要 CLI 下的完整优化策略时，使用 `cst-runtime-optimization` Skill。
-- 当前 Skill 只说明通过 MCP 服务调用 Runtime 的流程与安全边界，不复制 114 个工具的参数文档。
+- 当前 Skill 只说明通过 MCP 服务调用 Runtime 的流程与安全边界，不复制全部工具的参数文档。

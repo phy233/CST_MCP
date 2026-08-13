@@ -52,6 +52,7 @@ WORKSPACE_OPTIONAL_TOOLS = {
     "install-cst-libraries",
     "health-check",
     "stage-evidence",
+    "analyze-metasurface-sparameters",
 }
 CST_INTERFACE_TOOLS = {
     "create-blank-project",
@@ -128,6 +129,14 @@ CST_INTERFACE_TOOLS = {
     "run-experiment",
     "capture-3d-view",
     "inspect-model-view",
+    "define-unit-cell-boundary",
+    "inspect-boundary",
+    "define-floquet-port",
+    "inspect-floquet-ports",
+    "define-plane-wave",
+    "inspect-plane-wave",
+    "configure-frequency-domain-solver",
+    "list-monitors",
 }
 CST_RESULTS_TOOLS = {
     "open-results-project",

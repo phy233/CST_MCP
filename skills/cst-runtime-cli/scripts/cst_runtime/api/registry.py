@@ -23,6 +23,7 @@ class OperationSpec:
     description: str
     input_schema: dict[str, Any]
     handler: OperationHandler
+    exposure: str
     tool_name: str | None = None
     risk: str = "read"
     output_schema: dict[str, Any] | None = None
@@ -39,6 +40,7 @@ class OperationSpec:
             "description": self.description,
             "input_schema": self.input_schema,
             "risk": self.risk,
+            "exposure": self.exposure,
         }
         if public and self.public_name != self.name:
             result["operation"] = self.name
@@ -148,6 +150,7 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                 "如使用中心坐标应由调用方预先换算。"
             ),
             risk="write",
+            exposure="cli_only",
             input_schema=_object_schema(
                 {
                     "project_path": {"type": "string", "minLength": 1},
@@ -199,6 +202,7 @@ def _workflow_operations() -> dict[str, OperationSpec]:
             tool_name="quick-sweep",
             description="运行参数扫描并导出 JSON、CSV 和 NPZ 结果。",
             risk="write",
+            exposure="cli_only",
             input_schema=_object_schema(
                 {
                     "project_path": {"type": "string", "minLength": 1},
@@ -225,6 +229,7 @@ def _workflow_operations() -> dict[str, OperationSpec]:
             tool_name="cross-process-sweep",
             description="运行十字形单元的双极化参数扫描。",
             risk="write",
+            exposure="cli_only",
             input_schema=_object_schema(
                 {
                     "project_path": {"type": "string", "minLength": 1},
@@ -277,7 +282,9 @@ def _atomic_operations() -> dict[str, OperationSpec]:
             name=name,
             description=definition["description"],
             risk=definition["risk"],
+            exposure=definition["exposure"],
             input_schema=definition["input_schema"],
+            output_schema=definition.get("output_schema"),
             handler=call,
         )
     return result
@@ -322,8 +329,19 @@ def invoke(name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]
             phase="validation",
             available_operations=sorted(operations()),
         )
+    supplied = dict(arguments or {})
+    if spec.input_schema.get("additionalProperties") is False:
+        allowed = set(spec.input_schema.get("properties", {}))
+        unknown = sorted(set(supplied) - allowed)
+        if unknown:
+            return error_response(
+                "invalid_arguments",
+                f"包含 Schema 未声明的参数: {', '.join(unknown)}",
+                phase="validation",
+                unknown_arguments=unknown,
+            )
     try:
-        result = spec.handler(dict(arguments or {}))
+        result = spec.handler(supplied)
         if not isinstance(result, dict):
             return success_response(result=result)
         return normalize_response(result)

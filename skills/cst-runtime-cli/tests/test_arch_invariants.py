@@ -111,7 +111,7 @@ class TestJsonSchemaInvariants:
 
     def test_schema_property_types_valid(self):
         """JS-4: All property types must be valid JSON Schema types."""
-        valid_types = {"string", "number", "integer", "boolean", "array", "object"}
+        valid_types = {"string", "number", "integer", "boolean", "array", "object", "null"}
         for name, defn in _load_all_defs().items():
             for key, prop in defn["json_schema"]["properties"].items():
                 ptype = prop.get("type", "string")

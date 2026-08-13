@@ -17,6 +17,12 @@ def _register_tool_defs(defs: dict[str, dict]) -> None:
     conflicts = _ALL_DEFS.keys() & defs.keys()
     if conflicts:
         raise ValueError(f"Duplicate tool names: {conflicts}")
+    for name, definition in defs.items():
+        schema = definition.get("json_schema")
+        if not isinstance(schema, dict) or schema.get("type") != "object":
+            raise ValueError(f"工具 {name} 必须提供对象类型的 json_schema")
+        # 所有公开入口默认拒绝未声明字段，避免拼错参数被 handler 静默忽略。
+        schema["additionalProperties"] = False
     _ALL_DEFS.update(defs)
 
 
@@ -139,6 +145,8 @@ from . import audit  # noqa: E402, F811
 from . import workspace  # noqa: E402, F811
 from . import optimization  # noqa: E402, F811
 from . import doe  # noqa: E402, F811
+from . import em_setup  # noqa: E402, F811
+from . import metasurface  # noqa: E402, F811
 
 
 def _template_to_schema(template: dict) -> dict:
