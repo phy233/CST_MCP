@@ -44,7 +44,7 @@ _TIMELINE_TOOLS = {
     "update-status",
     "export-farfield-grid",
     "export-farfield-cut",
-    "export-run-results",
+    "export-sparameter",
     "cst-session-open",
     "cst-session-close",
     "list-parameters",
@@ -233,7 +233,7 @@ def _categorize_step(record: dict[str, Any]) -> str:
         return "read"
     if tool in {"cst-session-open", "cst-session-close"}:
         return "session"
-    if tool in {"generate-report", "export-run-results", "export-farfield-grid", "export-farfield-cut"}:
+    if tool in {"generate-report", "export-sparameter", "export-farfield-grid", "export-farfield-cut"}:
         return "export"
     if tool in {"record-stage", "update-status"}:
         return "audit"
@@ -296,10 +296,10 @@ def _step_summary(record: dict[str, Any]) -> str:
             return pairs
         return f'{args.get("param_name", "?")} = {args.get("param_value", "?")}'
     if tool == "run-experiment":
-        return f'simulate + export'
+        return "simulate + verify run"
     if tool in {"inspect-project", "list-parameters", "list-entities", "list-run-ids", "get-parameter-combination"}:
         return f'read project info'
-    if tool in {"generate-report", "export-run-results", "export-farfield-grid", "export-farfield-cut"}:
+    if tool in {"generate-report", "export-sparameter", "export-farfield-grid", "export-farfield-cut"}:
         return f'export data'
     if tool in {"record-stage", "update-status"}:
         return f'audit log'
@@ -329,7 +329,7 @@ def _rationale_from_step(record: dict[str, Any]) -> str:
         s11 = result.get("s11_metric", {})
         if s11:
             return f"仿真完成，S11 最优 {s11.get('min_db', '?')} dB @ {s11.get('best_freq', '?')} GHz"
-        return "仿真 + 导出结果"
+        return "仿真完成并验证结果节点"
     if tool == "inspect-project":
         params = args.get("parameters", {})
         return f"读取工程参数和实体列表"
@@ -337,7 +337,7 @@ def _rationale_from_step(record: dict[str, Any]) -> str:
         return f"生成综合报告"
     if tool in {"record-stage"}:
         return f"记录操作阶段"
-    if tool in {"export-run-results", "export-farfield-grid", "export-farfield-cut"}:
+    if tool in {"export-sparameter", "export-farfield-grid", "export-farfield-cut"}:
         return f"导出结果数据"
     if tool in {"cst-session-open"}:
         return f"打开 CST 工程"
@@ -464,7 +464,7 @@ def _make_iteration(
             if rid:
                 run_id = int(rid)
 
-    # Priority 2: extract from result steps (get-1d-result, export-run-results)
+    # Priority 2: extract from explicit result steps.
     if not run_id:
         for step in result_steps:
             rid = step.get("args", {}).get("run_id", 0) or step.get("result", {}).get("run_id", 0)
@@ -472,7 +472,7 @@ def _make_iteration(
                 run_id = int(rid)
                 break
 
-    # Priority 3: check export-run-results run_ids list
+    # Priority 3: check generic run ID lists.
     if not run_id:
         for step in result_steps:
             res = step.get("result", {})

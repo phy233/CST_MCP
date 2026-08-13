@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from ..contracts import error_response, normalize_response, success_response
+from .exposure import exposure_for
 
 
 OperationHandler = Callable[[dict[str, Any]], dict[str, Any]]
@@ -150,7 +151,7 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                 "如使用中心坐标应由调用方预先换算。"
             ),
             risk="write",
-            exposure="cli_only",
+            exposure=exposure_for("build-array"),
             input_schema=_object_schema(
                 {
                     "project_path": {"type": "string", "minLength": 1},
@@ -201,8 +202,8 @@ def _workflow_operations() -> dict[str, OperationSpec]:
             name="sweep.run",
             tool_name="quick-sweep",
             description="运行参数扫描并导出 JSON、CSV 和 NPZ 结果。",
-            risk="write",
-            exposure="cli_only",
+            risk="long-running",
+            exposure=exposure_for("quick-sweep"),
             input_schema=_object_schema(
                 {
                     "project_path": {"type": "string", "minLength": 1},
@@ -228,8 +229,8 @@ def _workflow_operations() -> dict[str, OperationSpec]:
             name="cross_process.run",
             tool_name="cross-process-sweep",
             description="运行十字形单元的双极化参数扫描。",
-            risk="write",
-            exposure="cli_only",
+            risk="long-running",
+            exposure=exposure_for("cross-process-sweep"),
             input_schema=_object_schema(
                 {
                     "project_path": {"type": "string", "minLength": 1},

@@ -159,5 +159,8 @@ class TestPipelineErrorPaths:
     def test_run_experiment_missing_project(self) -> None:
         sys.path.insert(0, str(SKILL_ROOT / "scripts"))
         from cst_runtime.cli.pipelines.impl import pipeline_run_experiment
-        result = pipeline_run_experiment(project_path="/nonexistent/p.cst")
+        result = pipeline_run_experiment(
+            project_path="/nonexistent/p.cst",
+            completion_result_paths=["1D Results\\S-Parameters\\S1,1"],
+        )
         assert result["status"] == "error"

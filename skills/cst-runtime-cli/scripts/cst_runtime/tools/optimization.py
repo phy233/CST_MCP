@@ -354,12 +354,19 @@ _register_tool_defs({
         "json_schema": {
             "$schema": "https://json-schema.org/draft-07/schema#",
             "type": "object",
-            "required": ["project_path", "parameters", "study_storage", "study_name"],
+            "required": ["project_path", "completion_result_paths", "parameters", "study_storage", "study_name"],
             "properties": {
                 "project_path": {
                     "type": "string",
                     "description": "Path to working.cst",
                     "default": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
+                },
+                "completion_result_paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": True,
+                    "items": {"type": "string", "minLength": 1},
+                    "description": "用于确认本次求解产生新 Run ID 且数据非空的真实 ResultTree 完整路径"
                 },
                 "parameters": {
                     "type": "object",
@@ -411,12 +418,19 @@ _register_tool_defs({
         "json_schema": {
             "$schema": "https://json-schema.org/draft-07/schema#",
             "type": "object",
-            "required": ["project_path", "study_storage", "study_name"],
+            "required": ["project_path", "completion_result_paths", "study_storage", "study_name"],
             "properties": {
                 "project_path": {
                     "type": "string",
                     "description": "Path to working.cst",
                     "default": "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
+                },
+                "completion_result_paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": True,
+                    "items": {"type": "string", "minLength": 1},
+                    "description": "用于确认本次求解产生新 Run ID 且数据非空的真实 ResultTree 完整路径"
                 },
                 "study_storage": {
                     "type": "string",
@@ -510,6 +524,7 @@ def tool_run_probe_phase(args: dict) -> dict:
     _run = _lazy_pipeline("pipeline_run_probe_phase")
     return _run(
         project_path=str(args["project_path"]),
+        completion_result_paths=list(args["completion_result_paths"]),
         parameters=args.get("parameters", {}),
         study_storage=str(args["study_storage"]),
         study_name=str(args["study_name"]),
@@ -523,6 +538,7 @@ def tool_run_optimization_step(args: dict) -> dict:
     _run = _lazy_pipeline("pipeline_run_optimization_step")
     return _run(
         project_path=str(args["project_path"]),
+        completion_result_paths=list(args["completion_result_paths"]),
         study_storage=str(args["study_storage"]),
         study_name=str(args["study_name"]),
         objective=args.get("objective"),

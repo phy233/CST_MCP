@@ -10,7 +10,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "when_to_use": "First contact in a fresh shell, migrated workspace, or external coding agent.",
         "required_context": ["skill_root", "workspace"],
         "commands": [
-            "uv run python -m cst_runtime health-check --auto-fix false",
+            "uv run python -m cst_runtime health-check --workspace <workspace>",
             "uv run python -m cst_runtime --help",
             "uv run python -m cst_runtime list-tools",
             "uv run python -m cst_runtime list-pipelines",
@@ -134,17 +134,19 @@ PIPELINES: dict[str, dict[str, Any]] = {
     "first-run": {
         "category": "meta",
         "risk": "read",
-        "description": "First-time environment setup: health-check with auto-fix, then discover CLI tools and pipelines.",
+        "description": "首次环境设置：显式运行 health-repair，再使用只读 health-check 验证。",
         "when_to_use": "When using the CLI for the first time in a new environment, or after installing/upgrading CST.",
         "required_context": [],
         "commands": [
-            "uv run python -m cst_runtime health-check --auto-fix true",
+            "uv run python -m cst_runtime health-repair --workspace <workspace>",
+            "uv run python -m cst_runtime health-check --workspace <workspace>",
             "uv run python -m cst_runtime --help",
             "uv run python -m cst_runtime list-tools",
             "uv run python -m cst_runtime list-pipelines",
         ],
         "steps": [
-            {"tool": "health-check", "purpose": "Diagnose environment, auto-fix what's possible, report remaining issues."},
+            {"tool": "health-repair", "purpose": "显式修复可自动处理的环境问题。"},
+            {"tool": "health-check", "purpose": "只读复查并报告剩余问题。"},
             {"tool": "--help", "purpose": "Read the CLI calling convention and help categories."},
             {"tool": "list-tools", "purpose": "Discover available commands."},
             {"tool": "list-pipelines", "purpose": "Discover known multi-tool chains."},
@@ -197,23 +199,23 @@ PIPELINES: dict[str, dict[str, Any]] = {
     "run-experiment": {
         "category": "simulation",
         "risk": "long-running",
-        "description": "Run a simulation, wait for completion, then export S11 and farfield (auto-discovered) results.",
-        "when_to_use": "After prepare-experiment to execute the simulation round and collect results.",
-        "required_context": ["working_project"],
+        "description": "运行求解，并以指定结果节点共同出现的新 Run ID 和非空数据确认完成；不执行导出。",
+        "when_to_use": "在 prepare-experiment 之后运行一次求解；调用前先枚举实际结果路径。",
+        "required_context": ["working_project", "completion_result_paths"],
         "commands": [
-            "uv run python -m cst_runtime run-experiment --project-path <run>\\projects\\working.cst",
+            "uv run python -m cst_runtime run-experiment --args-file run-experiment.json",
         ],
         "steps": [
             {"tool": "cst-session-open", "purpose": "Open the CST project for simulation."},
             {"tool": "start-simulation-async", "purpose": "Start the solver without blocking."},
             {"tool": "wait-simulation", "purpose": "Poll until running=false or timeout."},
             {"tool": "cst-session-close", "purpose": "Close modeler with save=false to release the project."},
-            {"tool": "export-run-results", "purpose": "Export S11 JSON + auto-discovered farfield TXT to exports/."},
+            {"tool": "list-sparameter-results", "purpose": "确认实际 S 参数节点及新 Run ID。"},
         ],
         "stop_rules": [
-            "If simulation times out, close modeler and record the timeout.",
-            "After export, read s11_metric from output (no need to read JSON file manually).",
-            "farfield_names is optional — all monitors are auto-discovered when omitted.",
+            "仿真超时时关闭工程并返回超时错误。",
+            "所有 completion_result_paths 必须具有共同的新 Run ID 且数据非空。",
+            "导出必须随后调用对应的 S 参数、场或远场专用工具。",
         ],
     },
     "run-probe-phase": {

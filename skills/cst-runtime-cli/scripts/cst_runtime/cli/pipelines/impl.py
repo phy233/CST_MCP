@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 import re
 from pathlib import Path
@@ -9,54 +8,8 @@ from typing import Any
 
 from ...lib.contracts import error_result as error_response
 from ...lib._pipeline_support import compute_objective
-from ...lib._pipeline_support import safe_log_db as _safe_log_db
 from ...lib._pipeline_support import infer_category as _infer_category
-
-
-def _parse_s11_json(file_path: str) -> dict[str, Any] | None:
-    try:
-        payload = json.loads(Path(file_path).read_text(encoding="utf-8-sig"))
-        xdata = payload.get("xdata") or []
-        ydata = payload.get("ydata") or []
-        if not xdata or not ydata:
-            return None
-        db_values: list[float] = []
-        for item in ydata:
-            if isinstance(item, dict):
-                real = float(item.get("real", 0.0))
-                imag = float(item.get("imag", 0.0))
-            elif isinstance(item, (list, tuple)) and len(item) >= 2:
-                real, imag = float(item[0]), float(item[1])
-            elif isinstance(item, (int, float)):
-                real, imag = float(item), 0.0
-            else:
-                real, imag = 0.0, 0.0
-            db_values.append(_safe_log_db(math.hypot(real, imag)))
-        if not db_values:
-            return None
-        min_idx = db_values.index(min(db_values))
-        return {
-            "run_id": payload.get("run_id"),
-            "min_db": min(db_values),
-            "best_freq": xdata[min_idx] if min_idx < len(xdata) else None,
-            "point_count": len(db_values),
-            "file": Path(file_path).name,
-        }
-    except Exception:
-        return None
-
-
-def _max_exported_run_id(project_path: str) -> int:
-    p = Path(project_path).expanduser().resolve()
-    exports_dir = p.parent.parent / "exports"
-    if not exports_dir.is_dir():
-        return 0
-    max_rid = 0
-    for f in exports_dir.glob("s11_run*.json"):
-        m = re.search(r"s11_run(\d+)\.json$", f.name)
-        if m:
-            max_rid = max(max_rid, int(m.group(1)))
-    return max_rid
+from ...lib.experiments import run_experiment as pipeline_run_experiment
 
 
 # ── inspect-project (file-based, no COM/DE) ──
@@ -435,156 +388,6 @@ def pipeline_prepare_experiment(
 
 # ── run-experiment ──
 
-def pipeline_run_experiment(
-    project_path: str,
-    farfield_names: list[str] | None = None,
-    farfield_plot_mode: str = "Realized Gain",
-    farfield_theta_step: float = 2.0,
-    farfield_phi_step: float = 2.0,
-    timeout_seconds: int = 3600,
-    poll_interval_seconds: float = 10.0,
-) -> dict[str, Any]:
-    from ...lib.session import open_project as sm_open, close_project as sm_close
-    from ...lib.simulation import start_simulation_async, is_simulation_running
-    from ...lib.results import export_run_results
-
-    # Record pre-existing exported file count to detect if solver produced new results.
-    # Checks the exports/ directory before and after export:
-    #   - mode A (existing project): file number must increase
-    #   - mode B (new project): first file is created (0 → N)
-    max_before_export = _max_exported_run_id(project_path)
-
-    open_result = sm_open(project_path)
-    if open_result.get("status") != "success":
-        return error_response(
-            "pipeline_open_failed",
-            open_result.get("message", "failed to open project for simulation"),
-            step="run-experiment:open",
-        )
-
-    sim_result = start_simulation_async(project_path)
-    if sim_result.get("status") != "success":
-        sm_close(project_path, save=False)
-        return error_response(
-            "pipeline_sim_start_failed",
-            sim_result.get("message", "failed to start simulation"),
-            step="run-experiment:start-sim",
-        )
-
-    import time
-    polls = 0
-    waited = 0.0
-    while True:
-        time.sleep(poll_interval_seconds)
-        waited += poll_interval_seconds
-        polls += 1
-        running_result = is_simulation_running(project_path)
-        if running_result.get("status") != "success":
-            sm_close(project_path, save=False)
-            return error_response(
-                "pipeline_sim_check_failed",
-                running_result.get("message", "failed to check simulation status"),
-                step="run-experiment:check",
-                polls=polls,
-                waited_seconds=waited,
-            )
-        if not running_result.get("running", True):
-            break
-        if waited >= timeout_seconds:
-            sm_close(project_path, save=False)
-            return error_response(
-                "pipeline_sim_timeout",
-                f"simulation still running after {waited:.0f}s",
-                step="run-experiment:timeout",
-                polls=polls,
-                timeout_seconds=timeout_seconds,
-            )
-
-    close_result = sm_close(project_path, save=False)
-    if close_result.get("status") != "success":
-        return error_response(
-            "pipeline_close_failed",
-            close_result.get("message", "failed to close modeler session"),
-            step="run-experiment:close",
-        )
-
-    export_result = export_run_results(
-        project_path=project_path,
-        farfield_names=farfield_names,
-        farfield_plot_mode=farfield_plot_mode,
-        farfield_theta_step=farfield_theta_step,
-        farfield_phi_step=farfield_phi_step,
-    )
-    if export_result.get("status") != "success":
-        return error_response(
-            "pipeline_export_failed",
-            export_result.get("message", "failed to export results"),
-            step="run-experiment:export",
-            export_result=export_result,
-        )
-
-    exported_files = export_result.get("exported", [])
-    s11_files = [f for f in exported_files if re.search(r"s11_run\d+\.json$", str(f), re.IGNORECASE)]
-    farfield_files = [f for f in exported_files if re.search(r"farfield", str(f), re.IGNORECASE)]
-
-    s11_metric = None
-    s11_export_path = ""
-    if s11_files:
-        s11_export_path = str(s11_files[-1])
-        s11_metric = _parse_s11_json(s11_export_path)
-
-    run_id = s11_metric.get("run_id") if s11_metric else None
-
-    # Verify solver produced new results by checking if exported file number increased
-    max_after_export = _max_exported_run_id(project_path)
-    solver_produced_new_data = max_after_export > max_before_export
-
-    output: dict[str, Any] = {
-        "pipeline": "run-experiment",
-        "project_path": open_result.get("project_path", project_path),
-        "polls": polls,
-        "waited_seconds": waited,
-        "exported_count": len(exported_files),
-        "exported": exported_files,
-        "s11_export_path": s11_export_path,
-        "s11_metric": s11_metric,
-        "farfield_exported": farfield_files,
-        "pre_export_max_file_num": max_before_export,
-        "post_export_max_file_num": max_after_export,
-    }
-    if run_id is not None:
-        output["run_id"] = run_id
-
-    if not solver_produced_new_data:
-        if exported_files:
-            output["status"] = "success"
-            output["solver_completed"] = False
-            output["warning"] = "solver_result_cached"
-            output["message"] = (
-                f"Solver completed but produced no new run_id (exported file number "
-                f"{max_after_export} unchanged). Existing results were re-exported. "
-                f"This is a cache hit: the parameter combination already exists."
-            )
-        else:
-            return {
-                "status": "error",
-                "error_type": "solver_did_not_complete",
-                "message": (
-                    f"Solver did not produce new results: "
-                    f"exported file number {max_after_export} <= pre-existing {max_before_export}. "
-                    f"No existing results were found either. "
-                    f"The simulation may have failed silently (e.g. mesh error, geometry issue). "
-                    f"Check CST solver logs in Result/*.log for details."
-                ),
-                **output,
-            }
-        return output
-
-    output["status"] = "success"
-    output["solver_completed"] = True
-    return output
-
-
 # CLI pipeline 与工具共用同一个 lib 业务实现，避免形成两套可调用行为。
 from ...lib.experiments import run_experiment as pipeline_run_experiment
 
@@ -593,6 +396,7 @@ from ...lib.experiments import run_experiment as pipeline_run_experiment
 
 def pipeline_run_probe_phase(
     project_path: str,
+    completion_result_paths: list[str],
     parameters: dict,
     study_storage: str,
     study_name: str,
@@ -634,7 +438,7 @@ def pipeline_run_probe_phase(
         if prep.get("status") != "success":
             failed.append({"params": probe, "error": "prepare_failed"})
             continue
-        sim = pipeline_run_experiment(probe_path)
+        sim = pipeline_run_experiment(probe_path, completion_result_paths)
         if sim.get("status") != "success":
             obj = compute_objective(objective or {}, sim)
             if not obj.get("error"):
@@ -655,10 +459,6 @@ def pipeline_run_probe_phase(
     exports_dir = p.parent.parent / "exports"
     probe_exports = exports_dir / "probe"
     probe_exports.mkdir(parents=True, exist_ok=True)
-    for f in exports_dir.glob("s11_run*.json"):
-        shutil.move(str(f), str(probe_exports / f.name))
-    for f in exports_dir.glob("farfield_*"):
-        shutil.move(str(f), str(probe_exports / f.name))
 
     if not simulated:
         return error_response("all_probes_failed",
@@ -715,6 +515,7 @@ def pipeline_run_probe_phase(
 
 def pipeline_run_optimization_step(
     project_path: str,
+    completion_result_paths: list[str],
     study_storage: str,
     study_name: str,
     objective: dict | None = None,
@@ -750,7 +551,7 @@ def pipeline_run_optimization_step(
             prep.get("message", "failed to prepare experiment"), step="opt-step:prepare")
 
     # 3. Run simulation and export
-    sim = pipeline_run_experiment(project_path)
+    sim = pipeline_run_experiment(project_path, completion_result_paths)
     if sim.get("status") != "success":
         obj = compute_objective(objective or {}, sim)
         if not obj.get("error"):

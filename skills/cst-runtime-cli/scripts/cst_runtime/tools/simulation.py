@@ -6,7 +6,10 @@ TOOL_DEFS = {
 "run-experiment": {
     "category": "simulation",
     "risk": "long-running",
-    "description": "Run a simulation, wait for completion, and export S11 + farfield results. Returns s11_metric with min_db and best_freq.",
+    "description": (
+        "运行求解并等待完成；必须以指定 0D/1D 结果节点共同出现的新 Run ID 和非空数据验收。"
+        "不执行任何结果导出，返回通用 result_metrics；S1,1 仅保留兼容 s11_metric。"
+    ),
     "handler": "tool_run_experiment",
     "json_schema": {
         "type": "object",
@@ -17,31 +20,16 @@ TOOL_DEFS = {
                     "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
                 ]
             },
-            "farfield_names": {
+            "completion_result_paths": {
                 "type": "array",
+                "minItems": 1,
+                "uniqueItems": True,
                 "items": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "examples": [
-                    []
-                ]
-            },
-            "farfield_plot_mode": {
-                "type": "string",
-                "examples": [
-                    "Realized Gain"
-                ]
-            },
-            "farfield_theta_step": {
-                "type": "number",
-                "examples": [
-                    2.0
-                ]
-            },
-            "farfield_phi_step": {
-                "type": "number",
-                "examples": [
-                    2.0
+                    ["1D Results\\S-Parameters\\SZmin(1),Zmax(1)"]
                 ]
             },
             "timeout_seconds": {
@@ -51,14 +39,8 @@ TOOL_DEFS = {
                 ]
             }
         },
-        "required": [
-            "project_path",
-            "farfield_names",
-            "farfield_plot_mode",
-            "farfield_theta_step",
-            "farfield_phi_step",
-            "timeout_seconds"
-        ]
+        "required": ["project_path", "completion_result_paths", "timeout_seconds"],
+        "additionalProperties": False
     },
 },
 }
@@ -71,19 +53,9 @@ from ._arguments import project_path_from_args
 
 
 def tool_run_experiment(args: dict) -> dict:
-    ff_names = args.get("farfield_names")
-    if isinstance(ff_names, str):
-        import json as _json
-        try:
-            ff_names = _json.loads(ff_names)
-        except Exception:
-            ff_names = None
     return run_experiment(
         project_path=str(args.get("project_path", "")),
-        farfield_names=ff_names if isinstance(ff_names, list) else None,
-        farfield_plot_mode=str(args.get("farfield_plot_mode", "Realized Gain")),
-        farfield_theta_step=float(args.get("farfield_theta_step", 2.0)),
-        farfield_phi_step=float(args.get("farfield_phi_step", 2.0)),
+        completion_result_paths=list(args.get("completion_result_paths") or []),
         timeout_seconds=int(args.get("timeout_seconds", 3600)),
     )
 
