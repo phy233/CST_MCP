@@ -143,13 +143,24 @@ class TestHandlerRegistration:
             assert name in tools, \
                 f"{name}: in TOOL_DEFS but not in dispatch.TOOLS"
 
-    @pytest.mark.xfail(reason="optimization tools use 'optimization' category not in VALID_CATEGORIES — add category or re-tag tools")
     def test_every_handler_has_category(self):
         """All tools in dispatch.TOOLS have valid category."""
-        for name, rec in _load_dispatch_tools().items():
-            cat = rec.get("category", "")
-            assert cat in VALID_CATEGORIES, \
-                f"{name}: unknown category '{cat}'. Valid: {sorted(VALID_CATEGORIES)}"
+        invalid = {
+            name: rec.get("category", "")
+            for name, rec in _load_dispatch_tools().items()
+            if rec.get("category", "") not in VALID_CATEGORIES
+        }
+        unexpected = {
+            name: category
+            for name, category in invalid.items()
+            if category != "optimization"
+        }
+        assert not unexpected, (
+            f"发现非预期的非法类别：{unexpected}。"
+            f"有效类别：{sorted(VALID_CATEGORIES)}"
+        )
+        if invalid:
+            pytest.xfail("optimization 工具类别尚未加入 VALID_CATEGORIES 或重新归类")
 
     def test_every_handler_has_valid_risk(self):
         """All tools have valid risk label."""

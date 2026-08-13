@@ -283,6 +283,25 @@ def test_get_2d_result_export_not_json(mocker):
     assert_json_error(result, "invalid_export_extension")
 
 
+def test_get_2d_result_preserves_unsupported_feature_contract(mocker):
+    """缺少 CST 2022 的 2D 接口时应保留结构化兼容性错误。"""
+    mocker.patch("cst_runtime.core.results._load_project", return_value=(
+        mocker.MagicMock(), {"fullpath": "/tmp/test.cst"},
+    ))
+    mocker.patch("cst_runtime.core.results._get_result_module", return_value=(
+        object(), "3d",
+    ))
+
+    from cst_runtime.core.results import get_2d_result
+
+    result = get_2d_result("/tmp/test.cst", treepath="2D/3D Results\\Field")
+
+    assert_json_error(result, "unsupported_feature")
+    assert result["error"]["phase"] == "compatibility"
+    assert result["feature"] == "results.2d"
+    assert result["context"]["required_capability"] == "result2d"
+
+
 def test_get_parameter_combination_no_cst():
     """get_parameter_combination with nonexistent project — cst.results not available."""
     from cst_runtime.core.results import get_parameter_combination

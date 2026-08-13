@@ -63,3 +63,34 @@ def test_no_interactive_input_remains_in_test_scripts() -> None:
                 if node.func.id == "input":
                     failures.append(f"{path.relative_to(TEST_ROOT)}：第 {node.lineno} 行")
     assert not failures, "仍存在人工 input()：\n" + "\n".join(failures)
+
+
+def test_real_cst_launch_path_never_requests_hidden_mode() -> None:
+    """真机 fixture 和正式 CST 启动入口都不得请求后台隐藏模式。"""
+    compatibility_session = (
+        TEST_ROOT.parent
+        / "scripts"
+        / "cst_runtime"
+        / "core"
+        / "compatibility"
+        / "session.py"
+    )
+    for path in (TEST_ROOT / "conftest.py", compatibility_session):
+        source = path.read_text(encoding="utf-8")
+        assert '"--hide"' not in source, path
+        assert "'--hide'" not in source, path
+
+
+def test_real_cst_tests_do_not_use_decorator_level_xfail() -> None:
+    """装饰器级 xfail 会吞掉传输超时，只允许在验证旧错误后条件式 xfail。"""
+    path = TEST_ROOT / "test_cst_integration.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    violations: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            function = decorator.func if isinstance(decorator, ast.Call) else decorator
+            if isinstance(function, ast.Attribute) and function.attr == "xfail":
+                violations.append(decorator.lineno)
+    assert not violations, f"真机测试仍有装饰器级 xfail：{violations}"

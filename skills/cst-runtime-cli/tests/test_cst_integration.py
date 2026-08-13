@@ -1,7 +1,9 @@
 """通过唯一 Worker 和唯一隔离工程执行的真实 CST 2022 集成测试。"""
 from __future__ import annotations
 
+import json
 import os
+import struct
 import time
 from pathlib import Path
 from typing import Any
@@ -16,6 +18,7 @@ pytestmark = [
 
 
 COMPONENT = "component1"
+STANDARD_NO_RESULT_ERRORS = {"no_result", "result_not_found"}
 
 
 def _entity_keys(items: list[dict[str, str]]) -> set[tuple[str, str]]:
@@ -29,14 +32,71 @@ def _project_arguments(cst_case: Any, **arguments: Any) -> dict[str, Any]:
     return {"project_path": cst_case.project_path, **arguments}
 
 
+def _assert_error_response(
+    result: dict[str, Any],
+    *,
+    error_types: set[str],
+    phase: str,
+) -> None:
+    """同时检查旧顶层字段和统一错误信封，避免把任意失败当成预期失败。"""
+    assert result.get("status") == "error", result
+    assert result.get("ok") is False, result
+    assert result.get("error_type") in error_types, result
+    error = result.get("error")
+    assert isinstance(error, dict), result
+    assert error.get("type") == result.get("error_type"), result
+    assert error.get("phase") == phase, result
+
+
+def _assert_standard_no_result_or_xfail(
+    result: dict[str, Any],
+    *,
+    legacy_error_type: str,
+    evidence_tokens: tuple[str, ...],
+) -> None:
+    """仅放行已知的旧错误类型，传输、Worker 和无关运行时错误必须失败。"""
+    error_type = str(result.get("error_type") or "")
+    if error_type == legacy_error_type:
+        _assert_error_response(result, error_types={legacy_error_type}, phase="runtime")
+        message = str(result.get("message") or "").casefold()
+        assert any(token.casefold() in message for token in evidence_tokens), result
+        pytest.xfail(f"空结果仍返回旧错误类型 {legacy_error_type}")
+    _assert_error_response(
+        result,
+        error_types=STANDARD_NO_RESULT_ERRORS,
+        phase="runtime",
+    )
+
+
+def _assert_png_1920x1080(path: Path) -> None:
+    """检查 PNG 文件签名和 IHDR 尺寸，不让任意非空文件冒充截图。"""
+    header = path.read_bytes()[:24]
+    assert header[:8] == b"\x89PNG\r\n\x1a\n", path
+    assert header[12:16] == b"IHDR", path
+    assert struct.unpack(">II", header[16:24]) == (1920, 1080), path
+
+
+def _prepare_interactive_result_read(cst_case: Any) -> None:
+    """保存隔离工程，使 CST 2022 交互结果接口读取到明确的最近保存状态。"""
+    saved = cst_case.require_success(
+        "save-project",
+        {"project_path": cst_case.project_path},
+    )
+    assert Path(saved["project_path"]).resolve() == Path(cst_case.project_path).resolve()
+    cst_case.shared.require_visible_window()
+
+
 def test_00_only_one_expected_project_is_open(cst_case: Any) -> None:
     """真机层必须只看到共享隔离工程，并能读取真实工程状态。"""
     opened = cst_case.require_success("list-open-projects", {})
     projects = list(opened.get("open_projects", []))
     assert len(projects) == 1, opened
+    assert opened.get("design_environment_count") == 1, opened
+    assert projects[0].get("design_environment_pid") == cst_case.shared.design_environment_pid
     assert os.path.normcase(os.path.abspath(projects[0]["project_path"])) == os.path.normcase(
         os.path.abspath(cst_case.project_path)
     )
+    cst_case.shared.require_visible_window()
 
     parameters = cst_case.require_success(
         "list-parameters",
@@ -177,8 +237,15 @@ def test_13_custom_view_exports_nonempty_png(cst_case: Any) -> None:
     image_path = Path(result["image_path"])
     assert image_path.is_file(), result
     assert image_path.stat().st_size > 0, result
+    _assert_png_1920x1080(image_path)
+    metadata_path = Path(result["metadata_path"])
+    assert metadata_path.is_file(), result
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert Path(metadata["image_path"]).resolve() == image_path.resolve()
+    assert metadata["image_size"] == {"width": 1920, "height": 1080}
     assert result["view_params"]["horizontal_rotation_deg"] == 35
     assert result["view_params"]["vertical_rotation_deg"] == 20
+    assert metadata["view_params"] == result["view_params"]
 
     cst_case.shared.delete_entity(COMPONENT, name)
 
@@ -236,7 +303,8 @@ def test_21_failed_array_batch_leaves_no_entity(cst_case: Any) -> None:
             summary=f"Pytest failed array {cst_case.prefix}",
         ),
     )
-    assert result.get("status") == "error", result
+    _assert_error_response(result, error_types={"runtime_error"}, phase="runtime")
+    assert "未知 builder_id" in str(result.get("message") or ""), result
     assert _entity_keys(cst_case.shared.list_entities()) == before
 
 
@@ -259,17 +327,14 @@ def test_30_missing_material_reports_error_without_entity(cst_case: Any) -> None
             z_max=131,
         ),
     )
-    assert result.get("status") == "error", result
+    _assert_error_response(result, error_types={"vba_runtime_error"}, phase="execution")
     assert not cst_case.shared.entity_exists(COMPONENT, name)
     assert _entity_keys(cst_case.shared.list_entities()) == before
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="空结果尚未标准化为 no_result/result_not_found 错误",
-)
 def test_40_empty_1d_result_returns_standard_no_result_error(cst_case: Any) -> None:
     """空工程读取 1D 结果应返回标准无结果错误。"""
+    _prepare_interactive_result_read(cst_case)
     export_path = Path(cst_case.shared.temp_root) / "missing_1d.json"
     result = cst_case.call(
         "get-1d-result",
@@ -280,20 +345,26 @@ def test_40_empty_1d_result_returns_standard_no_result_error(cst_case: Any) -> N
             run_id=0,
             load_impedances=True,
             export_path=str(export_path),
-            allow_interactive=False,
+            allow_interactive=True,
         ),
     )
-    assert result.get("status") == "error", result
-    assert result.get("error_type") in {"no_result", "result_not_found"}, result
     assert not export_path.exists()
+    _assert_standard_no_result_or_xfail(
+        result,
+        legacy_error_type="get_1d_result_failed",
+        evidence_tokens=(
+            "__pytest_missing__",
+            "not exist",
+            "not found",
+            "no result",
+            "没有可用的 run id",
+        ),
+    )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="空结果尚未标准化为 no_result/result_not_found 错误",
-)
-def test_41_empty_2d_result_returns_standard_no_result_error(cst_case: Any) -> None:
-    """空工程读取 2D 结果应返回标准无结果错误。"""
+def test_41_2d_result_reports_cst2022_capability_limit(cst_case: Any) -> None:
+    """CST 2022 未公开 2D 提取能力时应返回精确的兼容性证据。"""
+    _prepare_interactive_result_read(cst_case)
     export_path = Path(cst_case.shared.temp_root) / "missing_2d.json"
     result = cst_case.call(
         "get-2d-result",
@@ -302,35 +373,40 @@ def test_41_empty_2d_result_returns_standard_no_result_error(cst_case: Any) -> N
             treepath="2D/3D Results\\__pytest_missing__",
             module_type="3d",
             export_path=str(export_path),
-            allow_interactive=False,
+            allow_interactive=True,
             subproject_treepath="",
             include_data=False,
         ),
     )
-    assert result.get("status") == "error", result
-    assert result.get("error_type") in {"no_result", "result_not_found"}, result
     assert not export_path.exists()
+    _assert_error_response(
+        result,
+        error_types={"unsupported_feature"},
+        phase="compatibility",
+    )
+    assert result.get("feature") == "results.2d", result
+    assert result.get("context", {}).get("required_capability") == "result2d", result
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="空结果尚未标准化为 no_result/result_not_found 错误",
-)
-def test_42_empty_parameter_combination_returns_standard_no_result_error(
+def test_42_parameter_combination_resolves_run_zero(
     cst_case: Any,
 ) -> None:
-    """空工程读取参数组合应返回标准无结果错误。"""
-    result = cst_case.call(
+    """Run ID 0 应解析为基准工程中可用的真实或最新结果编号。"""
+    _prepare_interactive_result_read(cst_case)
+    result = cst_case.require_success(
         "get-parameter-combination",
         _project_arguments(
             cst_case,
             run_id=0,
             module_type="3d",
-            allow_interactive=False,
+            allow_interactive=True,
         ),
     )
-    assert result.get("status") == "error", result
-    assert result.get("error_type") in {"no_result", "result_not_found"}, result
+    assert result.get("requested_run_id") == 0, result
+    assert isinstance(result.get("run_id"), int), result
+    assert result["run_id"] >= 0, result
+    assert result.get("module_type") == "3d", result
+    assert isinstance(result.get("parameters"), dict), result
 
 
 @pytest.mark.cst_solver
