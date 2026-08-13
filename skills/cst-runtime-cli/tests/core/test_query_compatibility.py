@@ -101,6 +101,36 @@ def test_filtered_tree_items_use_get_tree_results(monkeypatch) -> None:
     assert '"0D/1D recursive"' in "\n".join(captured)
 
 
+def test_result_metadata_uses_documented_get_tree_results_outputs(monkeypatch) -> None:
+    captured: list[str] = []
+
+    def query(_project, lines, *, timeout):
+        assert timeout == 5.0
+        captured.extend(lines)
+        return [
+            "2D/3D Results\\E-Field\\custom monitor\tEfield3D\tD:\\result\\e.m3d"
+        ]
+
+    monkeypatch.setattr(tree, "execute_text_query", query)
+
+    rows = tree.get_result_metadata(
+        object(),
+        root_path="2D/3D Results",
+        filter_type="2D/3D",
+    )
+
+    assert rows == [
+        {
+            "result_path": "2D/3D Results\\E-Field\\custom monitor",
+            "result_type": "Efield3D",
+            "file_name": "D:\\result\\e.m3d",
+        }
+    ]
+    script = "\n".join(captured)
+    assert "ResultTree.GetTreeResults" in script
+    assert '"2D/3D recursive"' in script
+
+
 def test_material_names_use_zero_based_material_vba(monkeypatch) -> None:
     captured: list[str] = []
 

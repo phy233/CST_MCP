@@ -4,6 +4,7 @@ import json
 import math
 import re
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -294,6 +295,195 @@ def get_1d_result(
         )
 
 
+def list_sparameter_results(project_path: str) -> dict[str, Any]:
+    """枚举真实 S 参数节点及各节点可用 Run ID。"""
+    try:
+        project, context = _load_project(project_path, allow_interactive=False)
+        result_module, normalized_module = _get_result_module(project, "3d")
+        prefix = "1D Results\\S-Parameters\\"
+        items = [
+            str(item)
+            for item in result_module.get_tree_items(filter="0D/1D")
+            if str(item).casefold().startswith(prefix.casefold())
+        ]
+        results: list[dict[str, Any]] = []
+        for treepath in sorted(set(items), key=str.casefold):
+            run_ids = result_module.get_run_ids(
+                treepath,
+                skip_nonparametric=False,
+            )
+            results.append(
+                {
+                    "result_path": treepath,
+                    "name": treepath.rsplit("\\", 1)[-1],
+                    "run_ids": _serialize_value(run_ids),
+                }
+            )
+        return {
+            "status": "success",
+            "project_path": context["fullpath"],
+            "module_type": normalized_module,
+            "count": len(results),
+            "results": results,
+            "runtime_module": "cst_runtime.results",
+        }
+    except Exception as exc:
+        return error_response(
+            "list_sparameter_results_failed",
+            str(exc),
+            project_path=str(project_path),
+            runtime_module="cst_runtime.results",
+        )
+
+
+def inspect_1d_result(
+    project_path: str,
+    treepath: str,
+    run_id: int,
+    allow_interactive: bool = False,
+) -> dict[str, Any]:
+    """读取指定 Run 的 0D/1D 数据用于完成性验证，不创建导出文件。"""
+    try:
+        project, context = _load_project(
+            project_path,
+            allow_interactive=allow_interactive,
+        )
+        result_module, normalized_module = _get_result_module(project, "3d")
+        result_item = result_module.get_result_item(
+            treepath,
+            run_id=int(run_id),
+            load_impedances=True,
+        )
+        ydata = result_item.get_ydata()
+        if isinstance(ydata, (int, float, complex)):
+            xdata = None
+            point_count = 1
+        else:
+            xdata = result_item.get_xdata()
+            try:
+                point_count = len(ydata)
+            except TypeError:
+                point_count = int(result_item.length)
+        return {
+            "status": "success",
+            "project_path": context["fullpath"],
+            "module_type": normalized_module,
+            "result_path": result_item.treepath,
+            "run_id": int(result_item.run_id),
+            "point_count": int(point_count),
+            "xdata": _serialize_value(xdata),
+            "ydata": _serialize_value(ydata),
+            "runtime_module": "cst_runtime.results",
+        }
+    except Exception as exc:
+        return error_response(
+            "inspect_1d_result_failed",
+            str(exc),
+            project_path=str(project_path),
+            treepath=treepath,
+            run_id=run_id,
+            runtime_module="cst_runtime.results",
+        )
+
+
+def export_touchstone(
+    project_path: str,
+    output_base_path: str,
+    parameter_type: str = "S",
+    data_format: str = "MA",
+    frequency_range: str = "Full",
+    fmin: float | None = None,
+    fmax: float | None = None,
+    impedance: float = 50.0,
+    renormalize: bool = True,
+    sample_count: int = 0,
+    use_ar_results: bool = False,
+) -> dict[str, Any]:
+    """使用 CST 2022 TOUCHSTONE Object 导出完整 S/Y/Z 矩阵。"""
+    from .compatibility.execution import vba_string
+    from .modeling import _single_vba
+
+    export_type = parameter_type.strip().upper()
+    value_format = data_format.strip().upper()
+    range_mode = frequency_range.strip().title()
+    if export_type not in {"S", "Y", "Z"}:
+        return error_response("invalid_touchstone_type", "parameter_type 必须是 S、Y 或 Z")
+    if value_format not in {"MA", "DB", "RI"}:
+        return error_response("invalid_touchstone_format", "data_format 必须是 MA、DB 或 RI")
+    if range_mode not in {"Full", "Limited"}:
+        return error_response("invalid_touchstone_range", "frequency_range 必须是 Full 或 Limited")
+    if range_mode == "Limited" and (fmin is None or fmax is None or float(fmin) >= float(fmax)):
+        return error_response("invalid_touchstone_range", "Limited 模式要求 fmin 小于 fmax")
+    if isinstance(sample_count, bool) or int(sample_count) < 0:
+        return error_response("invalid_touchstone_samples", "sample_count 必须是非负整数")
+    if float(impedance) <= 0:
+        return error_response("invalid_touchstone_impedance", "impedance 必须大于零")
+
+    requested = Path(output_base_path).expanduser().resolve()
+    requested.parent.mkdir(parents=True, exist_ok=True)
+    temporary_base = requested.parent / f"cst_touchstone_{uuid.uuid4().hex}"
+    lines = [
+        "With TOUCHSTONE",
+        "    .Reset",
+        f'    .FileName "{vba_string(str(temporary_base))}"',
+        f"    .Impedance {float(impedance)}",
+        f'    .ExportType "{export_type}"',
+        f'    .Format "{value_format}"',
+        f'    .FrequencyRange "{range_mode}"',
+    ]
+    if range_mode == "Limited":
+        lines.extend([f"    .Fmin {float(fmin)}", f"    .Fmax {float(fmax)}"])
+    lines.extend(
+        [
+            f"    .Renormalize {'True' if renormalize else 'False'}",
+            f"    .UseARResults {'True' if use_ar_results else 'False'}",
+            f"    .SetNSamples {int(sample_count)}",
+            "    .Write",
+            "End With",
+        ]
+    )
+    result = _single_vba(project_path, "Export TOUCHSTONE", "\n".join(lines))
+    if result.get("status") == "error":
+        return result
+    generated = [
+        path for path in requested.parent.glob(f"{temporary_base.name}*")
+        if path.is_file() and path.stat().st_size > 0
+    ]
+    if len(generated) != 1:
+        for path in generated:
+            path.unlink(missing_ok=True)
+        return error_response(
+            "touchstone_file_not_found",
+            "CST 已执行 TOUCHSTONE.Write，但没有生成唯一的非空文件",
+            output_base_path=str(requested),
+        )
+    generated_file = generated[0]
+    final_path = requested if requested.suffix else requested.with_suffix(generated_file.suffix)
+    try:
+        generated_file.replace(final_path)
+        text = final_path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError as exc:
+        generated_file.unlink(missing_ok=True)
+        return error_response("touchstone_file_finalize_failed", str(exc), output_file=str(final_path))
+    lines_text = [line.strip() for line in text.splitlines() if line.strip()]
+    has_option_line = any(line.startswith("#") for line in lines_text)
+    header_lines = [line for line in lines_text if line.startswith("!")]
+    has_data = any(not line.startswith(("!", "#", "[")) for line in lines_text)
+    if not has_option_line or not header_lines or not has_data:
+        final_path.unlink(missing_ok=True)
+        return error_response(
+            "touchstone_file_invalid",
+            "导出文件缺少 CST 端口/模式注释头、TOUCHSTONE 选项行或网络数据",
+            output_file=str(final_path),
+        )
+    return {
+        **result,
+        "output_file": str(final_path),
+        "file_size": final_path.stat().st_size,
+        "parameter_type": export_type,
+        "data_format": value_format,
+        "header_lines": header_lines,
+    }
 def _get_1d_result_from_module(
     *,
     result_module: Any,
@@ -571,127 +761,6 @@ def plot_project_result(
             str(exc),
             project_path=str(project_path),
             treepath=treepath,
-            runtime_module="cst_runtime.results",
-        )
-
-
-def _extract_farfield_freq(name: str) -> str:
-    m = re.search(r"f\s*[=\uff1d]\s*(\d+(?:\.\d+)?)", name)
-    if m:
-        return m.group(1)
-    m = re.search(r"(\d+(?:\.\d+)?)\s*GHz", name, re.IGNORECASE)
-    if m:
-        return m.group(1)
-    return ""
-
-
-def _discover_farfield_names_from_result_module(result_module: Any) -> list[str]:
-    """从已加载的离线结果树发现远场结果，避免为查询树节点启动 GUI。"""
-    discovered: list[str] = []
-    for item in list_all_result_items(result_module):
-        tree_path = str(item)
-        low = tree_path.lower()
-        if "farfields" not in low or "\\farfield" not in low or "cut" in low:
-            continue
-        short_name = tree_path.rsplit("\\", 1)[-1]
-        if short_name.strip() and short_name not in discovered:
-            discovered.append(short_name)
-    return discovered
-
-
-def export_run_results(
-    project_path: str,
-    farfield_names: list[str] | None = None,
-    farfield_plot_mode: str = "Realized Gain",
-    farfield_theta_step: float = 2.0,
-    farfield_phi_step: float = 2.0,
-    run_id: int | None = None,
-) -> dict[str, Any]:
-    try:
-        p = Path(project_path).expanduser().resolve()
-        if not p.is_file():
-            return error_response("project_not_found", "project_path is not a file", project_path=str(p))
-
-        exports_dir = p.parent.parent / "exports"
-        exports_dir.mkdir(parents=True, exist_ok=True)
-        exported: list[str] = []
-
-        # 工程关闭后采用离线结果读取，避免让交互模式重新关联或拉起 CST 界面。
-        latest_run_id: int | None = None
-        proj2, ctx2 = _load_project(str(p), allow_interactive=False)
-        m3d2 = proj2.get_3d()
-        all_rids = m3d2.get_all_run_ids(max_mesh_passes_only=True)
-        if all_rids:
-            latest_run_id = _latest_available_run_id(all_rids)
-
-        # 直接复用离线结果树发现远场结果，不再为一次树查询启动 GUI 工程。
-        if not farfield_names:
-            try:
-                discovered = _discover_farfield_names_from_result_module(m3d2)
-                if discovered:
-                    farfield_names = discovered
-            except Exception:
-                pass
-
-        if farfield_names:
-            from .farfield import export_farfield_grid
-
-            for ff_name in farfield_names:
-                result = export_farfield_grid(
-                    project_path=str(p),
-                    farfield_name=ff_name,
-                    export_dir=str(exports_dir),
-                    quantity=farfield_plot_mode,
-                    theta_step_deg=farfield_theta_step,
-                    phi_step_deg=farfield_phi_step,
-                    run_id=latest_run_id,
-                )
-                if result.get("status") == "success":
-                    exported.append(result["output_file"])
-
-        try:
-            if run_id is not None:
-                rids = [run_id]
-            else:
-                # 非参数化结果可能只有真实 ID 0；存在其他编号时才排除别名 0。
-                rids = _canonical_run_ids(all_rids)
-
-            for rid in rids:
-                r = _get_1d_result_from_module(
-                    result_module=m3d2,
-                    context=ctx2,
-                    normalized_module="3d",
-                    treepath="1D Results\\S-Parameters\\S1,1",
-                    run_id=rid,
-                    load_impedances=True,
-                )
-                if r.get("status") == "success":
-                    exported.append(r["export_path"])
-
-            tree_items = get_colormap_items(m3d2)
-            for ti in tree_items:
-                try:
-                    r2 = get_2d_result(project_path=str(p), treepath=ti, allow_interactive=False)
-                    if r2.get("status") == "success":
-                        exported.append(r2["export_path"])
-                except Exception:
-                    pass
-
-        except Exception as exc:
-            return error_response("results_phase_failed", str(exc), project_path=str(p))
-
-        return {
-            "status": "success",
-            "exported_count": len(exported),
-            "exported": exported,
-            "exports_dir": str(exports_dir),
-            "runtime_module": "cst_runtime.results",
-        }
-    except Exception as exc:
-        return error_response(
-            "export_run_results_failed",
-            str(exc),
-            project_path=str(project_path),
             runtime_module="cst_runtime.results",
         )
 

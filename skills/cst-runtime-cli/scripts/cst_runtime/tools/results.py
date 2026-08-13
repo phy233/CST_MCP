@@ -3,58 +3,73 @@ from . import _register_tool_defs
 
 
 TOOL_DEFS = {
-"export-run-results": {
+"list-sparameter-results": {
     "category": "results",
-    "risk": "filesystem-write",
-    "description": "Export S1,1 JSON and farfield grids. 2D JSON is added only when the installed results API supports it.",
-    "handler": "tool_export_run_results",
+    "risk": "read",
+    "description": "枚举实际 ResultTree 中的普通端口与 Floquet S 参数节点及可用 Run ID。",
+    "handler": "tool_list_sparameter_results",
     "json_schema": {
         "type": "object",
         "properties": {
             "project_path": {
                 "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            },
-            "farfield_names": {
-                "type": "array",
-                "description": "Exact Farfields child names; pass [] for automatic discovery",
-                "items": {
-                    "type": "string"
-                },
-                "examples": [
-                    [
-                        "farfield (f=10) [1]"
-                    ]
-                ]
-            },
-            "farfield_plot_mode": {
-                "type": "string",
-                "examples": [
-                    "Realized Gain"
-                ]
-            },
-            "farfield_theta_step": {
-                "type": "number",
-                "examples": [
-                    2.0
-                ]
-            },
-            "farfield_phi_step": {
-                "type": "number",
-                "examples": [
-                    2.0
-                ]
+                "minLength": 1
             }
         },
-        "required": [
-            "project_path",
-            "farfield_names",
-            "farfield_plot_mode",
-            "farfield_theta_step",
-            "farfield_phi_step"
-        ]
+        "required": ["project_path"],
+        "additionalProperties": False
+    },
+},
+
+"export-sparameter": {
+    "category": "results",
+    "risk": "filesystem-write",
+    "description": (
+        "按真实 ResultTree 节点导出一条 S 参数曲线。可直接指定 result_path，或使用响应端口、"
+        "激励端口及可选模式；支持 S1,1 和 SZmin(1),Zmax(1) 等 CST 2022 名称。"
+    ),
+    "handler": "tool_export_sparameter",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {"type": "string", "minLength": 1},
+            "run_id": {"type": "integer", "minimum": 0},
+            "output_path": {"type": "string", "minLength": 1},
+            "result_path": {"type": "string", "default": ""},
+            "response_port": {"type": "string", "default": ""},
+            "excitation_port": {"type": "string", "default": ""},
+            "response_mode": {"type": ["integer", "null"], "minimum": 1, "default": None},
+            "excitation_mode": {"type": ["integer", "null"], "minimum": 1, "default": None}
+        },
+        "required": ["project_path", "run_id", "output_path"],
+        "additionalProperties": False
+    },
+},
+
+"export-touchstone": {
+    "category": "results",
+    "risk": "filesystem-write",
+    "description": (
+        "使用 CST 2022 TOUCHSTONE Object 导出完整 S/Y/Z 网络矩阵；端口模式顺序由 CST 文件头给出。"
+    ),
+    "handler": "tool_export_touchstone",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {"type": "string", "minLength": 1},
+            "output_base_path": {"type": "string", "minLength": 1},
+            "parameter_type": {"type": "string", "enum": ["S", "Y", "Z"], "default": "S"},
+            "data_format": {"type": "string", "enum": ["MA", "DB", "RI"], "default": "MA"},
+            "frequency_range": {"type": "string", "enum": ["Full", "Limited"], "default": "Full"},
+            "fmin": {"type": ["number", "null"], "default": None},
+            "fmax": {"type": ["number", "null"], "default": None},
+            "impedance": {"type": "number", "exclusiveMinimum": 0, "default": 50.0},
+            "renormalize": {"type": "boolean", "default": True},
+            "sample_count": {"type": "integer", "minimum": 0, "default": 0},
+            "use_ar_results": {"type": "boolean", "default": False}
+        },
+        "required": ["project_path", "output_base_path"],
+        "additionalProperties": False
     },
 },
 
@@ -577,14 +592,36 @@ def tool_get_2d_result(args: dict) -> dict:
     )
 
 
-def tool_export_run_results(args: dict) -> dict:
-    return _res.export_run_results(
+def tool_list_sparameter_results(args: dict) -> dict:
+    return _res.list_sparameter_results(project_path_from_args(args))
+
+
+def tool_export_sparameter(args: dict) -> dict:
+    return _res.export_sparameter(
         project_path=project_path_from_args(args),
-        farfield_names=args.get("farfield_names"),
-        farfield_plot_mode=str(args.get("farfield_plot_mode", "Realized Gain")),
-        farfield_theta_step=float(args.get("farfield_theta_step", 2.0)),
-        farfield_phi_step=float(args.get("farfield_phi_step", 2.0)),
-        run_id=args.get("run_id"),
+        run_id=run_id_from_args(args),
+        output_path=str(args.get("output_path", "")),
+        result_path=str(args.get("result_path", "")),
+        response_port=str(args.get("response_port", "")),
+        excitation_port=str(args.get("excitation_port", "")),
+        response_mode=args.get("response_mode"),
+        excitation_mode=args.get("excitation_mode"),
+    )
+
+
+def tool_export_touchstone(args: dict) -> dict:
+    return _res.export_touchstone(
+        project_path=project_path_from_args(args),
+        output_base_path=str(args.get("output_base_path", "")),
+        parameter_type=str(args.get("parameter_type", "S")),
+        data_format=str(args.get("data_format", "MA")),
+        frequency_range=str(args.get("frequency_range", "Full")),
+        fmin=args.get("fmin"),
+        fmax=args.get("fmax"),
+        impedance=float(args.get("impedance", 50.0)),
+        renormalize=bool(args.get("renormalize", True)),
+        sample_count=int(args.get("sample_count", 0)),
+        use_ar_results=bool(args.get("use_ar_results", False)),
     )
 
 

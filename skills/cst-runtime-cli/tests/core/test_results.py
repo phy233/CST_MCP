@@ -250,21 +250,34 @@ def test_canonical_run_ids_keeps_zero_only_result():
     assert _canonical_run_ids([0, 2, 5]) == [2, 5]
 
 
-def test_discover_farfield_names_from_loaded_result_tree(mocker):
-    """远场发现应复用离线结果树，不需要另外打开 GUI 工程。"""
+def test_list_sparameter_results_returns_real_paths_and_run_ids(mocker):
+    result_module = mocker.MagicMock()
+    result_module.get_tree_items.return_value = [
+        "1D Results\\S-Parameters\\S1,1",
+        "1D Results\\S-Parameters\\SZmin(1),Zmax(1)",
+        "1D Results\\Voltage Monitors\\voltage1",
+    ]
+    result_module.get_run_ids.side_effect = lambda path, **_kwargs: (
+        [0] if path.endswith("S1,1") else [3, 7]
+    )
     mocker.patch(
-        "cst_runtime.core.results.list_all_result_items",
-        return_value=[
-            "1D Results\\S-Parameters\\S1,1",
-            "Farfields\\farfield (f=2.45) [1]",
-            "Farfields\\Farfield Cuts\\cut1",
-        ],
+        "cst_runtime.core.results._load_project",
+        return_value=(mocker.MagicMock(), {"fullpath": "C:/work/model.cst"}),
+    )
+    mocker.patch(
+        "cst_runtime.core.results._get_result_module",
+        return_value=(result_module, "3d"),
     )
 
-    from cst_runtime.core.results import _discover_farfield_names_from_result_module
-    names = _discover_farfield_names_from_result_module(mocker.MagicMock())
+    from cst_runtime.core.results import list_sparameter_results
+    result = list_sparameter_results("C:/work/model.cst")
 
-    assert names == ["farfield (f=2.45) [1]"]
+    assert result["status"] == "success"
+    assert [item["name"] for item in result["results"]] == [
+        "S1,1",
+        "SZmin(1),Zmax(1)",
+    ]
+    assert result["results"][1]["run_ids"] == [3, 7]
 
 
 def test_get_2d_result_export_not_json(mocker):
@@ -330,3 +343,75 @@ def test_list_result_items_no_cst():
         assert result["status"] == "error"
     except ImportError:
         pass
+
+
+def test_touchstone_export_uses_documented_object_and_verifies_file(monkeypatch, tmp_path):
+    from cst_runtime.core import modeling
+
+    captured: dict[str, str] = {}
+
+    def fake_single(_project_path, _history_name, vba):
+        captured["vba"] = vba
+        file_line = next(line for line in vba.splitlines() if ".FileName" in line)
+        base = Path(file_line.split('"', 2)[1])
+        base.with_suffix(".s2p").write_text(
+            "! Port modes: 1(1), 2(1)\n# GHz S MA R 50\n1.0 1 0 0 0 0 0 1 0\n",
+            encoding="utf-8",
+        )
+        return {"status": "success"}
+
+    monkeypatch.setattr(modeling, "_single_vba", fake_single)
+
+    from cst_runtime.core.results import export_touchstone
+    result = export_touchstone(
+        "D:/work/model.cst",
+        str(tmp_path / "network"),
+        parameter_type="S",
+        data_format="MA",
+        frequency_range="Limited",
+        fmin=1.0,
+        fmax=2.0,
+        sample_count=101,
+    )
+
+    assert result["status"] == "success"
+    assert result["output_file"].endswith("network.s2p")
+    assert result["file_size"] > 0
+    assert "Port modes" in result["header_lines"][0]
+    assert "TOUCHSTONE" in captured["vba"]
+    assert '.FrequencyRange "Limited"' in captured["vba"]
+    assert ".Fmin 1.0" in captured["vba"]
+    assert ".SetNSamples 101" in captured["vba"]
+
+
+def test_touchstone_limited_range_requires_bounds(tmp_path):
+    from cst_runtime.core.results import export_touchstone
+
+    result = export_touchstone(
+        "D:/work/model.cst",
+        str(tmp_path / "network"),
+        frequency_range="Limited",
+    )
+
+    assert result["error_type"] == "invalid_touchstone_range"
+
+
+def test_touchstone_rejects_file_without_port_mode_header(monkeypatch, tmp_path):
+    from cst_runtime.core import modeling
+    from cst_runtime.core.results import export_touchstone
+
+    def fake_single(_project_path, _history_name, vba):
+        file_line = next(line for line in vba.splitlines() if ".FileName" in line)
+        base = Path(file_line.split('"', 2)[1])
+        base.with_suffix(".s2p").write_text(
+            "# GHz S MA R 50\n1.0 1 0 0 0 0 0 1 0\n",
+            encoding="utf-8",
+        )
+        return {"status": "success"}
+
+    monkeypatch.setattr(modeling, "_single_vba", fake_single)
+    result = export_touchstone("D:/work/model.cst", str(tmp_path / "network"))
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "touchstone_file_invalid"
+    assert not (tmp_path / "network.s2p").exists()

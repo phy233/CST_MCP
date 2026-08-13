@@ -30,7 +30,7 @@ from .farfield import (
     read_farfield_scalar_list,
     read_legacy_farfield_list,
 )
-from .tree import get_tree_items, result_item_exists, select_tree_item
+from .tree import get_result_metadata, get_tree_items, result_item_exists, select_tree_item
 from .materials import list_material_names
 from .results import (
     supports_2d_results,

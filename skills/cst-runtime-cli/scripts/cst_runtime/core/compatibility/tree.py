@@ -108,6 +108,51 @@ def _legacy_filtered_result_items(project: Any, filter_type: str) -> list[str]:
     return _unique_nonempty(execute_text_query(project, lines, timeout=5.0))
 
 
+def get_result_metadata(
+    project: Any,
+    *,
+    root_path: str,
+    filter_type: str,
+) -> list[dict[str, str]]:
+    """按 CST 2022 ResultTree.GetTreeResults 返回路径、类型和关联文件。"""
+    normalized_filter = filter_type.strip()
+    if "recursive" not in normalized_filter.casefold().split():
+        normalized_filter += " recursive"
+    lines = [
+        "Dim cstRtResultPaths As Variant",
+        "Dim cstRtResultTypes As Variant",
+        "Dim cstRtResultFiles As Variant",
+        "Dim cstRtResultInfo As Variant",
+        "Dim cstRtResultCount As Long",
+        "Dim cstRtResultIndex As Long",
+        (
+            "cstRtResultCount = ResultTree.GetTreeResults("
+            f'"{vba_string(root_path)}", "{vba_string(normalized_filter)}", "", '
+            "cstRtResultPaths, cstRtResultTypes, cstRtResultFiles, cstRtResultInfo)"
+        ),
+        "For cstRtResultIndex = 0 To cstRtResultCount - 1",
+        (
+            "Print #cstRtQueryFile, CStr(cstRtResultPaths(cstRtResultIndex)) & Chr(9) & "
+            "CStr(cstRtResultTypes(cstRtResultIndex)) & Chr(9) & "
+            "CStr(cstRtResultFiles(cstRtResultIndex))"
+        ),
+        "Next cstRtResultIndex",
+    ]
+    rows: list[dict[str, str]] = []
+    for line in execute_text_query(project, lines, timeout=5.0):
+        values = line.split("\t", 2)
+        if not values or not values[0].strip():
+            continue
+        rows.append(
+            {
+                "result_path": values[0].strip(),
+                "result_type": values[1].strip() if len(values) > 1 else "",
+                "file_name": values[2].strip() if len(values) > 2 else "",
+            }
+        )
+    return rows
+
+
 def get_tree_items(project: Any, filter: str | None = None) -> list[Any]:
     """
     Retrieves tree items using the most appropriate API available in the current CST version.
