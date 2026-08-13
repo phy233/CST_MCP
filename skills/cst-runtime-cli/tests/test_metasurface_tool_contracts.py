@@ -20,10 +20,10 @@ NEW_TOOLS = {
 }
 
 
-def test_all_new_tools_are_registered_as_experimental() -> None:
+def test_all_new_tools_are_registered_for_agent() -> None:
     definitions = {item["name"]: item for item in atomic_definitions()}
     assert NEW_TOOLS <= definitions.keys()
-    assert {definitions[name]["exposure"] for name in NEW_TOOLS} == {"experimental"}
+    assert {definitions[name]["exposure"] for name in NEW_TOOLS} == {"agent"}
     assert "inspect-solver-settings" not in definitions
 
 

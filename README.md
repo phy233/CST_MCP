@@ -2,7 +2,7 @@
 
 # CST Runtime CLI
 
-CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 113 个原子命令覆盖建模、仿真、结果读取、参数优化、远场导出全链路，统一的 JSON 契约接口，内建运行时守卫层拦截已知 CST 陷阱。
+CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 120 个原子命令覆盖建模、仿真、结果读取、参数优化、远场导出全链路，统一的 JSON 契约接口，内建运行时守卫层拦截已知 CST 陷阱。CLI 工具不等于 MCP 暴露面；只有明确标记为 `agent` 的工具才会注册到 MCP。
 
 项目同时以 AI 工具 skill 形式发布，但工具链本身是通用设计——可独立使用、作为 skill 集成、或作为 Python 包二次开发。
 
@@ -14,17 +14,17 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 113 �
 | ------------------ | ------ | ------------------------------------------------------------------------------------------------------------- |
 | **几何建模** | 42     | `define-brick`, `define-cylinder`, `boolean-subtract`, `change-material`, `transform-shape`         |
 | **工程操作** | 25     | `change-parameter`, `define-port`, `define-mesh`, `inspect-project`, `capture-3d-view`              |
-| **结果读取** | 11     | `get-1d-result`, `get-2d-result`, `export-run-results`, `list-run-ids`, `generate-report`           |
+| **结果读取** | 结果树驱动 | `list-sparameter-results`, `export-sparameter`, `list-field-results`, `export-touchstone`       |
 | **优化**     | 11     | `create-study`, `ask-study`, `tell-study`, `run-probe-phase`, `run-optimization-step`               |
 | **会话管理** | 7      | `cst-session-open`, `cst-session-close`, `cst-session-quit`, `create-blank-project`, `save-project` |
 | **远场**     | 4      | `export-farfield-grid`, `export-farfield-cut`, `inspect-farfield-monitors`, `inspect-model-view`      |
-| **工作区**   | 4      | `init-workspace`, `init-task`, `health-check`, `install-cst-libraries`                                |
+| **工作区**   | 5      | `init-workspace`, `init-task`, `health-check`, `health-repair`, `install-cst-libraries`               |
 | **项目身份** | 4      | `verify-project-identity`, `infer-run-dir`, `wait-project-unlocked`, `list-open-projects`             |
 | **审计**     | 3      | `record-stage`, `update-status`, `stage-evidence`                                                       |
 | **DOE**      | 2      | `design-probes`, `analyze-probes`                                                                         |
 | **运行**     | 2      | `prepare-run`, `get-run-context`                                                                          |
 
-113 个工具各含 JSON Schema 定义，入参校验、输出格式统一。
+120 个工具各含严格 JSON Schema 定义，未知字段会被拒绝，输出格式以通用 `OperationResult` 为基础。
 
 ---
 
@@ -80,7 +80,7 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 113 �
 
 ## 扩展开发
 
-当前 113 个工具不是能力上限。只要 CST VBA 或 COM API 可执行的操作，即可通过开发包扩展为 CLI 命令。
+当前 120 个工具不是能力上限。只要 CST 2022 文档明确支持的 VBA 或 COM API 可执行操作，即可通过开发包扩展为 CLI 命令；未经审核的能力保持 `cli_only` 或 `experimental`。
 
 ### 代码生成器路径（新 VBA 对象）
 
@@ -190,7 +190,7 @@ cst-runtime-cli/
 │   │   │   └── cst_runtime/             # 全部源码
 │   │   │       ├── cli/                 # 分发层（dispatch + pipeline 编排）
 │   │   │       ├── core/                # 核心模块（session/建模/仿真/结果/远场/守卫/审计/工作区等 20 模块）
-│   │   │       ├── tools/               # 工具层（10 模块，113 命令）
+│   │   │       ├── tools/               # 工具层（10 模块，120 命令）
 │   │   │       ├── render/              # 自包含 HTML/SVG/WebGL 报告
 │   │   │       └── analysis/            # 远场解析与平坦度分析
 │   │   ├── references/                  # 用户文档

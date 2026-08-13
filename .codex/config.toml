@@ -55,3 +55,12 @@ approval_mode = "approve"
 
 [mcp_servers.cst-runtime.tools.save-project]
 approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.capture-3d-view]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.inspect-model-view]
+approval_mode = "approve"
+
+[mcp_servers.cst-runtime.tools.define-farfield-monitor]
+approval_mode = "approve"
