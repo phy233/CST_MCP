@@ -34,7 +34,7 @@ TOOL_DEFS = {
 "health-check": {
     "category": "workspace",
     "risk": "read",
-    "description": "Run comprehensive environment diagnostics: Python, uv, workspace, CST libraries, imports. Auto-fixes what it can, reports remaining issues with user instructions.",
+    "description": "只读检查 Python、工作区、CST 库和导入状态；不会初始化、安装或修改配置。",
     "handler": "tool_health_check",
     "json_schema": {
         "type": "object",
@@ -44,18 +44,25 @@ TOOL_DEFS = {
                 "examples": [
                     ""
                 ]
-            },
-            "auto_fix": {
-                "type": "boolean",
-                "examples": [
-                    True
-                ]
             }
         },
-        "required": [
-            "workspace",
-            "auto_fix"
-        ]
+        "required": ["workspace"],
+        "additionalProperties": False
+    },
+},
+
+"health-repair": {
+    "category": "workspace",
+    "risk": "filesystem-write",
+    "description": "显式修复 health-check 发现的可自动处理问题；默认仅供人工 CLI 使用。",
+    "handler": "tool_health_repair",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "workspace": {"type": "string", "examples": [""]}
+        },
+        "required": ["workspace"],
+        "additionalProperties": False
     },
 },
 
@@ -230,10 +237,11 @@ def tool_install_cst_libraries(args: dict) -> dict:
 
 
 def tool_health_check(args: dict) -> dict:
-    return _ce.health_check(
-        workspace=str(args.get("workspace", "")),
-        auto_fix=bool(args.get("auto_fix", True)),
-    )
+    return _ce.health_check(workspace=str(args.get("workspace", "")))
+
+
+def tool_health_repair(args: dict) -> dict:
+    return _ce.health_repair(workspace=str(args.get("workspace", "")))
 
 
 _register_tool_defs(TOOL_DEFS)

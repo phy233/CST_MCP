@@ -482,16 +482,14 @@ def _verify_cst_imports(cst_path: str) -> dict[str, Any]:
     return results
 
 
-def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
-    """执行全盘系统体检，输出诊断报告。
+def _health_check(workspace: str, *, auto_fix: bool) -> dict[str, Any]:
+    """执行环境检查；是否修复只能由两个公开入口显式决定。
 
     对当前的 Python 环境、包管理器 uv、工作区目录结构、
     以及 CST 库的绑定状态进行全方位的诊断 (Phases 1-3)。
     
     Args:
         workspace (str, optional): 指定的工作区目录。
-        auto_fix (bool, optional): 是否尝试自动修复发现的问题。默认为 True。
-
     Returns:
         dict[str, Any]: 结构化的体检报告，包含 overall 状态和 remaining_issues。
     """
@@ -708,3 +706,13 @@ def health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]:
             "machine": platform.machine(),
         },
     }
+
+
+def health_check(workspace: str = "") -> dict[str, Any]:
+    """只读检查环境，不初始化目录也不安装或注册 CST 库。"""
+    return _health_check(workspace, auto_fix=False)
+
+
+def health_repair(workspace: str = "") -> dict[str, Any]:
+    """显式修复 health-check 能自动处理的工作区与 CST 配置问题。"""
+    return _health_check(workspace, auto_fix=True)

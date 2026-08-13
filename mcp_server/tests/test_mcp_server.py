@@ -102,3 +102,18 @@ def test_transport_error_is_returned_as_mcp_error_envelope() -> None:
     assert result["error"]["phase"] == "transport"
     assert result["error"]["code"] == "worker_request_timeout"
     assert result["context"]["tool_name"] == "define-brick"
+
+
+def test_long_running_tools_use_simulation_timeout() -> None:
+    from mcp_server.server import _timeout_for_risk
+
+    assert _timeout_for_risk(
+        "long-running",
+        request_timeout=120,
+        simulation_timeout=3600,
+    ) == 3600
+    assert _timeout_for_risk(
+        "write",
+        request_timeout=120,
+        simulation_timeout=3600,
+    ) == 120

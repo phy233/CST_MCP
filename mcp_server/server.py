@@ -22,6 +22,18 @@ def _call_tool_with_transport_envelope(
         return exc.to_response(tool_name=name)
 
 
+def _timeout_for_risk(
+    risk: str,
+    *,
+    request_timeout: int,
+    simulation_timeout: int,
+) -> int:
+    """长任务统一使用仿真超时，避免新增工具退回普通请求超时。"""
+    if risk == "long-running":
+        return simulation_timeout
+    return request_timeout
+
+
 def create_mcp_server():
     """创建低层 MCP Server，不复制 runtime 函数签名。"""
     from mcp import types
@@ -38,6 +50,10 @@ def create_mcp_server():
         if tool.get("exposure") == "agent"
     ]
     agent_tool_names = {tool["name"] for tool in tool_descriptions}
+    agent_tool_risks = {
+        tool["name"]: str(tool.get("risk", "read"))
+        for tool in tool_descriptions
+    }
 
     @server.list_tools()
     async def list_tools() -> list[types.Tool]:
@@ -76,10 +92,10 @@ def create_mcp_server():
                 },
                 "context": {},
             }
-        timeout = (
-            config.simulation_timeout
-            if name in {"quick-sweep", "cross-process-sweep", "wait-simulation"}
-            else config.request_timeout
+        timeout = _timeout_for_risk(
+            agent_tool_risks.get(name, "read"),
+            request_timeout=config.request_timeout,
+            simulation_timeout=config.simulation_timeout,
         )
         return await asyncio.to_thread(
             _call_tool_with_transport_envelope,

@@ -5,3 +5,4 @@ from ._facade import wrap_core
 auto_register_cst = wrap_core(_core.auto_register_cst)
 install_cst_libraries = wrap_core(_core.install_cst_libraries)
 health_check = wrap_core(_core.health_check)
+health_repair = wrap_core(_core.health_repair)
