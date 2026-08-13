@@ -290,7 +290,6 @@ def analyze_metasurface_sparameters(
             summary=summary,
             warning_count=len(passivity_violations),
             warnings=passivity_violations,
-            verification="non_empty_json_written",
         )
     except (OSError, TypeError, ValueError) as exc:
         return error_response(

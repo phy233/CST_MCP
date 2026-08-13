@@ -84,13 +84,15 @@ def test_normalize_legacy_error_and_success() -> None:
     error = normalize_response(
         {"status": "error", "error_type": "invalid_arguments", "message": "missing name"}
     )
-    success = normalize_response({"status": "success", "value": 3})
+    success = normalize_response(
+        {"status": "success", "value": 3, "verification": "legacy_value"}
+    )
 
     assert error["ok"] is False
     assert error["error"]["phase"] == "validation"
     assert success["ok"] is True
     assert success["submission"] == "not_applicable"
-    assert success["verification"] == "not_run"
+    assert "verification" not in success
 
 
 def test_parse_ok_status(tmp_path: Path) -> None:
@@ -157,12 +159,12 @@ def test_wrapper_contains_runtime_error_channel(tmp_path: Path) -> None:
     assert "Erl" not in wrapped
 
 
-def test_wrapper_routes_polygon_verification_failure_before_ok() -> None:
+def test_wrapper_routes_explicit_report_error_before_ok() -> None:
     wrapped = wrap_vba_with_status_channel(
         "\n".join(
             [
-                'If Not SelectTreeItem("Curves\\cut_curve_top_right\\profile") Then',
-                '    ReportError "Polygon3D.Create: Curve item was not created: cut_curve_top_right:profile"',
+                "If cstRejected Then",
+                '    ReportError "CST rejected the requested operation"',
                 "End If",
             ]
         ),
@@ -172,12 +174,11 @@ def test_wrapper_routes_polygon_verification_failure_before_ok() -> None:
         status_directory_expression='GetProjectPath("Temp")',
     )
 
-    assert 'ReportError "Polygon3D.Create:' not in wrapped
+    assert 'ReportError "CST rejected' not in wrapped
     assert "cstRt075d2d53f251ExplicitFailure = True" in wrapped
     assert "cstRt075d2d53f251ErrorNumber = 9999" in wrapped
     assert (
-        'cstRt075d2d53f251ErrorDescription = "Polygon3D.Create: '
-        'Curve item was not created: cut_curve_top_right:profile"'
+        'cstRt075d2d53f251ErrorDescription = "CST rejected the requested operation"'
     ) in wrapped
     assert "GoTo CSTRuntimeError075d2d53f251" in wrapped
     assert wrapped.index("GoTo CSTRuntimeError075d2d53f251") < wrapped.index(
@@ -220,7 +221,7 @@ def test_gateway_reports_ok_and_removes_status_file(tmp_path: Path) -> None:
     assert result["ok"] is True
     assert result["submission"] == "accepted"
     assert result["execution"] == "reported_ok"
-    assert result["verification"] == "not_run"
+    assert "verification" not in result
     assert not status_path.exists()
 
 

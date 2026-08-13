@@ -66,7 +66,7 @@ description: 通过已连接的 CST MCP 服务安全地检查、建模、改参�
 
 - Runtime CLI 已提供 `define-unit-cell-boundary`、`define-floquet-port`、`define-plane-wave` 和精简的 `configure-frequency-domain-solver`；不要用通用 `define-boundary` 冒充完整周期单元配置。
 - 普通 Plane Wave 不产生 S 参数，适用于有限结构散射/RCS；无限周期单元使用 Unit Cell + Floquet。
-- 配置工具提交后必须使用对应 inspect 工具或非空输出文件验收。Floquet 参考面、排序和极化开关没有 CST 2022 公开 getter，必须明确标记为未读回。
+- 配置写操作在 CST 无错误执行到状态文件 `OK` 后即返回成功，不自动调用 inspect 改写成功结论。需要查看当前配置时由调用方显式使用对应 inspect 工具；导出和仿真工具仍必须验证非空输出。
 - 超表面工具已向 Agent 暴露；尚未完成的 CST 2022 真机验收仍必须如实标记，不得因 History 返回成功或工具可见就宣称设置正确。
 - 禁止自行猜测 VBA；新增命令必须先按目标 CST 版本本地手册核对。
 

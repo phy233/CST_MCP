@@ -101,7 +101,7 @@ def _query_failure(exc: Exception, project_path: str) -> dict[str, Any]:
     return error_response(
         "inspection_failed",
         str(exc),
-        phase="verification",
+        phase="inspection",
         project_path=project_path,
     )
 
@@ -145,7 +145,6 @@ def inspect_boundary(project_path: str) -> dict[str, Any]:
             project_path=normalized,
             faces=faces,
             unit_cell_scan=scan,
-            verification="read_back",
         )
     except Exception as exc:
         return _query_failure(exc, normalized)
@@ -181,7 +180,7 @@ def define_unit_cell_boundary(
             phase="validation",
             project_path=normalized_project,
         )
-    result = _submit_versioned_vba(
+    return _submit_versioned_vba(
         normalized_project,
         "Define Unit Cell Boundary",
         unit_cell_boundary_vba,
@@ -190,38 +189,6 @@ def define_unit_cell_boundary(
         phi=normalized_phi,
         direction=normalized_direction,
     )
-    if result.get("status") == "error" or result.get("submission") == "buffered":
-        return result
-    actual = inspect_boundary(normalized_project)
-    if actual.get("status") == "error":
-        return actual
-    requested_faces = dict(zip(("xmin", "xmax", "ymin", "ymax", "zmin", "zmax"), faces))
-    same_faces = all(
-        str(actual["faces"][name]).strip().casefold() == value.casefold()
-        for name, value in requested_faces.items()
-    )
-    scan = actual["unit_cell_scan"]
-    same_scan = (
-        scan["available"]
-        and math.isclose(scan["theta"], normalized_theta, abs_tol=1e-9)
-        and math.isclose(scan["phi"], normalized_phi, abs_tol=1e-9)
-        and scan["direction"] == normalized_direction
-    )
-    if not (same_faces and same_scan):
-        return error_response(
-            "boundary_readback_mismatch",
-            "Boundary 提交后读回值与请求值不一致",
-            phase="verification",
-            project_path=normalized_project,
-            requested={"faces": requested_faces, "theta": normalized_theta, "phi": normalized_phi, "direction": normalized_direction},
-            actual={"faces": actual["faces"], "unit_cell_scan": scan},
-        )
-    result.update(
-        requested={"faces": requested_faces, "theta": normalized_theta, "phi": normalized_phi, "direction": normalized_direction},
-        actual={"faces": actual["faces"], "unit_cell_scan": scan},
-        verification="read_back_matched",
-    )
-    return result
 
 
 def _normalize_mode(mode: dict[str, Any], basis: str) -> dict[str, Any]:
@@ -349,7 +316,6 @@ def inspect_floquet_ports(project_path: str) -> dict[str, Any]:
             ports=[ports["Zmin"], ports["Zmax"]],
             readable_fields=["position", "modes", "mode number/name", "modes_considered"],
             unavailable_fields=["reference_distance", "sort settings", "polarization basis"],
-            verification="read_back",
         )
     except Exception as exc:
         return _query_failure(exc, normalized)
@@ -376,7 +342,7 @@ def define_floquet_port(
     except (TypeError, ValueError) as exc:
         return error_response("invalid_floquet_configuration", str(exc), phase="validation", project_path=normalized_project)
     normalized_ports, basis, sort, frequency, theta, phi, max_x, max_y = normalized
-    result = _submit_versioned_vba(
+    return _submit_versioned_vba(
         normalized_project,
         "Define Floquet Ports",
         floquet_port_setup_vba,
@@ -389,39 +355,6 @@ def define_floquet_port(
         max_order_x=max_x,
         max_order_yprime=max_y,
     )
-    if result.get("status") == "error" or result.get("submission") == "buffered":
-        return result
-    actual = inspect_floquet_ports(normalized_project)
-    if actual.get("status") == "error":
-        return actual
-    by_position = {item["position"]: item for item in actual["ports"]}
-    mismatches: list[str] = []
-    for requested in normalized_ports:
-        read = by_position[requested["position"]]
-        if not read["exists"]:
-            mismatches.append(f'{requested["position"]} 不存在')
-        if read["modes_considered"] != requested["modes_considered"]:
-            mismatches.append(f'{requested["position"]} modes_considered 不一致')
-        if requested["mode_strategy"] == "explicit":
-            requested_names = [f'{item["type"]}({item["order_x"]},{item["order_yprime"]})' for item in requested["modes"]]
-            if [item["name"] for item in read["modes"]] != requested_names:
-                mismatches.append(f'{requested["position"]} 显式模式列表不一致')
-    if mismatches:
-        return error_response(
-            "floquet_readback_mismatch",
-            "; ".join(mismatches),
-            phase="verification",
-            project_path=normalized_project,
-            requested=normalized_ports,
-            actual=actual["ports"],
-        )
-    result.update(
-        requested={"ports": normalized_ports, "polarization_basis": basis, "sort_code": sort, "sort_frequency": frequency, "theta": theta, "phi": phi, "max_order_x": max_x, "max_order_yprime": max_y},
-        actual={"ports": actual["ports"]},
-        verification="read_back_partially_matched",
-        unverified_fields=actual["unavailable_fields"],
-    )
-    return result
 
 
 def _vector(value: Sequence[Any], name: str) -> tuple[float, float, float]:
@@ -510,7 +443,7 @@ def inspect_plane_wave(project_path: str) -> dict[str, Any]:
             raise ValueError("PlaneWave 查询结果不完整")
         for name in ("reference_frequency", "phase_difference", "axial_ratio"):
             values[name] = float(values[name])
-        return success_response(project_path=normalized, plane_wave=values, verification="read_back")
+        return success_response(project_path=normalized, plane_wave=values)
     except Exception as exc:
         return _query_failure(exc, normalized)
 
@@ -532,7 +465,7 @@ def define_plane_wave(
     except (TypeError, ValueError) as exc:
         return error_response("invalid_plane_wave", str(exc), phase="validation", project_path=normalized_project)
     n, e, pol, frequency, hand, phase, ratio = normalized
-    result = _submit_versioned_vba(
+    return _submit_versioned_vba(
         normalized_project,
         "Define Plane Wave",
         plane_wave_vba,
@@ -544,26 +477,6 @@ def define_plane_wave(
         phase_difference=phase,
         axial_ratio=ratio,
     )
-    if result.get("status") == "error" or result.get("submission") == "buffered":
-        return result
-    actual = inspect_plane_wave(normalized_project)
-    if actual.get("status") == "error":
-        return actual
-    read = actual["plane_wave"]
-    vector_match = all(math.isclose(a, b, abs_tol=1e-9) for a, b in zip((*n, *e), (*read["normal"], *read["e_vector"])))
-    scalar_match = str(read["polarization"]).casefold() == pol.casefold()
-    if frequency is not None:
-        scalar_match = scalar_match and math.isclose(read["reference_frequency"], frequency, abs_tol=1e-9)
-    if hand is not None:
-        scalar_match = scalar_match and str(read["circular_direction"]).casefold() == hand.casefold()
-    if phase is not None:
-        scalar_match = scalar_match and math.isclose(read["phase_difference"], phase, abs_tol=1e-9)
-    if ratio is not None:
-        scalar_match = scalar_match and math.isclose(read["axial_ratio"], ratio, abs_tol=1e-9)
-    if not (vector_match and scalar_match):
-        return error_response("plane_wave_readback_mismatch", "PlaneWave 提交后读回值与请求值不一致", phase="verification", project_path=normalized_project, actual=read)
-    result.update(actual=read, verification="read_back_matched")
-    return result
 
 
 def _normalize_excitation(excitation: dict[str, Any]) -> dict[str, Any]:
@@ -635,7 +548,6 @@ def configure_frequency_domain_solver(
             mesh_method=mesh,
             excitation=normalized_excitation,
             untouched_settings="保持工程当前值；新工程由 CST 默认值决定",
-            verification="submitted_not_read_back" if result.get("submission") != "buffered" else "not_run",
         )
     return result
 
@@ -657,7 +569,7 @@ def list_monitors(project_path: str) -> dict[str, Any]:
             parts = row.split("\t")
             if len(parts) >= 5 and parts[0] == "MONITOR":
                 monitors.append({"name": parts[1], "type": parts[2], "domain": parts[3], "frequency": float(parts[4])})
-        return success_response(project_path=normalized, monitors=monitors, count=len(monitors), verification="read_back")
+        return success_response(project_path=normalized, monitors=monitors, count=len(monitors))
     except Exception as exc:
         return _query_failure(exc, normalized)
 

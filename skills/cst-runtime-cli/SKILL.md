@@ -269,7 +269,7 @@ CLI 命令：`cst-session-inspect` / `cst-session-open` / `cst-session-reattach`
 - `define-floquet-port` 支持 Zmin/Zmax、显式或自动模式、参考面、线/圆极化基础和 CST 2022 排序参数。
 - `define-plane-wave` 会创建真实 PlaneWave 源。普通 Plane Wave 不产生 S 参数，适用于有限结构散射/RCS；无限周期单元应使用 Unit Cell + Floquet。
 - `configure-frequency-domain-solver` 只修改求解器类型、网格方法和激励，不执行 `FDSolver.Reset`，也不改精度、扫频、网格自适应或收敛阈值。
-- `inspect-boundary`、`inspect-floquet-ports`、`inspect-plane-wave` 和 `list-monitors` 使用 CST 2022 手册公开 getter 读回。Floquet 的参考面、排序和极化开关没有公开 getter，因此这些字段不会被伪造成已验证。
+- `inspect-boundary`、`inspect-floquet-ports`、`inspect-plane-wave` 和 `list-monitors` 是调用方主动使用的只读查询，不会在配置写入后自动执行。Floquet 的参考面、排序和极化开关没有公开 getter，因此查询结果不会伪造这些字段。
 - `analyze-metasurface-sparameters` 完全离线处理多个 `export-sparameter` JSON；它要求 Run ID 和严格递增频率网格一致，不执行隐式重采样。
 - 上述工具已向 Agent 暴露，以支持完整工程闭环；暴露状态不代表已完成 CST 2022 真机验收。History 提交成功只证明命令被提交，不能代替 getter、实体、结果或非空文件证据。
 

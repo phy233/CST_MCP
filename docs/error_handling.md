@@ -3,7 +3,7 @@
 ## 目标与边界
 
 本阶段解决 CST 2022 `add_to_history()` 可能在 VBA 失败时仍返回 `True` 的问题。
-Runtime 不再把“已缓冲”“COM 已接受”“VBA 已执行”和“业务结果已验证”混成同一个成功状态。
+Runtime 不再把“已缓冲”“COM 已接受”和“VBA 已执行”混成同一个成功状态；写操作不再附加执行后验证状态。
 
 本阶段不实现自动回滚、Message Window 读取、完整事务系统或 History 自动修复。私有
 `_GetHistory` 和 `_TryToUndoNTimes` 只出现在显式启用的人工验收样例中，不进入生产路径。
@@ -81,7 +81,6 @@ peek_batch -> submit / read status -> commit_batch
   "status": "success",
   "submission": "accepted",
   "execution": "reported_ok",
-  "verification": "not_run",
   "operation_id": "..."
 }
 ```
@@ -127,7 +126,6 @@ Proxy 启动、IPC、退出、响应 ID 和超时故障统一为 `transport_erro
 | `cst_submission_error` | `submission` | Side-channel 准备、COM 或 History 提交失败 |
 | `vba_runtime_error` | `execution` | VBA `Err` 被包装器捕获 |
 | `vba_compile_or_host_error` | `execution` | 无完整状态，不能安全断言成功 |
-| `verification_failed` | `verification` | 命令无显式错误，但后置条件不成立 |
 | `rollback_failed` | `rollback` | 后续版本尝试恢复但无法确认成功 |
 | `runtime_error` | `runtime` | 未归入上述阶段的运行时错误 |
 
@@ -148,11 +146,12 @@ python -m pytest -q -s --run-cst -m cst_integration
 
 ## 已知限制
 
-- `execution=reported_ok` 只证明包装器到达成功出口；当前建模操作仍返回
-  `verification=not_run`，不能替代实体、材料、参数或结果树的后置验证。
+- `execution=reported_ok` 表示业务 VBA 已无错误执行到状态文件 `OK`，写操作据此返回成功；
+  Runtime 不再自动读回实体、材料、参数或设置来改变该成功结论。
 - 默认状态等待为 5 秒。超大批次若超过该时间会安全地返回
   `vba_compile_or_host_error`，不会误报成功；后续可按操作规模暴露超时配置。
 - 状态缺失不能可靠地区分语法错误、编译错误、CST 宿主拒绝和代码未运行。
 - compile/host 类错误会附带原始 VBA 便于诊断，可能包含模型细节；MCP/CLI 日志应按工程数据处理。
-- 状态文件是错误侧信道，不是业务后置条件。实体存在性、参数读回、仿真终态和结果验证仍需后续实现。
+- 状态文件是 CST 错误侧信道。用户需要查看当前工程状态时，应显式调用只读查询工具；
+  文件导出和仿真结果工具仍检查其承诺的输出是否真实存在且非空。
 - 自动回滚、Message Window 读取、完整事务和 History 修复不在本阶段范围内。

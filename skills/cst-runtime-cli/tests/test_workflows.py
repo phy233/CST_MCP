@@ -279,7 +279,7 @@ def test_array_api_matches_python_result(monkeypatch) -> None:
     assert payload["ok"] is True
     assert payload["submission"] == "not_applicable"
     assert payload["execution"] == "not_run"
-    assert payload["verification"] == "not_run"
+    assert "verification" not in payload
     for key, value in expected.to_dict().items():
         assert payload[key] == value
 

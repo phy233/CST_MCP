@@ -114,7 +114,6 @@ def success_response(
     *,
     submission: str = "not_applicable",
     execution: str = "not_run",
-    verification: str = "not_run",
     **payload: Any,
 ) -> dict[str, Any]:
     return {
@@ -122,7 +121,6 @@ def success_response(
         "status": "success",
         "submission": submission,
         "execution": execution,
-        "verification": verification,
         **_json_safe(payload),
     }
 
@@ -170,6 +168,9 @@ def normalize_response(value: Mapping[str, Any]) -> dict[str, Any]:
     if payload.get("status") == "success" or payload.get("ok") is True:
         payload.pop("ok", None)
         payload.pop("status", None)
+        # 旧版本响应可能携带 execution 后置验证状态；新契约只以 CST
+        # 是否无错误执行到状态文件 OK 作为写操作成功依据。
+        payload.pop("verification", None)
         return success_response(**payload)
     return _json_safe(payload)
 

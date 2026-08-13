@@ -81,7 +81,6 @@ def _output_schema(name: str) -> dict[str, Any]:
     elif name in {"inspect-boundary", "inspect-floquet-ports", "inspect-plane-wave", "list-monitors"}:
         properties.update({
             "project_path": {"type": "string"},
-            "verification": {"type": "string"},
             "faces": {"type": "object"},
             "unit_cell_scan": {"type": "object"},
             "ports": {"type": "array", "items": {"type": "object"}},
@@ -94,7 +93,6 @@ def _output_schema(name: str) -> dict[str, Any]:
             "project_path": {"type": "string"},
             "submission": {"type": "string"},
             "execution": {"type": "string"},
-            "verification": {"type": "string"},
             "requested": {"type": "object"},
             "actual": {"type": "object"},
             "unverified_fields": {"type": "array", "items": {"type": "string"}},
@@ -104,7 +102,6 @@ def _output_schema(name: str) -> dict[str, Any]:
             "project_path": {"type": "string"},
             "submission": {"type": "string"},
             "execution": {"type": "string"},
-            "verification": {"type": "string"},
             "solver_type": {"type": "string"},
             "mesh_method": {"type": "string"},
             "excitation": {"type": "object"},

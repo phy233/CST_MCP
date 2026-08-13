@@ -102,22 +102,23 @@ def test_inspect_boundary_parses_public_getters(monkeypatch, tmp_path: Path) -> 
     assert result["unit_cell_scan"] == {"available": True, "theta": 10.0, "phi": 20.0, "direction": "inward"}
 
 
-def test_boundary_readback_mismatch_is_an_error(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(em_setup, "_submit_versioned_vba", lambda *a, **k: {"status": "success", "submission": "submitted"})
+def test_boundary_write_does_not_run_post_execution_readback(monkeypatch, tmp_path: Path) -> None:
+    submitted = {
+        "status": "success",
+        "submission": "accepted",
+        "execution": "reported_ok",
+    }
+    monkeypatch.setattr(em_setup, "_submit_versioned_vba", lambda *a, **k: dict(submitted))
     monkeypatch.setattr(
         em_setup,
         "inspect_boundary",
-        lambda path: {
-            "status": "success",
-            "faces": {"xmin": "Open", "xmax": "Unit Cell", "ymin": "Unit Cell", "ymax": "Unit Cell", "zmin": "Open", "zmax": "Open"},
-            "unit_cell_scan": {"available": True, "theta": 0.0, "phi": 0.0, "direction": "outward"},
-        },
+        lambda _path: pytest.fail("写操作成功后不得自动读回 Boundary"),
     )
     result = em_setup.define_unit_cell_boundary(
         str(tmp_path / "model.cst"), xmin="unit cell", xmax="unit cell",
         ymin="unit cell", ymax="unit cell", zmin="open", zmax="open",
     )
-    assert result["error_type"] == "boundary_readback_mismatch"
+    assert result == submitted
 
 
 def _explicit_ports() -> list[dict]:
@@ -194,22 +195,20 @@ def test_inspect_floquet_returns_only_publicly_readable_fields(monkeypatch, tmp_
     assert "reference_distance" not in result["ports"][0]
 
 
-def test_floquet_readback_mismatch_is_an_error(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(em_setup, "_submit_versioned_vba", lambda *a, **k: {"status": "success", "submission": "submitted"})
+def test_floquet_write_does_not_run_post_execution_readback(monkeypatch, tmp_path: Path) -> None:
+    submitted = {
+        "status": "success",
+        "submission": "accepted",
+        "execution": "reported_ok",
+    }
+    monkeypatch.setattr(em_setup, "_submit_versioned_vba", lambda *a, **k: dict(submitted))
     monkeypatch.setattr(
         em_setup,
         "inspect_floquet_ports",
-        lambda path: {
-            "status": "success",
-            "ports": [
-                {"position": "Zmin", "exists": True, "modes_considered": 1, "modes": [{"name": "TM(0,0)"}]},
-                {"position": "Zmax", "exists": False, "modes_considered": 1, "modes": []},
-            ],
-            "unavailable_fields": [],
-        },
+        lambda _path: pytest.fail("写操作成功后不得自动读回 FloquetPort"),
     )
     result = em_setup.define_floquet_port(str(tmp_path / "model.cst"), ports=_explicit_ports())
-    assert result["error_type"] == "floquet_readback_mismatch"
+    assert result == submitted
 
 
 @pytest.mark.parametrize(
@@ -263,22 +262,20 @@ def test_inspect_plane_wave_parses_all_getters(monkeypatch, tmp_path: Path) -> N
     assert "GetPolarization\n" not in captured["script"] + "\n"
 
 
-def test_plane_wave_readback_mismatch_is_an_error(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(em_setup, "_submit_versioned_vba", lambda *a, **k: {"status": "success", "submission": "submitted"})
+def test_plane_wave_write_does_not_run_post_execution_readback(monkeypatch, tmp_path: Path) -> None:
+    submitted = {
+        "status": "success",
+        "submission": "accepted",
+        "execution": "reported_ok",
+    }
+    monkeypatch.setattr(em_setup, "_submit_versioned_vba", lambda *a, **k: dict(submitted))
     monkeypatch.setattr(
         em_setup,
         "inspect_plane_wave",
-        lambda path: {
-            "status": "success",
-            "plane_wave": {
-                "normal": [0.0, 0.0, 1.0], "e_vector": [0.0, 1.0, 0.0],
-                "polarization": "Linear", "reference_frequency": 0.0,
-                "circular_direction": "Left", "phase_difference": 0.0, "axial_ratio": 1.0,
-            },
-        },
+        lambda _path: pytest.fail("写操作成功后不得自动读回 PlaneWave"),
     )
     result = em_setup.define_plane_wave(str(tmp_path / "model.cst"), normal=[0, 0, -1], e_vector=[1, 0, 0])
-    assert result["error_type"] == "plane_wave_readback_mismatch"
+    assert result == submitted
 
 
 @pytest.mark.parametrize(

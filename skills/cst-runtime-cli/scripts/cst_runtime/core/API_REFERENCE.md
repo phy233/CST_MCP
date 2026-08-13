@@ -175,16 +175,21 @@ result = error_response(
 
 | 项 | 说明 |
 |---|---|
-| **签名** | `success_response(**payload: Any) -> dict[str, Any]` |
-| **参数** | `**payload` — 任意键值对作为响应负载 |
-| **返回值** | `{"status": "success", **payload}` |
+| **签名** | `success_response(submission="not_applicable", execution="not_run", **payload: Any) -> dict[str, Any]` |
+| **参数** | `submission` 表示提交状态，`execution` 表示 VBA 执行状态，其余键值对作为响应负载 |
+| **返回值** | `{"ok": true, "status": "success", "submission": ..., "execution": ..., **payload}` |
 | **功能** | 构造标准化成功响应字典 |
 
 ```python
 from cst_runtime.core.errors import success_response
 
-result = success_response(project_path="C:/models/test.cst", saved=True)
-# => {"status": "success", "project_path": "C:/models/test.cst", "saved": True}
+result = success_response(
+    submission="accepted",
+    execution="reported_ok",
+    project_path="C:/models/test.cst",
+)
+# => {"ok": True, "status": "success", "submission": "accepted",
+#     "execution": "reported_ok", "project_path": "C:/models/test.cst"}
 ```
 
 ---
@@ -1498,18 +1503,21 @@ for inst in result["installations"]:
 
 | 项 | 说明 |
 |---|---|
-| **签名** | `health_check(workspace: str = "", auto_fix: bool = True) -> dict[str, Any]` |
+| **签名** | `health_check(workspace: str = "") -> dict[str, Any]` |
 | **返回值** | `{status, overall: "pass"|"degraded"|"blocked", remaining_issues, user_instructions, phases, fixes_applied, workspace, platform}` |
 | **功能** | 全面系统诊断：(1) 工作区 + 平台检查，(2) CST 环境检查，(3) 集成检查 |
 
 ```python
-from cst_runtime.core.environment import health_check
+from cst_runtime.core.environment import health_check, health_repair
 
-report = health_check(auto_fix=True)
+report = health_check()
 print(f"Overall: {report['overall']}")
 if report["remaining_issues"]:
     for issue in report["remaining_issues"]:
         print(f"  ⚠ {issue}")
+
+# 只有人工明确决定修复环境时才调用；该函数可能写入工作区或配置。
+repair_report = health_repair()
 ```
 
 ---

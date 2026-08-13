@@ -386,7 +386,6 @@ def submit_vba_history(
         return success_response(
             submission="accepted",
             execution="reported_ok",
-            verification="not_run",
             project_path=project_path,
             history_label=history_label,
             operation_id=resolved_operation_id,

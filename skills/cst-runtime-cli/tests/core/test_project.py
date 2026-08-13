@@ -39,7 +39,6 @@ def test_change_parameter_marks_dirty_and_annotates(mocker, tmp_path):
             "status": "success",
             "submission": "accepted",
             "execution": "reported_ok",
-            "verification": "not_run",
         },
     )
 

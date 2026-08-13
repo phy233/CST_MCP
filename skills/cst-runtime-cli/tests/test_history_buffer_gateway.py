@@ -36,7 +36,7 @@ def test_buffered_history_is_not_reported_as_executed() -> None:
     assert result["ok"] is True
     assert result["submission"] == "buffered"
     assert result["execution"] == "not_run"
-    assert result["verification"] == "not_run"
+    assert "verification" not in result
     assert buffer.peek_batch(project_path)[1] == "With Brick\n"
 
 
