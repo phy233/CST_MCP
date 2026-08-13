@@ -333,26 +333,32 @@ def test_2022_monitor_sets_coordinates_when_subvolume_is_enabled() -> None:
     assert '.SetSubvolume "-1", "1", "-2", "2", "0", "10"' in text
 
 
-def test_set_farfield_monitor_passes_nonempty_generated_name(monkeypatch) -> None:
-    captured: dict[str, object] = {}
+def test_define_farfield_monitor_stops_after_successful_history_submission(monkeypatch) -> None:
+    captured: list[dict[str, object]] = []
 
     def fake_submit(project_path, history_name, builder, **arguments):
-        captured.update(arguments)
-        return {"status": "success"}
+        captured.append(arguments)
+        return {
+            "status": "success",
+            "submission": "accepted",
+            "execution": "reported_ok",
+        }
 
     monkeypatch.setattr(core_modeling, "_submit_versioned_vba", fake_submit)
 
-    result = core_modeling.set_farfield_monitor(
+    result = core_modeling.define_farfield_monitor(
         "D:/project.cst",
-        start_freq=2.35,
-        end_freq=2.55,
-        step=0.05,
+        name="ff",
+        frequencies=[8, 12],
     )
 
     assert result["status"] == "success"
-    assert captured["name"] == "farfield (f=2.35-2.55)"
-    assert captured["use_subvolume"] is False
-    assert captured["subvolume"] is None
+    assert [item["name"] for item in captured] == ["ff (f=8)", "ff (f=12)"]
+    assert all(item["start"] == item["end"] for item in captured)
+    assert all(item["use_subvolume"] is False for item in captured)
+    assert result["created_count"] == 2
+    assert result["execution"] == "reported_ok"
+    assert "verification" not in result
 
 
 def test_other_monitor_entrypoints_pass_nonempty_generated_names(monkeypatch) -> None:
@@ -402,27 +408,23 @@ def test_2026_efield_entrypoint_keeps_range_name(monkeypatch) -> None:
     assert captured["name"] == "e-field (f=2.35-2.55)"
 
 
-def test_define_monitor_name_reflects_requested_range_without_fake_suffix(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_submit(project_path, history_name, builder, **arguments):
-        captured.update(arguments)
-        captured["generated"] = builder(profile=CST2022, **arguments)
-        return {"status": "success"}
-
-    monkeypatch.setattr(core_modeling, "_submit_versioned_vba", fake_submit)
-
-    core_modeling.define_monitor("D:/project.cst", 8, 12, 1)
-
-    assert captured["name"] == "farfield (f=8-12)"
-    generated = captured["generated"]
+def test_2022_single_farfield_uses_frequency_and_optional_subvolume() -> None:
+    generated = monitor_vba(
+        field_type="Farfield",
+        start=8,
+        end=8,
+        samples=1,
+        name="ff",
+        subvolume=(-1, 1, -2, 2, 0, 10),
+        use_subvolume=True,
+        profile=CST2022,
+    )
     text = _text(generated)
-    assert ".UseSubvolume" not in text
-    assert ".SetSubvolume" not in text
-    assert generated.not_applied == {
-        "use_subvolume": True,
-        "subvolume": (-105, 105, -105, 105, 0, 445),
-    }
+
+    assert '.Frequency "8"' in text
+    assert ".FrequencyRange" not in text
+    assert '.UseSubvolume "True"' in text
+    assert '.SetSubvolume "-1", "1", "-2", "2", "0", "10"' in text
 
 
 def test_set_probe_normalizes_documented_eh_values(monkeypatch) -> None:
@@ -455,22 +457,57 @@ def test_set_probe_rejects_non_eh_field_before_vba(monkeypatch) -> None:
     assert result["error_type"] == "validation_error"
 
 
-def test_export_paths_follow_2022_documented_result_names(monkeypatch) -> None:
+def test_field_export_uses_exact_discovered_path_without_model_assumptions(monkeypatch) -> None:
     captured: list[str] = []
 
-    def fake_export(project_path, tree_path, file_path, history_name):
+    def fake_export(project_path, tree_path, file_path, history_name, **sampling):
         captured.append(tree_path)
         return {"status": "success"}
 
     monkeypatch.setattr(core_modeling, "_ascii_export", fake_export)
+    monkeypatch.setattr(
+        core_modeling,
+        "list_field_results",
+        lambda _path: {
+            "status": "success",
+            "results": [
+                {
+                    "result_path": "2D/3D Results\\E-Field\\custom monitor (f=8) [Zmax (1)]",
+                    "result_type": "Efield3D",
+                }
+            ],
+        },
+    )
 
-    core_modeling.export_e_field("D:/project.cst", "8", "D:/exports")
-    core_modeling.export_voltage("D:/project.cst", "1", "D:/exports")
+    result = core_modeling.export_field_result(
+        "D:/project.cst",
+        "2D/3D Results\\E-Field\\custom monitor (f=8) [Zmax (1)]",
+        "D:/exports/e.txt",
+        "e_field",
+    )
 
-    assert captured == [
-        "2D/3D Results\\E-Field\\e-field (f=8) [1]",
-        "1D Results\\Voltage Monitors\\voltage1",
-    ]
+    assert result["status"] == "success"
+    assert captured == ["2D/3D Results\\E-Field\\custom monitor (f=8) [Zmax (1)]"]
+
+
+def test_field_export_rejects_wrong_official_result_type(monkeypatch) -> None:
+    monkeypatch.setattr(
+        core_modeling,
+        "list_field_results",
+        lambda _path: {
+            "status": "success",
+            "results": [{"result_path": "2D/3D Results\\H-Field\\h1", "result_type": "Hfield3D"}],
+        },
+    )
+
+    result = core_modeling.export_field_result(
+        "D:/project.cst",
+        "2D/3D Results\\H-Field\\h1",
+        "D:/exports/e.txt",
+        "e_field",
+    )
+
+    assert result["error_type"] == "field_result_type_mismatch"
 
 
 def test_ascii_export_checks_tree_selection_and_output_file(tmp_path, monkeypatch) -> None:
@@ -478,7 +515,7 @@ def test_ascii_export_checks_tree_selection_and_output_file(tmp_path, monkeypatc
 
     def fake_single(project_path, history_name, vba, project=None):
         captured["vba"] = vba
-        export_line = next(line for line in vba.splitlines() if line.startswith("ASCIIExport.FileName"))
+        export_line = next(line for line in vba.splitlines() if ".FileName" in line)
         output = core_modeling.Path(export_line.split('"', 2)[1].replace('""', '"'))
         output.write_text("x y z Ex Ey Ez\n", encoding="utf-8")
         return {"status": "success"}
@@ -497,6 +534,8 @@ def test_ascii_export_checks_tree_selection_and_output_file(tmp_path, monkeypatc
     assert core_modeling.Path(result["output_file"]).name == "e-field 8.txt"
     assert "If Not SelectTreeItem" in captured["vba"]
     assert "ReportError" in captured["vba"]
+    assert '.Mode "FixedNumber"' in captured["vba"]
+    assert '.SetfileType "ascii"' in captured["vba"]
     assert ".e-field 8." in captured["vba"]
 
 
@@ -813,10 +852,9 @@ def test_polygon3d_uses_version_specific_point_signatures() -> None:
     assert legacy.count('.Point "0", "0", "0"') == 1
     assert '.Point "0:0:0", "1:2:0", "2:0:0"' in modern
     assert '.Closed "False"' in modern
-    assert 'If Not SelectTreeItem("Curves\\c\\p") Then' in modern
-    assert 'ReportError "Polygon3D.Create: Curve item was not created: c:p"' in modern
+    assert 'SelectTreeItem("Curves\\c\\p")' not in modern
+    assert "ReportError" not in modern
     assert "Err.Raise" not in modern
-    assert "Curve item was not created: c:p" in modern
     assert ".Version" not in modern
 
 
@@ -839,7 +877,7 @@ def test_polygon3d_rejects_fewer_than_three_points() -> None:
         polygon3d_vba("p", "c", [(0, 0, 0), (1, 0, 0)], profile=CST2022)
 
 
-def test_analytical_curve_creates_container_and_uses_status_gateway_error() -> None:
+def test_analytical_curve_creates_container_without_post_execution_readback() -> None:
     text = _text(
         analytical_curve_vba(
             name="helix",
@@ -855,8 +893,8 @@ def test_analytical_curve_creates_container_and_uses_status_gateway_error() -> N
 
     assert 'If Not SelectTreeItem("Curves\\curves1") Then' in text
     assert 'Curve.NewCurve "curves1"' in text
-    assert 'If Not SelectTreeItem("Curves\\curves1\\helix") Then' in text
-    assert 'ReportError "AnalyticalCurve.Create: Curve item was not created: curves1:helix"' in text
+    assert 'SelectTreeItem("Curves\\curves1\\helix")' not in text
+    assert "ReportError" not in text
     assert "Err.Raise" not in text
 
 
@@ -949,7 +987,7 @@ def test_2022_extrude_cannot_preserve_profile() -> None:
     assert generated.not_applied == {"delete_profile": False}
 
 
-def test_2022_rectangle_creates_container_and_reports_through_gateway() -> None:
+def test_2022_rectangle_creates_container_without_post_execution_readback() -> None:
     text = _text(
         rectangle_vba(
             name="outline",
@@ -964,7 +1002,8 @@ def test_2022_rectangle_creates_container_and_reports_through_gateway() -> None:
 
     assert 'Curve.NewCurve "profiles"' in text
     assert '.Xrange "xmin", "xmax"' in text
-    assert 'ReportError "Rectangle.Create: Curve item was not created: profiles:outline"' in text
+    assert 'SelectTreeItem("Curves\\profiles\\outline")' not in text
+    assert "ReportError" not in text
     assert "Err.Raise" not in text
 
 

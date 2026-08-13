@@ -10,7 +10,6 @@ from .modeling import (
     CompatibleVBA,
     _bool,
     _curve_container_guard_vba,
-    _curve_item_verification_vba,
     _profile,
     transform_vba,
 )
@@ -126,7 +125,6 @@ def arc_vba(
                 f"    .Segments {segments}",
                 "    .Create",
                 "End With",
-                *_curve_item_verification_vba(curve, name, source="Arc.Create"),
             ),
             "cst2026",
         )
@@ -164,7 +162,6 @@ def arc_vba(
         "    .Create",
         "End With",
         f'WCS.Restore "{stored_wcs}"',
-        *_curve_item_verification_vba(curve, name, source="Arc.Create"),
     ]
     return CompatibleVBA(
         tuple(lines),
@@ -203,11 +200,6 @@ def polygon_solid_vba(
             f'    .LineTo "{vertices[0][0]}", "{vertices[0][1]}"',
             "    .Create",
             "End With",
-            *_curve_item_verification_vba(
-                curve,
-                profile_name,
-                source="Polygon.Create",
-            ),
             "With ExtrudeCurve",
             "    .Reset",
             f'    .Name "{name}"',

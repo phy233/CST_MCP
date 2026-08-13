@@ -1,11 +1,10 @@
 """CST monitor management operations.
 
 Usage:
-    from cst_runtime.lib.monitors import set_farfield, set_efield, set_probe, delete_monitor
+    from cst_runtime.lib.monitors import define_farfield, set_efield, set_probe, delete_monitor
 
     # Set farfield monitor
-    set_farfield("C:\\path\\to\\model.cst",
-                 start_freq=8, end_freq=12, step=0.5)
+    define_farfield("C:\\path\\to\\model.cst", "ff", [8, 10, 12])
 
     # Set E-field monitor
     set_efield("C:\\path\\to\\model.cst",
@@ -23,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core.modeling import set_farfield_monitor as _set_farfield_monitor
+from ..core.modeling import define_farfield_monitor as _define_farfield_monitor
 from ..core.modeling import set_efield_monitor as _set_efield_monitor
 from ..core.modeling import set_field_monitor as _set_field_monitor
 from ..core.modeling import set_probe as _set_probe
@@ -33,43 +32,32 @@ from ._facade import wrap_public
 from .contracts import raise_result_error
 
 
-def set_farfield(
+def define_farfield(
     project_path: str,
-    start_freq: float,
-    end_freq: float,
-    step: float = 1,
+    name: str,
+    frequencies: list[float],
     subvolume: tuple[float, float, float, float, float, float] | None = None,
     enable_nearfield: bool = True,
 ) -> None:
-    """Set farfield monitor.
+    """为每个频率创建并验证独立远场监视器。
 
     Args:
         project_path: Path to .cst file
-        start_freq: Start frequency in GHz
-        end_freq: End frequency in GHz
-        step: Frequency step in GHz
+        name: 单频监视器的基础名称
+        frequencies: 一个或多个监视频率
         subvolume: Optional (xmin, xmax, ymin, ymax, zmin, zmax) subvolume
         enable_nearfield: Whether to enable nearfield calculation
 
     Raises:
         RuntimeError: If monitor cannot be set
     """
-    kwargs = {
-        "start_freq": start_freq,
-        "end_freq": end_freq,
-        "step": step,
-        "enable_nearfield": enable_nearfield,
-    }
-    if subvolume:
-        kwargs.update({
-            "subvolume_x_min": subvolume[0],
-            "subvolume_x_max": subvolume[1],
-            "subvolume_y_min": subvolume[2],
-            "subvolume_y_max": subvolume[3],
-            "subvolume_z_min": subvolume[4],
-            "subvolume_z_max": subvolume[5],
-        })
-    result = _set_farfield_monitor(project_path, **kwargs)
+    result = _define_farfield_monitor(
+        project_path,
+        name=name,
+        frequencies=frequencies,
+        subvolume=list(subvolume) if subvolume else None,
+        enable_nearfield=enable_nearfield,
+    )
     if result.get("status") == "error":
         raise_result_error(result, "Failed to set farfield monitor")
 
@@ -196,7 +184,7 @@ def delete_monitor(project_path: str, monitor_name: str) -> None:
 
 
 for _public_name in (
-    "set_farfield", "set_efield", "set_field", "set_probe",
+    "define_farfield", "set_efield", "set_field", "set_probe",
     "delete_probe", "delete_monitor",
 ):
     globals()[_public_name] = wrap_public(globals()[_public_name])

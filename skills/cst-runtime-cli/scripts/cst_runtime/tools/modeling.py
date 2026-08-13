@@ -2,6 +2,43 @@
 from . import _register_tool_defs
 
 
+def _field_export_definition(handler: str, physical_name: str) -> dict:
+    """构造按官方 Result Type 校验的场结果导出工具定义。"""
+    return {
+        "category": "results",
+        "risk": "filesystem-write",
+        "description": (
+            f"导出实际 ResultTree 中的{physical_name}节点；完整 result_path 为唯一依据，"
+            "支持 CST 2022 ASCIIExport 的采样、点文件、子体积和 CSV 选项。"
+        ),
+        "handler": handler,
+        "json_schema": {
+            "type": "object",
+            "properties": {
+                "project_path": {"type": "string", "minLength": 1},
+                "result_path": {"type": "string", "minLength": 1},
+                "file_path": {"type": "string", "minLength": 1},
+                "mode": {"type": "string", "enum": ["FixedNumber", "FixedWidth"], "default": "FixedNumber"},
+                "step_x": {"type": ["number", "null"], "default": None},
+                "step_y": {"type": ["number", "null"], "default": None},
+                "step_z": {"type": ["number", "null"], "default": None},
+                "point_file": {"type": "string", "default": ""},
+                "subvolume": {
+                    "type": ["array", "null"],
+                    "items": {"type": "number"},
+                    "minItems": 6,
+                    "maxItems": 6,
+                    "default": None,
+                },
+                "file_type": {"type": "string", "enum": ["ascii", "csv"], "default": "ascii"},
+                "csv_separator": {"type": "string", "minLength": 1, "default": ","},
+            },
+            "required": ["project_path", "result_path", "file_path"],
+            "additionalProperties": False,
+        },
+    }
+
+
 TOOL_DEFS = {
 "boolean-add": {
     "category": "modeling",
@@ -1355,108 +1392,42 @@ TOOL_DEFS = {
     },
 },
 
-"export-e-field": {
-    "category": "modeling",
-    "risk": "filesystem-write",
-    "description": "Select the exact E-Field result node for the given frequency and export its current plot with CST ASCIIExport.",
-    "handler": "tool_export_e_field",
+"list-field-results": {
+    "category": "results",
+    "risk": "read",
+    "description": "使用 CST 2022 ResultTree.GetTreeResults 枚举 2D/3D 节点、官方 Result Type 和关联文件。",
+    "handler": "tool_list_field_results",
     "json_schema": {
         "type": "object",
         "properties": {
-            "project_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            },
-            "frequency": {
-                "type": "string",
-                "examples": [
-                    "10"
-                ]
-            },
-            "file_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\run\\exports"
-                ]
-            }
+            "project_path": {"type": "string", "minLength": 1}
         },
-        "required": [
-            "project_path",
-            "frequency",
-            "file_path"
-        ]
+        "required": ["project_path"],
+        "additionalProperties": False
     },
 },
 
-"export-surface-current": {
-    "category": "modeling",
-    "risk": "filesystem-write",
-    "description": "Select the exact Surface Current result node for the given frequency and export it with CST ASCIIExport.",
-    "handler": "tool_export_surface_current",
-    "json_schema": {
-        "type": "object",
-        "properties": {
-            "project_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            },
-            "frequency": {
-                "type": "string",
-                "examples": [
-                    "10"
-                ]
-            },
-            "file_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\run\\exports"
-                ]
-            }
-        },
-        "required": [
-            "project_path",
-            "frequency",
-            "file_path"
-        ]
-    },
-},
+"export-e-field": _field_export_definition("tool_export_e_field", "电场"),
+"export-h-field": _field_export_definition("tool_export_h_field", "磁场"),
+"export-surface-current": _field_export_definition("tool_export_surface_current", "表面电流"),
+"export-power-flow": _field_export_definition("tool_export_power_flow", "功率流"),
+"export-current-density": _field_export_definition("tool_export_current_density", "电流密度"),
+"export-power-loss-density": _field_export_definition("tool_export_power_loss_density", "功率损耗密度"),
 
-"export-voltage": {
-    "category": "modeling",
+"export-voltage-result": {
+    "category": "results",
     "risk": "filesystem-write",
-    "description": "Select the exact voltage monitor result node and export the current 1D plot with CST ASCIIExport.",
-    "handler": "tool_export_voltage",
+    "description": "按实际 0D/1D ResultTree 完整路径导出电压结果，不生成固定监视器编号。",
+    "handler": "tool_export_voltage_result",
     "json_schema": {
         "type": "object",
         "properties": {
-            "project_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            },
-            "voltage_index": {
-                "type": "string",
-                "examples": [
-                    "0"
-                ]
-            },
-            "file_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\run\\exports"
-                ]
-            }
+            "project_path": {"type": "string", "minLength": 1},
+            "result_path": {"type": "string", "minLength": 1},
+            "file_path": {"type": "string", "minLength": 1}
         },
-        "required": [
-            "project_path",
-            "voltage_index",
-            "file_path"
-        ]
+        "required": ["project_path", "result_path", "file_path"],
+        "additionalProperties": False
     },
 },
 
@@ -1693,45 +1664,36 @@ TOOL_DEFS = {
     },
 },
 
-"set-farfield-monitor": {
+"define-farfield-monitor": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set a farfield monitor over a frequency range.",
-    "handler": "tool_set_farfield_monitor",
+    "description": (
+        "按 CST 2022 Monitor Object 为每个频率创建独立单频远场监视器，并读回名称、类型、"
+        "域和频率验证；子体积完全可选，不含模型专用默认坐标。"
+    ),
+    "handler": "tool_define_farfield_monitor",
     "json_schema": {
         "type": "object",
         "properties": {
-            "project_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
+            "project_path": {"type": "string", "minLength": 1},
+            "name": {"type": "string", "minLength": 1},
+            "frequencies": {
+                "type": "array",
+                "items": {"type": "number", "exclusiveMinimum": 0},
+                "minItems": 1,
+                "uniqueItems": True
             },
-            "start_freq": {
-                "type": "number",
-                "examples": [
-                    2.0
-                ]
-            },
-            "end_freq": {
-                "type": "number",
-                "examples": [
-                    18.0
-                ]
-            },
-            "step": {
-                "type": "number",
-                "examples": [
-                    1
-                ]
+            "enable_nearfield": {"type": "boolean", "default": True},
+            "subvolume": {
+                "type": ["array", "null"],
+                "items": {"type": "number"},
+                "minItems": 6,
+                "maxItems": 6,
+                "default": None
             }
         },
-        "required": [
-            "project_path",
-            "start_freq",
-            "end_freq",
-            "step"
-        ]
+        "required": ["project_path", "name", "frequencies"],
+        "additionalProperties": False
     },
 },
 
@@ -2105,7 +2067,7 @@ def tool_change_material(args: dict) -> dict: return _md.change_material(**args)
 def tool_rename_entity(args: dict) -> dict: return _md.rename_entity(**args)
 def tool_set_entity_color(args: dict) -> dict: return _md.set_entity_color(**args)
 def tool_define_units(args: dict) -> dict: return _md.define_units(**args)
-def tool_set_farfield_monitor(args: dict) -> dict: return _md.set_farfield_monitor(**args)
+def tool_define_farfield_monitor(args: dict) -> dict: return _md.define_farfield_monitor(**args)
 def tool_set_efield_monitor(args: dict) -> dict: return _md.set_efield_monitor(**args)
 def tool_set_field_monitor(args: dict) -> dict: return _md.set_field_monitor(**args)
 def tool_set_probe(args: dict) -> dict: return _md.set_probe(**args)
@@ -2125,9 +2087,21 @@ def tool_create_loft_sweep(args: dict) -> dict: return _md.create_loft_sweep(**a
 def tool_create_hollow_sweep(args: dict) -> dict: return _md.create_hollow_sweep(**args)
 def tool_pick_face(args: dict) -> dict: return _md.pick_face(**args)
 def tool_define_loft(args: dict) -> dict: return _md.define_loft(**args)
-def tool_export_e_field(args: dict) -> dict: return _md.export_e_field(**args)
-def tool_export_surface_current(args: dict) -> dict: return _md.export_surface_current(**args)
-def tool_export_voltage(args: dict) -> dict: return _md.export_voltage(**args)
+def tool_list_field_results(args: dict) -> dict:
+    return _md.list_field_results(str(args.get("project_path", "")))
+
+
+def _export_field(args: dict, field_kind: str) -> dict:
+    return _md.export_field_result(field_kind=field_kind, **args)
+
+
+def tool_export_e_field(args: dict) -> dict: return _export_field(args, "e_field")
+def tool_export_h_field(args: dict) -> dict: return _export_field(args, "h_field")
+def tool_export_surface_current(args: dict) -> dict: return _export_field(args, "surface_current")
+def tool_export_power_flow(args: dict) -> dict: return _export_field(args, "power_flow")
+def tool_export_current_density(args: dict) -> dict: return _export_field(args, "current_density")
+def tool_export_power_loss_density(args: dict) -> dict: return _export_field(args, "power_loss_density")
+def tool_export_voltage_result(args: dict) -> dict: return _md.export_voltage_result(**args)
 
 
 _register_tool_defs(TOOL_DEFS)

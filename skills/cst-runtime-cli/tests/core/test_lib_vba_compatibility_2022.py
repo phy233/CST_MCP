@@ -81,7 +81,8 @@ def test_arc_uses_legacy_points_and_restores_wcs() -> None:
     assert "WCS.Restore" in text
     assert "WCS.Delete" not in text
     assert generated.not_applied["wcs_cleanup"].startswith("__CSTRuntime_")
-    assert 'ReportError "Arc.Create: Curve item was not created: curve1:arc1"' in text
+    assert 'SelectTreeItem("Curves\\curve1\\arc1")' not in text
+    assert "ReportError" not in text
     assert "Err.Raise" not in text
     assert ".StartAngle" not in text
 
@@ -100,8 +101,8 @@ def test_polygon_builds_2d_profile_then_extrudes_without_unsafe_cleanup() -> Non
     assert 'Curve.NewCurve "__cst_runtime_plate"' in text
     assert "With Polygon\n" in text
     assert "With Polygon3D" not in text
-    assert 'If Not SelectTreeItem("Curves\\__cst_runtime_plate\\profile") Then' in text
-    assert 'ReportError "Polygon.Create: Curve item was not created: __cst_runtime_plate:profile"' in text
+    assert 'SelectTreeItem("Curves\\__cst_runtime_plate\\profile")' not in text
+    assert "ReportError" not in text
     assert "Err.Raise" not in text
     assert "With ExtrudeCurve" in text
     assert '.Curve "__cst_runtime_plate:profile"' in text

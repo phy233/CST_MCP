@@ -9,8 +9,8 @@ from typing import Any
 from . import buffer
 from .error_gateway import submit_vba_history
 from .errors import CSTRuntimeError, error_response, success_response
-from .compatibility import detect_compatibility_profile
-from .compatibility.execution import vba_string
+from .compatibility import detect_compatibility_profile, get_result_metadata, result_item_exists
+from .compatibility.execution import execute_text_query, vba_string
 from .compatibility.modeling import (
     CST_2022_SOLVER_TYPES,
     analytical_curve_vba,
@@ -52,7 +52,6 @@ def _add_vba_history(project_path: str, history_name: str, vba_lines: list[str],
         return success_response(
             submission="buffered",
             execution="not_run",
-            verification="not_run",
             project_path=normalized_project,
             history_label=history_name,
         )
@@ -149,7 +148,6 @@ def begin_batch(project_path: str, summary: str = "Batch Execution") -> dict[str
         return success_response(
             submission="buffered",
             execution="not_run",
-            verification="not_run",
             project_path=normalized_project,
         )
     except RuntimeError as exc:
@@ -175,7 +173,6 @@ def flush_batch(project_path: str) -> dict[str, Any]:
         return success_response(
             submission="not_required",
             execution="not_run",
-            verification="not_run",
             project_path=normalized_project,
             message="empty batch, nothing to flush",
             batch_committed=True,
@@ -204,7 +201,6 @@ def discard_batch(project_path: str) -> dict[str, Any]:
     return success_response(
         submission="discarded",
         execution="not_run",
-        verification="not_run",
         project_path=normalized_project,
     )
 
@@ -638,21 +634,67 @@ def define_port(
     )
 
 
-def define_monitor(project_path: str, start_freq: float, end_freq: float, step: float) -> dict[str, Any]:
-    return _submit_versioned_vba(
-        project_path,
-        f"Define Monitor:{start_freq}-{end_freq}",
-        monitor_vba,
-        field_type="Farfield",
-        start=start_freq,
-        end=end_freq,
-        step=step,
-        name=f"farfield (f={start_freq}-{end_freq})",
-        subvolume=(-105, 105, -105, 105, 0, 445),
-        use_subvolume=True,
-        enable_nearfield=True,
-        modern_setter_style=True,
+def define_farfield_monitor(
+    project_path: str,
+    name: str,
+    frequencies: list[float],
+    enable_nearfield: bool = True,
+    subvolume: list[float] | None = None,
+) -> dict[str, Any]:
+    """为每个频率创建独立的 CST 2022 单频远场监视器。"""
+    base_name = str(name).strip()
+    if not base_name:
+        return error_response("invalid_monitor_name", "监视器名称不能为空")
+    try:
+        values = [float(value) for value in frequencies]
+    except (TypeError, ValueError):
+        return error_response("invalid_monitor_frequency", "frequencies 必须是有限数值数组")
+    if not values or any(not math.isfinite(value) or value <= 0 for value in values):
+        return error_response("invalid_monitor_frequency", "frequencies 必须包含至少一个大于零的有限频率")
+    if len(set(values)) != len(values):
+        return error_response("duplicate_monitor_frequency", "frequencies 不得重复")
+    bounds: tuple[float, float, float, float, float, float] | None = None
+    if subvolume is not None:
+        if len(subvolume) != 6:
+            return error_response("invalid_subvolume", "subvolume 必须包含六个坐标")
+        raw_bounds = tuple(float(value) for value in subvolume)
+        if not (raw_bounds[0] < raw_bounds[1] and raw_bounds[2] < raw_bounds[3] and raw_bounds[4] < raw_bounds[5]):
+            return error_response("invalid_subvolume", "subvolume 每一轴的最小值必须小于最大值")
+        bounds = raw_bounds
+
+    requested = [
+        {
+            "name": base_name if len(values) == 1 else f"{base_name} (f={frequency:g})",
+            "frequency": frequency,
+        }
+        for frequency in values
+    ]
+    created: list[dict[str, Any]] = []
+    for monitor in requested:
+        result = _submit_versioned_vba(
+            project_path,
+            f"Define Farfield Monitor:{monitor['name']}",
+            monitor_vba,
+            field_type="Farfield",
+            start=monitor["frequency"],
+            end=monitor["frequency"],
+            samples=1,
+            name=monitor["name"],
+            subvolume=bounds,
+            use_subvolume=bounds is not None,
+            enable_nearfield=enable_nearfield,
+        )
+        if result.get("status") == "error":
+            result["created_before_failure"] = created
+            return result
+        created.append(monitor)
+    result.update(
+        created_count=len(created),
+        monitors=created,
+        enable_nearfield=bool(enable_nearfield),
+        subvolume=list(bounds) if bounds else None,
     )
+    return result
 
 
 def rename_entity(project_path: str, old_name: str, new_name: str) -> dict[str, Any]:
@@ -703,35 +745,6 @@ def define_units(
         current=current,
         conductance=conductance,
         capacitance=capacitance,
-    )
-
-
-def set_farfield_monitor(
-    project_path: str,
-    start_freq: float,
-    end_freq: float,
-    step: float = 1,
-    subvolume_x_min: float = -105,
-    subvolume_x_max: float = 105,
-    subvolume_y_min: float = -105,
-    subvolume_y_max: float = 105,
-    subvolume_z_min: float = 0,
-    subvolume_z_max: float = 445,
-    enable_nearfield: bool = True,
-) -> dict[str, Any]:
-    return _submit_versioned_vba(
-        project_path,
-        "Set Farfield Monitor",
-        monitor_vba,
-        field_type="Farfield",
-        start=start_freq,
-        end=end_freq,
-        step=step,
-        name=f"farfield (f={start_freq}-{end_freq})",
-        # 保留旧参数签名，但禁用子体积时不把无效坐标提交给 CST。
-        subvolume=None,
-        use_subvolume=False,
-        enable_nearfield=enable_nearfield,
     )
 
 
@@ -1345,7 +1358,84 @@ def define_loft(project_path: str, name: str, component: str, material: str, tan
     )
 
 
-def _ascii_export(project_path: str, tree_path: str, file_path: str, history_name: str) -> dict[str, Any]:
+FIELD_RESULT_TYPES: dict[str, frozenset[str]] = {
+    "e_field": frozenset({"Efield2D", "Efield2DTD", "Efield3D", "Efield3DTD", "Efield3D_tet", "Efield3D_srf"}),
+    "h_field": frozenset({"Hfield2D", "Hfield2DTD", "Hfield3D", "Hfield3DTD", "Hfield3D_tet", "Hfield3D_srf"}),
+    "surface_current": frozenset({"SurfaceCurrent", "SurfaceCurrentTD", "SurfaceCurrent_tet", "SurfaceCurrent_srf"}),
+    "power_flow": frozenset({"Pfield2D", "Pfield2DTD", "Pfield3D", "Pfield3DTD", "Pfield3D_tet"}),
+    "current_density": frozenset({"Current3D", "Current3DTD", "Current3D_tet"}),
+    "power_loss_density": frozenset({"PowerLoss3D", "PowerLoss3DTD", "PowerLoss3D_tet"}),
+}
+
+
+def list_field_results(project_path: str) -> dict[str, Any]:
+    """列出实际 2D/3D ResultTree 节点及官方 Result Type。"""
+    normalized = _abs_project_path(project_path)
+    project, status = attach_expected_project(normalized)
+    if project is None:
+        return status
+    try:
+        rows = get_result_metadata(
+            project,
+            root_path="2D/3D Results",
+            filter_type="2D/3D recursive",
+        )
+        reverse_types = {
+            result_type: kind
+            for kind, result_types in FIELD_RESULT_TYPES.items()
+            for result_type in result_types
+        }
+        results = [
+            {**row, "field_kind": reverse_types.get(row["result_type"])}
+            for row in rows
+        ]
+        return success_response(
+            project_path=normalized,
+            count=len(results),
+            results=results,
+        )
+    except CSTRuntimeError as exc:
+        return exc.to_response(project_path=normalized)
+    except Exception as exc:
+        return error_response(
+            "list_field_results_failed",
+            str(exc),
+            project_path=normalized,
+        )
+
+
+def _ascii_export(
+    project_path: str,
+    tree_path: str,
+    file_path: str,
+    history_name: str,
+    *,
+    mode: str = "FixedNumber",
+    step_x: int | float | None = None,
+    step_y: int | float | None = None,
+    step_z: int | float | None = None,
+    point_file: str = "",
+    subvolume: list[float] | None = None,
+    file_type: str = "ascii",
+    csv_separator: str = ",",
+) -> dict[str, Any]:
+    mode_values = {"fixednumber": "FixedNumber", "fixedwidth": "FixedWidth"}
+    normalized_mode = mode_values.get(mode.strip().casefold())
+    if normalized_mode is None:
+        return error_response("invalid_ascii_export_mode", "mode 必须是 FixedNumber 或 FixedWidth")
+    normalized_file_type = file_type.strip().casefold()
+    if normalized_file_type not in {"ascii", "csv"}:
+        return error_response("invalid_ascii_export_type", "file_type 必须是 ascii 或 csv")
+    if point_file and not Path(point_file).expanduser().is_file():
+        return error_response("point_file_not_found", "point_file 不存在", point_file=point_file)
+    if subvolume is not None:
+        if len(subvolume) != 6:
+            return error_response("invalid_subvolume", "subvolume 必须包含 xmin,xmax,ymin,ymax,zmin,zmax")
+        values = [float(value) for value in subvolume]
+        if not (values[0] < values[1] and values[2] < values[3] and values[4] < values[5]):
+            return error_response("invalid_subvolume", "subvolume 每一轴的最小值必须小于最大值")
+    else:
+        values = []
     escaped_tree_path = vba_string(tree_path)
     output_path = Path(file_path).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1353,14 +1443,28 @@ def _ascii_export(project_path: str, tree_path: str, file_path: str, history_nam
         f".{output_path.stem}.{uuid.uuid4().hex}.tmp{output_path.suffix}"
     )
     escaped_file_path = vba_string(str(temporary_path))
-    vba = (
+    lines = [
         f'If Not SelectTreeItem("{escaped_tree_path}") Then\n'
         f'    ReportError "ASCIIExport: tree item was not selected: {escaped_tree_path}"\n'
-        "End If\n"
-        "ASCIIExport.Reset\n"
-        f'ASCIIExport.FileName "{escaped_file_path}"\n'
-        "ASCIIExport.Execute"
-    )
+        "End If",
+        "With ASCIIExport",
+        "    .Reset",
+        f'    .FileName "{escaped_file_path}"',
+        f'    .Mode "{normalized_mode}"',
+        f'    .SetfileType "{normalized_file_type}"',
+    ]
+    for axis, value in (("X", step_x), ("Y", step_y), ("Z", step_z)):
+        if value is not None:
+            lines.append(f"    .Step{axis} {value}")
+    if normalized_file_type == "csv":
+        lines.append(f'    .SetCsvSeparator "{vba_string(csv_separator)}"')
+    if point_file:
+        lines.append(f'    .SetPointFile "{vba_string(str(Path(point_file).expanduser().resolve()))}"')
+    if values:
+        lines.append("    .SetSubvolume " + ", ".join(str(value) for value in values))
+        lines.append('    .UseSubvolume "True"')
+    lines.extend(["    .Execute", "End With"])
+    vba = "\n".join(lines)
     result = _single_vba(project_path, history_name, vba)
     if result.get("status") == "error":
         temporary_path.unlink(missing_ok=True)
@@ -1390,22 +1494,65 @@ def _ascii_export(project_path: str, tree_path: str, file_path: str, history_nam
     }
 
 
-def export_e_field(project_path: str, frequency: str, file_path: str) -> dict[str, Any]:
-    tree = f"2D/3D Results\\E-Field\\e-field (f={frequency}) [1]"
-    fpath = f"{file_path}\\E-field-{frequency}GHz.txt"
-    return _ascii_export(project_path, tree, fpath, "ExportEField")
+def export_field_result(
+    project_path: str,
+    result_path: str,
+    file_path: str,
+    field_kind: str,
+    **sampling: Any,
+) -> dict[str, Any]:
+    """校验官方 Result Type 后导出精确场结果节点。"""
+    listed = list_field_results(project_path)
+    if listed.get("status") == "error":
+        return listed
+    matched = [
+        item for item in listed.get("results", [])
+        if str(item.get("result_path", "")).casefold() == result_path.casefold()
+    ]
+    if len(matched) != 1:
+        return error_response(
+            "field_result_not_found",
+            "实际 ResultTree 中没有唯一匹配的场结果节点",
+            result_path=result_path,
+            candidates=[item.get("result_path") for item in listed.get("results", [])],
+        )
+    accepted_types = FIELD_RESULT_TYPES.get(field_kind)
+    if accepted_types is None or matched[0].get("result_type") not in accepted_types:
+        return error_response(
+            "field_result_type_mismatch",
+            "结果节点的官方 Result Type 与所选物理量不一致",
+            result_path=result_path,
+            result_type=matched[0].get("result_type"),
+            expected_types=sorted(accepted_types or []),
+        )
+    result = _ascii_export(
+        project_path,
+        str(matched[0]["result_path"]),
+        file_path,
+        f"Export {field_kind}",
+        **sampling,
+    )
+    if result.get("status") != "error":
+        result.update(field_kind=field_kind, result_type=matched[0]["result_type"])
+    return result
 
 
-def export_surface_current(project_path: str, frequency: str, file_path: str) -> dict[str, Any]:
-    tree = f"2D/3D Results\\Surface Current\\surface current (f={frequency}) [pw]"
-    fpath = f"{file_path}\\Surface-Current-{frequency}GHz.txt"
-    return _ascii_export(project_path, tree, fpath, "ExportSurfaceCurrent")
-
-
-def export_voltage(project_path: str, voltage_index: str, file_path: str) -> dict[str, Any]:
-    tree = f"1D Results\\Voltage Monitors\\voltage{voltage_index}"
-    fpath = f"{file_path}\\voltage-{voltage_index}.txt"
-    return _ascii_export(project_path, tree, fpath, f"ExportVoltage{voltage_index}")
+def export_voltage_result(project_path: str, result_path: str, file_path: str) -> dict[str, Any]:
+    """按实际 0D/1D 电压结果路径导出，不拼接监视器编号。"""
+    normalized = _abs_project_path(project_path)
+    project, status = attach_expected_project(normalized)
+    if project is None:
+        return status
+    try:
+        if not result_item_exists(project, result_path):
+            return error_response(
+                "voltage_result_not_found",
+                "实际 ResultTree 中不存在指定电压结果节点",
+                result_path=result_path,
+            )
+    except CSTRuntimeError as exc:
+        return exc.to_response(project_path=normalized, result_path=result_path)
+    return _ascii_export(project_path, result_path, file_path, "Export voltage result")
 
 
 def capture_3d_view(

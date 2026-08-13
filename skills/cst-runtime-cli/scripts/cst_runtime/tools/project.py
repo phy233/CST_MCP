@@ -207,48 +207,6 @@ TOOL_DEFS = {
     },
 },
 
-"define-monitor": {
-    "category": "project_ops",
-    "risk": "write",
-    "description": "Define a farfield monitor over a frequency range.",
-    "handler": "tool_define_monitor",
-    "json_schema": {
-        "type": "object",
-        "properties": {
-            "project_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            },
-            "start_freq": {
-                "type": "number",
-                "examples": [
-                    2.0
-                ]
-            },
-            "end_freq": {
-                "type": "number",
-                "examples": [
-                    18.0
-                ]
-            },
-            "step": {
-                "type": "number",
-                "examples": [
-                    1
-                ]
-            }
-        },
-        "required": [
-            "project_path",
-            "start_freq",
-            "end_freq",
-            "step"
-        ]
-    },
-},
-
 "define-parameters": {
     "category": "project_ops",
     "risk": "write",
@@ -639,9 +597,8 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "依据本机 CST 2022 手册先执行 FDSolver.Reset（会重置此前的频域求解器"
-        "设置），再设置激励。当前仅完成离线命令生成和参数校验，尚未经过本轮 "
-        "CST 实机验收。"
+        "依据本机 CST 2022 FDSolver.Stimulation 手册设置激励，不会隐式执行 "
+        "FDSolver.Reset。该工具可由 MCP Agent 调用，但暴露状态不代表已完成 CST 2022 实机验收。"
     ),
     "handler": "tool_define_fdsolver_stimulation",
     "json_schema": {
@@ -1224,10 +1181,6 @@ def tool_define_solver(args: dict) -> dict:
 
 def tool_define_port(args: dict) -> dict:
     return _md.define_port(**args)
-
-
-def tool_define_monitor(args: dict) -> dict:
-    return _md.define_monitor(**args)
 
 
 def tool_capture_3d_view(args: dict) -> dict:

@@ -86,10 +86,8 @@ def test_fdsolver_stimulation_matches_cst2022_manual() -> None:
     profile = CompatibilityProfile(major=2022, version="2022", source="test")
     generated = fdsolver_stimulation_vba(port="All", mode="All", profile=profile)
 
-    assert generated.lines == (
-        "FDSolver.Reset",
-        'FDSolver.Stimulation "All", "All"',
-    )
+    assert generated.lines == ('FDSolver.Stimulation "All", "All"',)
+    assert all("FDSolver.Reset" not in line for line in generated.lines)
 
 
 def test_fdsolver_stimulation_supports_manual_plane_wave_rule() -> None:

@@ -74,23 +74,6 @@ def _curve_container_guard_vba(curve: str) -> tuple[str, ...]:
     )
 
 
-def _curve_item_verification_vba(
-    curve: str,
-    name: str,
-    *,
-    source: str = "Polygon3D.Create",
-) -> tuple[str, ...]:
-    """验证曲线项，并通过现有 History 状态文件网关报告失败。"""
-    tree_path = vba_string(f"Curves\\{curve}\\{name}")
-    full_name = vba_string(f"{curve}:{name}")
-    escaped_source = vba_string(source)
-    return (
-        f'If Not SelectTreeItem("{tree_path}") Then',
-        f'    ReportError "{escaped_source}: Curve item was not created: {full_name}"',
-        "End If",
-    )
-
-
 def _normalize_temperature_unit(value: str) -> str:
     """把常见温度单位写法转换为 CST 接受的完整名称。"""
     aliases = {
@@ -614,7 +597,6 @@ def fdsolver_stimulation_vba(
 
     return CompatibleVBA(
         (
-            "FDSolver.Reset",
             (
                 "FDSolver.Stimulation "
                 f"{_argument(normalized_port)}, {_argument(normalized_mode)}"
@@ -705,6 +687,7 @@ def monitor_vba(
             )
         except (TypeError, ValueError) as exc:
             raise ValidationError("CST 2022 Farfield 监视器频率必须是数值") from exc
+        is_single_frequency_field = not is_broadband_farfield
     if resolved.is_2022 and is_single_frequency_field:
         try:
             same_frequency = math.isclose(float(start), float(end), rel_tol=1e-12, abs_tol=1e-12)
@@ -886,7 +869,6 @@ def rectangle_vba(
         f'    .Yrange "{vba_string(str(y_min))}", "{vba_string(str(y_max))}"',
         "    .Create",
         "End With",
-        *_curve_item_verification_vba(curve, name, source="Rectangle.Create"),
     ]
     return CompatibleVBA(tuple(lines), resolved.label)
 
@@ -933,7 +915,6 @@ def polygon3d_vba(
         [
             "    .Create",
             "End With",
-            *_curve_item_verification_vba(curve, name),
         ]
     )
     return CompatibleVBA(tuple(lines), resolved.label)
@@ -991,11 +972,6 @@ def analytical_curve_vba(
         [
             "    .Create",
             "End With",
-            *_curve_item_verification_vba(
-                curve,
-                name,
-                source="AnalyticalCurve.Create",
-            ),
         ]
     )
     return CompatibleVBA(tuple(lines), resolved.label)
