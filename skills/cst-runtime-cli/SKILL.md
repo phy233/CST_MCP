@@ -211,13 +211,17 @@ uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment
 - wait-simulation 在求解器停止后扫描等待期间新增的日志：发现 *** Error *** 块时返回
   solver_stopped_with_error + 原始文本；无错误时只返回 running=false 与 solver_completed=unknown，
   不声称求解成功。
-- run-experiment 在启动前预检背景与监视器（存在远场监视器且背景不兼容时返回
-  background_incompatible_with_farfield），停止后若日志含错误则快速失败并回传原始文本
-  （solver_reported_error）；无新 Run ID 时附 solver_log_tails。
-- 只读工具 get-background 返回背景 Type/ε/μ/电导率/空间与 farfield_compatible 判定；
-  define-background 现在总是显式写出 .Type 与 ε/μ（默认 Normal + 1.0/1.0，等价 Vacuum），
-  并在提交后回读实际生效值。CST 2022 的 Background.Reset 会把 Type 重置为默认 "pec"，
-  因此 set-background-with-space 也显式写 Normal，避免远场监视器报错。
+- run-experiment 在启动前预检监视器与背景：监视器通过手册文档化的 Monitor Get* 方法读取；
+  背景仅依赖运行时跟踪状态（存在远场监视器且跟踪状态不兼容时返回
+  background_incompatible_with_farfield；未跟踪背景时不阻断求解）。停止后若日志含错误
+  则快速失败并回传原始文本（solver_reported_error）；无新 Run ID 时附 solver_log_tails。
+- 只读工具 get-background 返回本会话运行时跟踪的背景状态（source=runtime_tracked）与
+  farfield_compatible 判定。CST 2022 手册的 Background 对象只定义写入方法、没有读取接口，
+  因此本工具绝不调用未文档化的属性读取；没有跟踪状态时返回 background_state_unknown，
+  需先调用 define-background。define-background 总是显式写出 .Type 与 ε/μ
+  （默认 Normal + 1.0/1.0，等价 Vacuum），返回 requested 值与基于请求值的
+  farfield_compatible 判定；set-background-with-space 也显式写 Normal，
+  避免 CST 2022 的 Background.Reset 把 Type 重置为默认 "pec"。
 
 日志扫描是诊断增强；权威成功信号仍是 run_solver 返回值与结果树中的新 Run ID。
 

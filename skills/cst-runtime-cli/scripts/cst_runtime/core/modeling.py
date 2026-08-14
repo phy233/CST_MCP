@@ -6,16 +6,15 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from . import buffer
+from . import buffer, gateway
 from .error_gateway import submit_vba_history
 from .errors import CSTRuntimeError, error_response, success_response
 from .compatibility import (
-    compatibility_metadata,
     detect_compatibility_profile,
     get_result_metadata,
     result_item_exists,
 )
-from .compatibility.execution import execute_text_query, vba_string
+from .compatibility.execution import vba_string
 from .compatibility.modeling import (
     CST_2022_SOLVER_TYPES,
     analytical_curve_vba,
@@ -528,127 +527,134 @@ def change_solver_type(project_path: str, solver_type: str) -> dict[str, Any]:
     )
 
 
+_BACKGROUND_MANUAL_NOTE = (
+    "CST 2022 手册（VBA Background Object）只定义写入方法"
+    "（Reset/Type/Epsilon/Mu/ElConductivity/XminSpace…ZmaxSpace/"
+    "ThermalType/ThermalConductivity/ApplyInAllDirections），"
+    "未提供任何读取接口；运行时只能返回本会话内 define-background "
+    "实际写入并跟踪的状态，不能读回 GUI 中的修改。"
+)
+
+
 def define_background(
     project_path: str,
     background_type: str = "Normal",
     epsilon: float = 1.0,
     mu: float = 1.0,
 ) -> dict[str, Any]:
-    """设置背景类型与材料参数，并在提交后回读实际生效值。
+    """按 CST 2022 手册写入背景类型与材料参数，并登记运行时跟踪状态。
 
-    CST 2022 的 Background 对象没有 Material 属性，背景材料由
-    Type/Epsilon/Mu/ElConductivity 决定；远场监视器要求 Normal 且
-    ε=1、μ=1（等价 Vacuum）。
+    手册的 Background 对象只提供写入方法，因此无法从 CST 读回实际生效值；
+    本工具在 execution=reported_ok 时把请求值登记为运行时跟踪状态（供
+    get-background 返回），并在响应中返回 requested 值与远场监视器兼容性
+    判定。远场监视器要求 Normal 且 ε=1、μ=1（等价 Vacuum）。
     """
+    normalized_project = _abs_project_path(project_path)
     normalized_type = str(background_type or "Normal").strip()
     if normalized_type.casefold() not in {"normal", "pec"}:
         return error_response(
             "validation_error",
             'background_type 只允许 "Normal" 或 "PEC"',
             phase="validation",
-            project_path=_abs_project_path(project_path),
+            project_path=normalized_project,
         )
+    epsilon_value = float(epsilon)
+    mu_value = float(mu)
     result = _submit_versioned_vba(
         project_path,
         "define background",
         background_vba,
         background_type=normalized_type,
-        epsilon=epsilon,
-        mu=mu,
+        epsilon=epsilon_value,
+        mu=mu_value,
     )
     if result.get("status") == "error":
         return result
-    readback = get_background(project_path)
-    if readback.get("status") == "success":
-        result["actual"] = readback
-        result["farfield_compatible"] = bool(readback.get("farfield_compatible"))
-        if not readback.get("farfield_compatible"):
-            result["warning"] = (
-                "当前背景不满足远场监视器要求（Farfield monitors are not "
-                "supported with pec, dispersive, lossy or surface impedance as "
-                "background material）；如需远场结果请恢复 Normal/Vacuum 背景"
-            )
+    requested = {
+        "background_type": normalized_type,
+        "epsilon": epsilon_value,
+        "mu": mu_value,
+    }
+    farfield_compatible = (
+        normalized_type.casefold() == "normal"
+        and epsilon_value == 1.0
+        and mu_value == 1.0
+    )
+    if result.get("execution") == "reported_ok":
+        gateway.mark_background_state(
+            normalized_project,
+            background_type=normalized_type,
+            epsilon=epsilon_value,
+            mu=mu_value,
+        )
+        result["background_state"] = "tracked"
     else:
-        result["readback"] = "unavailable"
+        # 批处理尚未执行，登记会在实际执行路径之外丢失，不提前声明已生效
+        result["background_state"] = "not_tracked"
+    result["requested"] = requested
+    result["farfield_compatible"] = farfield_compatible
+    result["farfield_basis"] = "requested"
+    result["readback"] = {
+        "status": "unsupported_by_manual",
+        "manual_note": _BACKGROUND_MANUAL_NOTE,
+    }
+    if not farfield_compatible:
+        result["warning"] = (
+            "请求的背景不满足远场监视器要求（Farfield monitors are not "
+            "supported with pec, dispersive, lossy or surface impedance as "
+            "background material）；如需远场结果请恢复 Normal/Vacuum 背景"
+        )
     return result
 
 
-_BACKGROUND_QUERY_FIELDS = (
-    ("Type", "background_type"),
-    ("Epsilon", "epsilon"),
-    ("Mu", "mu"),
-    ("ElConductivity", "el_conductivity"),
-    ("XminSpace", "xmin_space"),
-    ("XmaxSpace", "xmax_space"),
-    ("YminSpace", "ymin_space"),
-    ("YmaxSpace", "ymax_space"),
-    ("ZminSpace", "zmin_space"),
-    ("ZmaxSpace", "zmax_space"),
-    ("ApplyInAllDirections", "apply_in_all_directions"),
-)
-
-
 def get_background(project_path: str) -> dict[str, Any]:
-    """读取当前背景类型、材料参数与空间，并判定远场监视器兼容性。"""
+    """返回本会话运行时跟踪的背景状态。
+
+    CST 2022 手册未给 Background 对象定义任何读取接口（对比 Boundary
+    对象手册中的 GetXmin/GetXmax 等 Get* 方法），因此本工具绝不调用
+    未文档化的属性读取；唯一数据来源是本会话内 define-background 实际
+    写入后登记的状态。没有跟踪状态时返回 error（background_state_unknown），
+    调用方不应把该错误当作 CST 故障，而应使用 define-background 显式
+    设置背景，或依赖 run-experiment/wait-simulation 回传的求解日志错误。
+    """
     normalized_project = _abs_project_path(project_path)
-    project, status = attach_expected_project(normalized_project)
-    if project is None:
-        return status
-    lines = [
-        f'Print #cstRtQueryFile, "{key}=" & CStr(Background.{key})'
-        for key, _field in _BACKGROUND_QUERY_FIELDS
-    ]
+    tracked = gateway.get_background_state(normalized_project)
     try:
-        rows = execute_text_query(project, lines)
-    except Exception as exc:
-        return error_response(
-            "get_background_failed",
-            f"读取背景设置失败：{exc}",
-            project_path=normalized_project,
-            next_action="检查 CST Message Window 与即时 VBA 通道后重试",
-        )
-    values: dict[str, str] = {}
-    for row in rows:
-        if "=" not in row:
-            continue
-        key, _, value = row.partition("=")
-        values[key.strip()] = value.strip()
-
-    def _number(key: str) -> float | None:
-        raw = values.get(key)
-        if raw is None or raw == "":
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-
-    background_type = values.get("Type", "").strip()
-    epsilon = _number("Epsilon")
-    mu = _number("Mu")
-    farfield_compatible = (
-        background_type.casefold() == "normal"
-        and epsilon == 1.0
-        and mu == 1.0
-    )
-    try:
-        compatibility = compatibility_metadata(project)
+        compatibility = detect_compatibility_profile().metadata()
     except Exception:
         compatibility = {}
+    if tracked is None:
+        return error_response(
+            "background_state_unknown",
+            "未取得背景状态：CST 2022 手册未提供背景读取接口，"
+            "且本会话尚未通过 define-background 写入背景",
+            project_path=normalized_project,
+            manual_note=_BACKGROUND_MANUAL_NOTE,
+            next_action=(
+                "先调用 define-background 显式设置背景（响应返回 requested "
+                "值与 farfield_compatible）；或依赖 run-experiment/"
+                "wait-simulation 回传的求解日志错误判断远场-背景不兼容"
+            ),
+            compatibility=compatibility,
+        )
+    background_type = str(tracked["background_type"])
+    epsilon = float(tracked["epsilon"])
+    mu = float(tracked["mu"])
     return success_response(
         project_path=normalized_project,
-        background_type=background_type or None,
+        background_type=background_type,
         epsilon=epsilon,
         mu=mu,
-        el_conductivity=_number("ElConductivity"),
-        spaces={
-            field: _number(key)
-            for key, field in _BACKGROUND_QUERY_FIELDS[4:10]
-        },
-        apply_in_all_directions=(
-            values.get("ApplyInAllDirections", "").strip().casefold() == "true"
+        el_conductivity=None,
+        spaces=None,
+        apply_in_all_directions=None,
+        farfield_compatible=(
+            background_type.casefold() == "normal"
+            and epsilon == 1.0
+            and mu == 1.0
         ),
-        farfield_compatible=farfield_compatible,
+        source="runtime_tracked",
+        manual_note=_BACKGROUND_MANUAL_NOTE,
         compatibility=compatibility,
     )
 
@@ -963,7 +969,7 @@ def set_background_with_space(
     z_min_space: float = 50,
     z_max_space: float = 100,
 ) -> dict[str, Any]:
-    return _submit_versioned_vba(
+    result = _submit_versioned_vba(
         project_path,
         "Set Background Space",
         background_vba,
@@ -972,6 +978,16 @@ def set_background_with_space(
         background_type="Normal",
         spaces=(x_min_space, x_max_space, y_min_space, y_max_space, z_min_space, z_max_space),
     )
+    if result.get("status") != "error" and result.get("execution") == "reported_ok":
+        # 本工具写入的背景为 Normal + 默认 ε/μ（等价 Vacuum），
+        # 登记为运行时跟踪状态，供 get-background 返回。
+        gateway.mark_background_state(
+            project_path,
+            background_type="Normal",
+            epsilon=1.0,
+            mu=1.0,
+        )
+    return result
 
 
 def set_farfield_plot_cuts(project_path: str, lateral_cuts: list | None = None, polar_cuts: list | None = None) -> dict[str, Any]:

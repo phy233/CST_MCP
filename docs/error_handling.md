@@ -131,7 +131,8 @@ Proxy 启动、IPC、退出、响应 ID 和超时故障统一为 `transport_erro
 | `solver_run_failed` | `runtime` | 同步 run_solver 返回 False；附 cst_errors/cst_error_lines 原始日志 |
 | `solver_stopped_with_error` | `runtime` | wait-simulation 检测到等待期间新增日志含 *** Error *** 块 |
 | `solver_reported_error` | `runtime` | run-experiment 在求解停止后检测到 CST 原始报错 |
-| `background_incompatible_with_farfield` | `runtime` | 存在远场监视器且背景不是 Normal/ε=1/μ=1 时求解前预检失败 |
+| `background_incompatible_with_farfield` | `runtime` | 存在远场监视器且运行时跟踪背景不是 Normal/ε=1/μ=1 时求解前预检失败 |
+| `background_state_unknown` | `runtime` | get-background 无运行时跟踪状态；CST 2022 手册未提供背景读取接口 |
 
 ## 测试入口
 
@@ -161,5 +162,12 @@ python -m pytest -q -s --run-cst -m cst_integration
 - 自动回滚、Message Window 读取、完整事务和 History 修复不在本阶段范围内。
 - 求解器错误回传通过扫描工程 companion 目录 Result/*.log 的 *** Error *** 块实现（基线增量，
   避免历史错误误报）；这是诊断增强，权威成功信号仍是 run_solver 返回值与结果树中的新 Run ID。
+- CST 2022 手册（VBA Background Object）只定义写入方法（Reset/Type/Epsilon/Mu/ElConductivity/
+  空间/Thermal*/ApplyInAllDirections），没有读取接口；与 Boundary 手册中明确列出的
+  GetXmin/GetXmax 等 Get* 方法不同。因此 get-background 绝不调用未文档化的属性读取，
+  只返回本会话 define-background 实际写入后登记的运行时跟踪状态，未跟踪时返回
+  background_state_unknown；define-background 的 readback 固定为 unsupported_by_manual，
+  其 requested 值与 farfield_compatible（基于请求值）是权威输入。GUI 中的背景修改无法
+  被运行时读取，只能通过求解日志错误回传或重新 define-background 确认。
   CST 2022 的 Background.Reset 会把 Type 重置为默认 "pec"（远场监视器禁止），
   define-background/set-background-with-space 因此显式写出 Normal 与 ε/μ=1.0。

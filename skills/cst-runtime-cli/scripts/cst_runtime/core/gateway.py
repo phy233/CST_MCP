@@ -86,6 +86,7 @@ def _ensure_state(project_path: str) -> ProjectState:
 
 def _remove_state(project_path: str) -> None:
     _registry.pop(_normalize(project_path), None)
+    _background_states.pop(_normalize(project_path), None)
     _clear_dirty_marker(project_path)
 
 
@@ -154,6 +155,40 @@ def guard_cross_session(project_path: str, expected_type: str) -> dict[str, Any]
             next_action=f"cst-session-close --project-path {project_path} to release the {st.session_type} session first",
         )
     return None
+
+
+# ---------------------------------------------------------------------------
+# 背景状态跟踪
+# ---------------------------------------------------------------------------
+# CST 2022 手册（VBA Background Object）只定义写入方法，未提供任何读取接口；
+# 运行时只能跟踪本会话内由 define-background 实际写入的状态，作为
+# get-background 的唯一数据来源。
+_background_states: dict[str, dict[str, Any]] = {}
+
+
+def mark_background_state(
+    project_path: str,
+    *,
+    background_type: str,
+    epsilon: float,
+    mu: float,
+) -> None:
+    """登记本会话内实际写入（execution=reported_ok）的背景值。"""
+    _background_states[_normalize(project_path)] = {
+        "background_type": str(background_type),
+        "epsilon": float(epsilon),
+        "mu": float(mu),
+        "source": "runtime_tracked",
+    }
+
+
+def get_background_state(project_path: str) -> dict[str, Any] | None:
+    """返回本会话运行时跟踪的背景状态；从未写入过则返回 None。"""
+    return _background_states.get(_normalize(project_path))
+
+
+def clear_background_state(project_path: str) -> None:
+    _background_states.pop(_normalize(project_path), None)
 
 
 # ---------------------------------------------------------------------------

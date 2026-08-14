@@ -72,8 +72,10 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "设置背景类型与材料参数（Normal 时显式写出 ε/μ，默认 1.0/1.0 等价 Vacuum），"
-        "提交后回读实际生效值并给出 farfield_compatible 判定。"
+        "设置背景类型与材料参数（Normal 时显式写出 ε/μ，默认 1.0/1.0 等价 Vacuum）。"
+        "CST 2022 手册的 Background 对象无读取接口，因此返回 requested 值与 "
+        "farfield_compatible 判定（基于请求值），并把状态登记为运行时跟踪，供 "
+        "get-background 返回；无法读回 GUI 中的修改。"
     ),
     "handler": "tool_define_background",
     "json_schema": {
@@ -111,8 +113,10 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "read",
     "description": (
-        "读取当前背景类型、ε/μ/电导率与空间设置，并返回 farfield_compatible 判定"
-        "（远场监视器要求 Normal 且 ε=1、μ=1）。"
+        "返回本会话运行时跟踪的背景状态（source=runtime_tracked）与 farfield_compatible "
+        "判定（远场监视器要求 Normal 且 ε=1、μ=1）。CST 2022 手册的 Background 对象"
+        "未提供任何读取接口，本工具不调用未文档化的属性读取；没有跟踪状态时返回 "
+        "background_state_unknown，需先调用 define-background 显式设置背景。"
     ),
     "handler": "tool_get_background",
     "json_schema": {
