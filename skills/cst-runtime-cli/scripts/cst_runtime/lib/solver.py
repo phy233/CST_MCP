@@ -28,6 +28,10 @@ from ..core.simulation import set_frequency_range as _set_frequency_range
 from ..core.simulation import rebuild_structure as _rebuild_structure
 from ..core.simulation import delete_results as _delete_results
 from ..core.simulation import get_solver_type as _get_solver_type
+from ..core.solver_diagnostics import (
+    capture_solver_log_baseline as _capture_solver_log_baseline,
+    read_appended_solver_logs as _read_appended_solver_logs,
+)
 from ._facade import call_core
 from .contracts import OperationResult, error_result, success_result
 
@@ -70,27 +74,84 @@ def start_async(project_path: str) -> OperationResult:
     return call_core(_start_simulation_async, project_path)
 
 
-def wait(project_path: str, timeout: int = 3600, interval: int = 10) -> OperationResult:
-    """轮询等待异步仿真停止。
+def capture_log_baseline(project_path: str) -> OperationResult:
+    """捕获求解日志基线（各文件字节大小），供 wait 后做增量错误检测。"""
+    try:
+        return success_result(baseline=_capture_solver_log_baseline(project_path))
+    except Exception as exc:
+        return error_result("solver_log_baseline_failed", str(exc), project_path=project_path)
 
-    该函数只依据 ``is_solver_running()``。``running=False`` 表示求解器已不再运行，
-    不能像同步 ``start()`` 的 ``run_solver=True`` 那样证明求解成功。
+
+def read_solver_errors(
+    project_path: str,
+    baseline: dict[str, int] | None = None,
+    since: float | None = None,
+) -> OperationResult:
+    """读取本次求解新增的日志内容并提取 *** Error *** 块。"""
+    try:
+        return success_result(
+            **_read_appended_solver_logs(
+                project_path,
+                baseline=baseline,
+                since=since,
+            )
+        )
+    except Exception as exc:
+        return error_result("solver_log_read_failed", str(exc), project_path=project_path)
+
+
+def wait(project_path: str, timeout: int = 3600, interval: int = 10) -> OperationResult:
+    """轮询等待异步仿真停止，并检测等待期间新增的 CST 原始报错。
+
+    ``running=False`` 只表示求解器已不再运行，不能像同步 ``start()`` 的
+    ``run_solver=True`` 那样证明求解成功；本函数会检查等待期间新增的
+    Result 日志内容，发现 *** Error *** 块时返回 solver_stopped_with_error。
 
     Args:
         project_path: .cst 文件的绝对路径
         timeout: 最大等待时间 (秒)，默认 3600 秒 (1小时)
         interval: 轮询状态的间隔 (秒)，默认 10 秒
-
-    Returns:
-        如果仿真在超时前完成则返回 True，如果超时未完成则返回 False
     """
+    started_wall = time.time()
+    baseline_result = capture_log_baseline(project_path)
+    baseline = (
+        dict(baseline_result.get("baseline", {}))
+        if baseline_result.get("status") == "success"
+        else {}
+    )
     start_time = time.time()
     while time.time() - start_time < timeout:
         running_result = is_running(project_path)
         if running_result.get("status") == "error":
             return running_result
         if not running_result.get("running", False):
-            return success_result(project_path=project_path, running=False, completed=True)
+            diagnostics = read_solver_errors(
+                project_path,
+                baseline=baseline,
+                since=started_wall,
+            )
+            errors = (
+                list(diagnostics.get("errors", []))
+                if diagnostics.get("status") == "success"
+                else []
+            )
+            if errors:
+                return error_result(
+                    "solver_stopped_with_error",
+                    "求解器已停止并报告错误",
+                    project_path=project_path,
+                    running=False,
+                    cst_errors=errors,
+                    cst_error_lines=diagnostics.get("error_lines", []),
+                    log_files=diagnostics.get("log_files", []),
+                )
+            return success_result(
+                project_path=project_path,
+                running=False,
+                completed=True,
+                solver_completed="unknown",
+                cst_errors=[],
+            )
         time.sleep(interval)
     return error_result(
         "simulation_wait_timeout",

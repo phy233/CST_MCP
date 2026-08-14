@@ -128,6 +128,10 @@ Proxy 启动、IPC、退出、响应 ID 和超时故障统一为 `transport_erro
 | `vba_compile_or_host_error` | `execution` | 无完整状态，不能安全断言成功 |
 | `rollback_failed` | `rollback` | 后续版本尝试恢复但无法确认成功 |
 | `runtime_error` | `runtime` | 未归入上述阶段的运行时错误 |
+| `solver_run_failed` | `runtime` | 同步 run_solver 返回 False；附 cst_errors/cst_error_lines 原始日志 |
+| `solver_stopped_with_error` | `runtime` | wait-simulation 检测到等待期间新增日志含 *** Error *** 块 |
+| `solver_reported_error` | `runtime` | run-experiment 在求解停止后检测到 CST 原始报错 |
+| `background_incompatible_with_farfield` | `runtime` | 存在远场监视器且背景不是 Normal/ε=1/μ=1 时求解前预检失败 |
 
 ## 测试入口
 
@@ -155,3 +159,7 @@ python -m pytest -q -s --run-cst -m cst_integration
 - 状态文件是 CST 错误侧信道。用户需要查看当前工程状态时，应显式调用只读查询工具；
   文件导出和仿真结果工具仍检查其承诺的输出是否真实存在且非空。
 - 自动回滚、Message Window 读取、完整事务和 History 修复不在本阶段范围内。
+- 求解器错误回传通过扫描工程 companion 目录 Result/*.log 的 *** Error *** 块实现（基线增量，
+  避免历史错误误报）；这是诊断增强，权威成功信号仍是 run_solver 返回值与结果树中的新 Run ID。
+  CST 2022 的 Background.Reset 会把 Type 重置为默认 "pec"（远场监视器禁止），
+  define-background/set-background-with-space 因此显式写出 Normal 与 ε/μ=1.0。

@@ -329,14 +329,28 @@ def cone_vba(
 def background_vba(
     *,
     background_type: str | None = None,
+    epsilon: float | str | None = None,
+    mu: float | str | None = None,
+    el_conductivity: float | str | None = None,
     spaces: tuple[float, float, float, float, float, float] | None = None,
     profile: CompatibilityProfile | None = None,
 ) -> CompatibleVBA:
+    """生成背景设置 VBA。
+
+    CST 2022 文档确认 .Reset 后 Type 默认 "pec"，会直接触发远场监视器
+    不支持错误；因此这里总是显式输出 .Type，Normal 类型还显式写出
+    ε/μ/电导率（默认 1.0/1.0/0，即等价 Vacuum 的无损背景）。
+    """
     resolved = _profile(profile)
     reset = ".Reset" if resolved.is_2022 else ".ResetBackground"
-    lines = ["With Background", f"    {reset}"]
-    if background_type is not None:
-        lines.append(f'    .Type "{background_type}"')
+    normalized_type = str(background_type or "Normal").strip()
+    lines = ["With Background", f"    {reset}", f'    .Type "{normalized_type}"']
+    if normalized_type.casefold() == "normal":
+        lines.append(f'    .Epsilon "{epsilon if epsilon is not None else "1.0"}"')
+        lines.append(f'    .Mu "{mu if mu is not None else "1.0"}"')
+        lines.append(
+            f'    .ElConductivity "{el_conductivity if el_conductivity is not None else "0"}"'
+        )
     if spaces is not None:
         for name, value in zip(("Xmin", "Xmax", "Ymin", "Ymax", "Zmin", "Zmax"), spaces):
             lines.append(f'    .{name}Space "{value}"')

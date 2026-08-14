@@ -52,6 +52,7 @@ _PUBLIC_OPERATIONS = (
     "define_frequency_range",
     "change_solver_type",
     "define_background",
+    "get_background",
     "define_boundary",
     "define_mesh",
     "define_solver",

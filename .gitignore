@@ -6,5 +6,8 @@ test_*/
 *.log
 dist/
 .pytest-tmp/
+.pytest_cache/
+.pytest_basetemp/
+.pytest_bt_py/
 refs/
 tasks/

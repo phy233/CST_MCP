@@ -9,7 +9,12 @@ from typing import Any
 from . import buffer
 from .error_gateway import submit_vba_history
 from .errors import CSTRuntimeError, error_response, success_response
-from .compatibility import detect_compatibility_profile, get_result_metadata, result_item_exists
+from .compatibility import (
+    compatibility_metadata,
+    detect_compatibility_profile,
+    get_result_metadata,
+    result_item_exists,
+)
 from .compatibility.execution import execute_text_query, vba_string
 from .compatibility.modeling import (
     CST_2022_SOLVER_TYPES,
@@ -523,12 +528,128 @@ def change_solver_type(project_path: str, solver_type: str) -> dict[str, Any]:
     )
 
 
-def define_background(project_path: str, background_type: str = "Normal") -> dict[str, Any]:
-    return _submit_versioned_vba(
+def define_background(
+    project_path: str,
+    background_type: str = "Normal",
+    epsilon: float = 1.0,
+    mu: float = 1.0,
+) -> dict[str, Any]:
+    """设置背景类型与材料参数，并在提交后回读实际生效值。
+
+    CST 2022 的 Background 对象没有 Material 属性，背景材料由
+    Type/Epsilon/Mu/ElConductivity 决定；远场监视器要求 Normal 且
+    ε=1、μ=1（等价 Vacuum）。
+    """
+    normalized_type = str(background_type or "Normal").strip()
+    if normalized_type.casefold() not in {"normal", "pec"}:
+        return error_response(
+            "validation_error",
+            'background_type 只允许 "Normal" 或 "PEC"',
+            phase="validation",
+            project_path=_abs_project_path(project_path),
+        )
+    result = _submit_versioned_vba(
         project_path,
         "define background",
         background_vba,
-        background_type=background_type,
+        background_type=normalized_type,
+        epsilon=epsilon,
+        mu=mu,
+    )
+    if result.get("status") == "error":
+        return result
+    readback = get_background(project_path)
+    if readback.get("status") == "success":
+        result["actual"] = readback
+        result["farfield_compatible"] = bool(readback.get("farfield_compatible"))
+        if not readback.get("farfield_compatible"):
+            result["warning"] = (
+                "当前背景不满足远场监视器要求（Farfield monitors are not "
+                "supported with pec, dispersive, lossy or surface impedance as "
+                "background material）；如需远场结果请恢复 Normal/Vacuum 背景"
+            )
+    else:
+        result["readback"] = "unavailable"
+    return result
+
+
+_BACKGROUND_QUERY_FIELDS = (
+    ("Type", "background_type"),
+    ("Epsilon", "epsilon"),
+    ("Mu", "mu"),
+    ("ElConductivity", "el_conductivity"),
+    ("XminSpace", "xmin_space"),
+    ("XmaxSpace", "xmax_space"),
+    ("YminSpace", "ymin_space"),
+    ("YmaxSpace", "ymax_space"),
+    ("ZminSpace", "zmin_space"),
+    ("ZmaxSpace", "zmax_space"),
+    ("ApplyInAllDirections", "apply_in_all_directions"),
+)
+
+
+def get_background(project_path: str) -> dict[str, Any]:
+    """读取当前背景类型、材料参数与空间，并判定远场监视器兼容性。"""
+    normalized_project = _abs_project_path(project_path)
+    project, status = attach_expected_project(normalized_project)
+    if project is None:
+        return status
+    lines = [
+        f'Print #cstRtQueryFile, "{key}=" & CStr(Background.{key})'
+        for key, _field in _BACKGROUND_QUERY_FIELDS
+    ]
+    try:
+        rows = execute_text_query(project, lines)
+    except Exception as exc:
+        return error_response(
+            "get_background_failed",
+            f"读取背景设置失败：{exc}",
+            project_path=normalized_project,
+            next_action="检查 CST Message Window 与即时 VBA 通道后重试",
+        )
+    values: dict[str, str] = {}
+    for row in rows:
+        if "=" not in row:
+            continue
+        key, _, value = row.partition("=")
+        values[key.strip()] = value.strip()
+
+    def _number(key: str) -> float | None:
+        raw = values.get(key)
+        if raw is None or raw == "":
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    background_type = values.get("Type", "").strip()
+    epsilon = _number("Epsilon")
+    mu = _number("Mu")
+    farfield_compatible = (
+        background_type.casefold() == "normal"
+        and epsilon == 1.0
+        and mu == 1.0
+    )
+    try:
+        compatibility = compatibility_metadata(project)
+    except Exception:
+        compatibility = {}
+    return success_response(
+        project_path=normalized_project,
+        background_type=background_type or None,
+        epsilon=epsilon,
+        mu=mu,
+        el_conductivity=_number("ElConductivity"),
+        spaces={
+            field: _number(key)
+            for key, field in _BACKGROUND_QUERY_FIELDS[4:10]
+        },
+        apply_in_all_directions=(
+            values.get("ApplyInAllDirections", "").strip().casefold() == "true"
+        ),
+        farfield_compatible=farfield_compatible,
+        compatibility=compatibility,
     )
 
 
@@ -846,6 +967,9 @@ def set_background_with_space(
         project_path,
         "Set Background Space",
         background_vba,
+        # 显式 Normal：CST 2022 的 .Reset 会把 Type 重置为默认 "pec"，
+        # 只设空间而不设类型会留下远场监视器不兼容的背景。
+        background_type="Normal",
         spaces=(x_min_space, x_max_space, y_min_space, y_max_space, z_min_space, z_max_space),
     )
 

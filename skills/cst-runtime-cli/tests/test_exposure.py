@@ -51,6 +51,18 @@ def test_agent_allowlist_covers_complete_project_workflow() -> None:
     assert public["cross-process-sweep"].risk == "long-running"
 
 
+def test_solver_error_propagation_tools_are_agent_exposed() -> None:
+    """start-simulation 与 get-background 必须对 MCP Agent 可见。"""
+    from cst_runtime.api.exposure import AGENT_TOOLS
+    from cst_runtime.api.registry import tools
+
+    public = tools()
+    assert "get-background" in AGENT_TOOLS
+    assert "start-simulation" in AGENT_TOOLS
+    assert public["get-background"].risk == "read"
+    assert public["start-simulation"].risk == "long-running"
+
+
 def test_raw_history_and_project_deletion_are_not_registered_tools() -> None:
     from cst_runtime.api.registry import tools
 

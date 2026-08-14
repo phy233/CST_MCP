@@ -71,7 +71,10 @@ TOOL_DEFS = {
 "define-background": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Set the background type (Normal or PEC).",
+    "description": (
+        "设置背景类型与材料参数（Normal 时显式写出 ε/μ，默认 1.0/1.0 等价 Vacuum），"
+        "提交后回读实际生效值并给出 farfield_compatible 判定。"
+    ),
     "handler": "tool_define_background",
     "json_schema": {
         "type": "object",
@@ -82,9 +85,42 @@ TOOL_DEFS = {
             },
             "background_type": {
                 "type": "string",
+                "enum": ["Normal", "PEC"],
                 "default": "Normal",
-                "description": "Background material type.",
+                "description": "背景类型：Normal（非导电背景）或 PEC（理想电导体）。",
                 "examples": ["Normal", "PEC"]
+            },
+            "epsilon": {
+                "type": "number",
+                "default": 1.0,
+                "description": "背景相对介电常数；远场监视器要求 1.0（Vacuum）。",
+                "examples": [1.0]
+            },
+            "mu": {
+                "type": "number",
+                "default": 1.0,
+                "description": "背景相对磁导率；远场监视器要求 1.0（Vacuum）。",
+                "examples": [1.0]
+            }
+        },
+        "required": ["project_path"]
+    },
+},
+
+"get-background": {
+    "category": "project_ops",
+    "risk": "read",
+    "description": (
+        "读取当前背景类型、ε/μ/电导率与空间设置，并返回 farfield_compatible 判定"
+        "（远场监视器要求 Normal 且 ε=1、μ=1）。"
+    ),
+    "handler": "tool_get_background",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {
+                "type": "string",
+                "examples": ["C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"]
             }
         },
         "required": ["project_path"]
@@ -723,6 +759,31 @@ TOOL_DEFS = {
     },
 },
 
+"start-simulation": {
+    "category": "project_ops",
+    "risk": "long-running",
+    "description": (
+        "同步运行 CST 求解器并阻塞到结束；仅当 CST 的 run_solver 返回 True 才报告 "
+        "success。失败时返回 solver_run_failed，并附本次求解写入 Result 日志的 "
+        "CST 原始报错文本。"
+    ),
+    "handler": "tool_start_simulation",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {
+                "type": "string",
+                "examples": [
+                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
+                ]
+            }
+        },
+        "required": [
+            "project_path"
+        ]
+    },
+},
+
 "start-simulation-async": {
     "category": "project_ops",
     "risk": "long-running",
@@ -970,6 +1031,7 @@ TOOL_DEFS = {
 
 from ..lib import project as _po
 from ..lib import simulation as _sim
+from ..lib import solver as _sv
 from ..lib import modeling as _md
 from ..lib import identity as _pi
 from ._arguments import project_path_from_args
@@ -1064,6 +1126,13 @@ def tool_wait_simulation(args: dict) -> dict:
     timeout_seconds = float(args.get("timeout_seconds", 3600.0))
     poll_interval_seconds = float(args.get("poll_interval_seconds", 10.0))
     started = time.monotonic()
+    started_wall = time.time()
+    baseline_result = _sv.capture_log_baseline(project_path)
+    log_baseline = (
+        dict(baseline_result.get("baseline", {}))
+        if baseline_result.get("status") == "success"
+        else {}
+    )
     polls = 0
     last_result = None
     while True:
@@ -1072,10 +1141,36 @@ def tool_wait_simulation(args: dict) -> dict:
         if last_result.get("status") == "error":
             return {**last_result, "polls": polls, "waited_seconds": round(time.monotonic() - started, 3)}
         if not bool(last_result.get("running")):
+            diagnostics = _sv.read_solver_errors(
+                project_path,
+                baseline=log_baseline,
+                since=started_wall,
+            )
+            errors = (
+                list(diagnostics.get("errors", []))
+                if diagnostics.get("status") == "success"
+                else []
+            )
+            if errors:
+                return {
+                    "status": "error",
+                    "error_type": "solver_stopped_with_error",
+                    "message": "求解器已停止并报告错误",
+                    "project_path": last_result.get("project_path", project_path),
+                    "running": False,
+                    "cst_errors": errors,
+                    "cst_error_lines": diagnostics.get("error_lines", []),
+                    "log_files": diagnostics.get("log_files", []),
+                    "polls": polls,
+                    "waited_seconds": round(time.monotonic() - started, 3),
+                    "runtime_module": "cst_runtime._tools.project_ops",
+                }
             return {
                 "status": "success",
                 "project_path": last_result.get("project_path", project_path),
                 "running": False,
+                "solver_completed": "unknown",
+                "cst_errors": [],
                 "polls": polls,
                 "waited_seconds": round(time.monotonic() - started, 3),
                 "runtime_module": "cst_runtime._tools.project_ops",
@@ -1165,6 +1260,10 @@ def tool_change_solver_type(args: dict) -> dict:
 
 def tool_define_background(args: dict) -> dict:
     return _md.define_background(**args)
+
+
+def tool_get_background(args: dict) -> dict:
+    return _md.get_background(project_path_from_args(args))
 
 
 def tool_define_boundary(args: dict) -> dict:

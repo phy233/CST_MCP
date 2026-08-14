@@ -180,6 +180,7 @@ uv run python -m cst_runtime install-cst-libraries --cst-path "D:\CST\AMD64\pyth
 inspect-project           cst-session-open → list-parameters → list-entities → cst-session-close
 prepare-experiment        cst-session-open → change-parameter → list-parameters → save-project → cst-session-close
 run-experiment            cst-session-open → start-simulation-async → wait-simulation → cst-session-close → open-results-project → export-run-results → cst-session-close
+                          （启动前预检背景与远场监视器；停止后回传 Result 日志中的 CST 原始报错）
 ```
 
 **原则：管道覆盖 80% 标准路径，原子工具覆盖 20% 非标场景。** agent 可在管道之间插入自定义步骤，或完全退回到原子工具。
@@ -201,6 +202,25 @@ uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment
 
 `list-open-projects` 和 `get-run-context` 需要 CST Design Environment 正在运行。无 DE 时必然返回 error，不是工具问题。
 
+## 求解器错误回传与背景预检
+
+求解器错误此前只出现在 CST GUI 的 Message Window，MCP 无法拿到原始文本。现在：
+
+- 同步工具 start-simulation 仅在 run_solver 返回 True 时报告 success；失败返回 solver_run_failed，
+  并附本次求解写入工程 companion 目录 Result/*.log 的 CST 原始报错块（cst_errors/cst_error_lines）。
+- wait-simulation 在求解器停止后扫描等待期间新增的日志：发现 *** Error *** 块时返回
+  solver_stopped_with_error + 原始文本；无错误时只返回 running=false 与 solver_completed=unknown，
+  不声称求解成功。
+- run-experiment 在启动前预检背景与监视器（存在远场监视器且背景不兼容时返回
+  background_incompatible_with_farfield），停止后若日志含错误则快速失败并回传原始文本
+  （solver_reported_error）；无新 Run ID 时附 solver_log_tails。
+- 只读工具 get-background 返回背景 Type/ε/μ/电导率/空间与 farfield_compatible 判定；
+  define-background 现在总是显式写出 .Type 与 ε/μ（默认 Normal + 1.0/1.0，等价 Vacuum），
+  并在提交后回读实际生效值。CST 2022 的 Background.Reset 会把 Type 重置为默认 "pec"，
+  因此 set-background-with-space 也显式写 Normal，避免远场监视器报错。
+
+日志扫描是诊断增强；权威成功信号仍是 run_solver 返回值与结果树中的新 Run ID。
+
 ## 管道参考表
 
 所有管道定义通过 `describe-pipeline --pipeline <name>` 查询，以下是 9 条管道的概览：
@@ -209,7 +229,7 @@ uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment
 |------|-------------|------|
 | **inspect-project** | `cst-session-open` → `list-parameters` → `list-entities` → `inspect-farfield-monitors` → `cst-session-close` | 了解工程（参数+实体+远场） |
 | **prepare-experiment** | `cst-session-open` → `change-parameter` → `list-parameters` → `save-project` → `cst-session-close` | 改参→保存 |
-| **run-experiment** | `cst-session-open` → `start-simulation-async` → `wait-simulation` → `cst-session-close` → `export-run-results` | 仿真→导出 |
+| **run-experiment** | `cst-session-open` → `start-simulation-async` → `wait-simulation` → `cst-session-close` → `export-run-results` | 仿真→导出（启动前背景/远场预检，停止后回传 CST 原始报错） |
 | **async-simulation-refresh-results** | `start-simulation-async` → `wait-simulation` → `cst-session-close` → `list-run-ids` → `get-1d-result` | 异步仿真→读结果 |
 | **project-unlock-check** | `infer-run-dir` → `wait-project-unlocked` | 检查锁文件 |
 | **cst-session-management-gate** | 6 步完整 session 生命周期验证 | session 管理 |

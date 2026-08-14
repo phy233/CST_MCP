@@ -19,12 +19,17 @@ from .compatibility.modeling import (
     solver_acceleration_vba,
 )
 from .identity import attach_expected_project
+from .solver_diagnostics import capture_solver_log_baseline, read_appended_solver_logs
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _single_vba, _submit_versioned_vba
 
 
 def start_simulation(project_path: str) -> dict[str, Any]:
-    """同步运行求解器；仅当 CST 的 run_solver 返回 True 时报告成功。"""
+    """同步运行求解器；仅当 CST 的 run_solver 返回 True 时报告成功。
+
+    求解失败时附上本次求解新增到 Result/*.log 的 CST 原始报错块，
+    让调用方无需查看 GUI Message Window 即可拿到错误文本。
+    """
     normalized_project = _abs_project_path(project_path)
     rejected = gateway.guard_before_simulation(normalized_project)
     if rejected:
@@ -33,21 +38,9 @@ def start_simulation(project_path: str) -> dict[str, Any]:
     project, status = attach_expected_project(normalized_project)
     if project is None:
         return status
+    baseline = capture_solver_log_baseline(normalized_project)
     try:
         solver_successful = bool(project.modeler.run_solver())
-        if not solver_successful:
-            return error_response(
-                "solver_run_failed",
-                "CST 求解器已经结束，但 run_solver 返回 False，求解未成功完成",
-                project_path=normalized_project,
-                runtime_module="cst_runtime.simulation",
-            )
-        return {
-            "status": "success",
-            "project_path": normalized_project,
-            "message": "simulation completed",
-            "runtime_module": "cst_runtime.simulation",
-        }
     except Exception as exc:
         return error_response(
             "start_simulation_failed",
@@ -55,6 +48,30 @@ def start_simulation(project_path: str) -> dict[str, Any]:
             project_path=normalized_project,
             runtime_module="cst_runtime.simulation",
         )
+    diagnostics = read_appended_solver_logs(normalized_project, baseline=baseline)
+    if not solver_successful:
+        errors = list(diagnostics.get("errors") or [])
+        first_error = errors[0] if errors else ""
+        message = "CST 求解器已经结束，但 run_solver 返回 False，求解未成功完成"
+        if first_error:
+            message += f"；CST 原始报错：{first_error}"
+        return error_response(
+            "solver_run_failed",
+            message,
+            project_path=normalized_project,
+            cst_errors=diagnostics.get("errors", []),
+            cst_error_lines=diagnostics.get("error_lines", []),
+            log_files=diagnostics.get("log_files", []),
+            runtime_module="cst_runtime.simulation",
+        )
+    return {
+        "status": "success",
+        "project_path": normalized_project,
+        "message": "simulation completed",
+        "solver_success": True,
+        "cst_errors": diagnostics.get("errors", []),
+        "runtime_module": "cst_runtime.simulation",
+    }
 
 
 def start_simulation_async(project_path: str) -> dict[str, Any]:
