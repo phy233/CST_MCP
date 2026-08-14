@@ -39,6 +39,15 @@ from .utils import serialize_value as _serialize_value
 from .compatibility import get_result2d_item, get_colormap_items, list_all_result_items
 
 
+def _is_missing_tree_path(exc: Exception) -> bool:
+    """判断 CST 结果 API 异常是否来自“结果树节点不存在”。
+
+    CST 对不存在的节点报 "tree path not found"；用 "tree path" 作为
+    结构锚点，避免与“工程文件不存在”等其他 not found 错误混淆。
+    """
+    return "tree path" in str(exc).casefold()
+
+
 def _load_project(project_path: str, allow_interactive: bool = False, subproject_treepath: str = "") -> tuple[Any, dict[str, Any]]:
     import cst.results
 
@@ -222,6 +231,16 @@ def list_run_ids(
     except UnsupportedFeatureError as exc:
         return exc.to_response(project_path=str(project_path), treepath=treepath)
     except Exception as exc:
+        if _is_missing_tree_path(exc):
+            # 首次仿真的正常初始状态：节点尚不存在。用稳定错误码区分，
+            # 调用方据此把预检当作空基线而不是通道故障。
+            return error_response(
+                "result_node_not_found",
+                f"结果树节点不存在：{treepath or '<全量 Run ID 查询>'}",
+                project_path=str(project_path),
+                treepath=treepath or None,
+                runtime_module="cst_runtime.results",
+            )
         return error_response(
             "list_run_ids_failed",
             str(exc),
@@ -285,6 +304,14 @@ def get_1d_result(
             export_path=export_path,
         )
     except Exception as exc:
+        if _is_missing_tree_path(exc):
+            return error_response(
+                "result_node_not_found",
+                f"结果树节点不存在：{treepath}",
+                project_path=str(project_path),
+                treepath=treepath,
+                runtime_module="cst_runtime.results",
+            )
         return error_response(
             "get_1d_result_failed",
             str(exc),
@@ -664,6 +691,14 @@ def get_2d_result(
     except UnsupportedFeatureError as exc:
         return exc.to_response(project_path=str(project_path), treepath=treepath)
     except Exception as exc:
+        if _is_missing_tree_path(exc):
+            return error_response(
+                "result_node_not_found",
+                f"结果树节点不存在：{treepath}",
+                project_path=str(project_path),
+                treepath=treepath,
+                runtime_module="cst_runtime.results",
+            )
         return error_response(
             "get_2d_result_failed",
             str(exc),

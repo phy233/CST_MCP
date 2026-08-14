@@ -22,9 +22,10 @@ _ERROR_OPEN = re.compile(r"\*{3}\s*Error\s*\*{3}")
 _SEPARATOR = re.compile(r"^\s*-{10,}\s*$")
 # 新日志条目的时间戳行（23/Aug/2026 12:34:56 开头）
 _TIMESTAMP = re.compile(r"^\d{2}/[A-Za-z]{3}/\d{4}\s")
-# 非块式错误写法的行级兜底标记（排除 "0 errors occurred" 等良性文本）
+# 非块式错误写法的行级兜底标记（排除 "0 errors occurred" 等良性文本；
+# 不使用宽泛的 "not supported"，避免把普通警告误报为求解错误）
 _ERROR_LINE_MARKERS = re.compile(
-    r"(?i)((?<!\d)[1-9]\d*\s+errors?\s+occurred|not supported|"
+    r"(?i)((?<!\d)[1-9]\d*\s+errors?\s+occurred|"
     r"\bsolver\b[^\n]{0,80}\bfailed\b|\baborted\b)"
 )
 

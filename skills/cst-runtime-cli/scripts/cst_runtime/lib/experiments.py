@@ -42,12 +42,17 @@ def _result_node_absent(
     文档化的树枚举通道（get_tree_items/0D/1D）复核该节点确实不在结果
     树中；两者一致才视为合法空基线，其余错误仍按预检/后检失败处理。
     """
-    if failure.get("error_type") != "list_run_ids_failed":
-        return False
+    error_type = failure.get("error_type")
     message = str(failure.get("message", "")).casefold()
-    # CST 明确报目标节点缺失是必要条件；其余报错（工程未打开、文件不存在
-    # 等）即使树枚举恰好为空也不能当作“节点尚未创建”的正常初始状态。
-    if "tree path not found" not in message:
+    if error_type == "result_node_not_found":
+        # core 层已给出“节点不存在”的稳定错误码
+        pass
+    elif error_type == "list_run_ids_failed" and "tree path not found" in message:
+        # 旧版 CST 文案兜底：仍按节点缺失处理，但必须经树枚举复核
+        pass
+    else:
+        # 其余报错（工程未打开、文件不存在等）即使树枚举恰好为空
+        # 也不能当作“节点尚未创建”的正常初始状态。
         return False
     enumerated = list_result_items(
         project_path=project_path,
@@ -189,12 +194,14 @@ def run_experiment(
         close_project(project_path, save=False)
         return error_result("pipeline_sim_start_failed", started.get("message", "启动仿真失败"))
 
+    # 轮询间隔下限钳制，避免 poll_interval_seconds=0 时 CPU 空转自旋
+    effective_poll = max(float(poll_interval_seconds), 0.1)
     polls = 0
     waited = 0.0
     while True:
-        time.sleep(poll_interval_seconds)
+        time.sleep(effective_poll)
         polls += 1
-        waited += poll_interval_seconds
+        waited += effective_poll
         running = is_simulation_running(project_path)
         if running.get("status") == "error":
             close_project(project_path, save=False)

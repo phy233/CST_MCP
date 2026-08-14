@@ -902,21 +902,21 @@ TOOL_DEFS = {
             },
             "timeout_seconds": {
                 "type": "number",
+                "default": 3600,
                 "examples": [
                     3600
                 ]
             },
             "poll_interval_seconds": {
                 "type": "number",
+                "default": 10,
                 "examples": [
                     10
                 ]
             }
         },
         "required": [
-            "project_path",
-            "timeout_seconds",
-            "poll_interval_seconds"
+            "project_path"
         ]
     },
 },
@@ -1131,6 +1131,8 @@ def tool_wait_simulation(args: dict) -> dict:
     poll_interval_seconds = float(args.get("poll_interval_seconds", 10.0))
     started = time.monotonic()
     started_wall = time.time()
+    # 轮询间隔下限钳制，避免 poll_interval_seconds=0 时 CPU 空转自旋
+    effective_poll = max(float(poll_interval_seconds), 0.1)
     # 优先使用 start-simulation-async 落盘的启动时基线，避免求解器在
     # start 与 wait 两次调用之间报错退出时漏检；无 marker 再回退现取基线。
     baseline_result = _sv.load_log_baseline(project_path)
@@ -1200,7 +1202,7 @@ def tool_wait_simulation(args: dict) -> dict:
                 "last_result": last_result,
                 "runtime_module": "cst_runtime._tools.project_ops",
             }
-        time.sleep(poll_interval_seconds)
+        time.sleep(effective_poll)
 
 
 def tool_stop_simulation(args: dict) -> dict:

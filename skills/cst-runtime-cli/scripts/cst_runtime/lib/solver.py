@@ -138,6 +138,7 @@ def wait(project_path: str, timeout: int = 3600, interval: int = 10) -> Operatio
             else {}
         )
     start_time = time.time()
+    effective_interval = max(float(interval), 0.1)
     while time.time() - start_time < timeout:
         running_result = is_running(project_path)
         if running_result.get("status") == "error":
@@ -170,7 +171,7 @@ def wait(project_path: str, timeout: int = 3600, interval: int = 10) -> Operatio
                 solver_completed="unknown",
                 cst_errors=[],
             )
-        time.sleep(interval)
+        time.sleep(effective_interval)
     return error_result(
         "simulation_wait_timeout",
         "等待仿真完成超时",
