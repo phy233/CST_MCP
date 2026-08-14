@@ -260,7 +260,7 @@ def test_list_sparameter_results_returns_real_paths_and_run_ids(mocker):
     result_module.get_run_ids.side_effect = lambda path, **_kwargs: (
         [0] if path.endswith("S1,1") else [3, 7]
     )
-    mocker.patch(
+    load_project = mocker.patch(
         "cst_runtime.core.results._load_project",
         return_value=(mocker.MagicMock(), {"fullpath": "C:/work/model.cst"}),
     )
@@ -278,6 +278,10 @@ def test_list_sparameter_results_returns_real_paths_and_run_ids(mocker):
         "SZmin(1),Zmax(1)",
     ]
     assert result["results"][1]["run_ids"] == [3, 7]
+    load_project.assert_called_once_with(
+        "C:/work/model.cst",
+        allow_interactive=True,
+    )
 
 
 def test_get_2d_result_export_not_json(mocker):

@@ -296,9 +296,13 @@ def get_1d_result(
 
 
 def list_sparameter_results(project_path: str) -> dict[str, Any]:
-    """枚举真实 S 参数节点及各节点可用 Run ID。"""
+    """枚举真实 S 参数节点及各节点可用 Run ID。
+
+    该便捷查询允许目标工程同时在 CST 中打开。CST Results API 在这种模式下
+    读取工程最近保存到磁盘的状态，未保存的交互修改不属于结果读取契约。
+    """
     try:
-        project, context = _load_project(project_path, allow_interactive=False)
+        project, context = _load_project(project_path, allow_interactive=True)
         result_module, normalized_module = _get_result_module(project, "3d")
         prefix = "1D Results\\S-Parameters\\"
         items = [

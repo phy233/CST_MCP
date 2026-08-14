@@ -6,7 +6,10 @@ TOOL_DEFS = {
 "list-sparameter-results": {
     "category": "results",
     "risk": "read",
-    "description": "枚举实际 ResultTree 中的普通端口与 Floquet S 参数节点及可用 Run ID。",
+    "description": (
+        "枚举实际 ResultTree 中的普通端口与 Floquet S 参数节点及可用 Run ID。"
+        "允许工程同时在 CST 中打开；此时读取最近保存到磁盘的工程状态。"
+    ),
     "handler": "tool_list_sparameter_results",
     "json_schema": {
         "type": "object",
