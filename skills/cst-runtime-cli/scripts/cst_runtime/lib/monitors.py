@@ -39,7 +39,7 @@ def define_farfield(
     subvolume: tuple[float, float, float, float, float, float] | None = None,
     enable_nearfield: bool = True,
 ) -> None:
-    """为每个频率创建并验证独立远场监视器。
+    """为每个频率创建独立远场监视器；VBA 提交且未报错即视为已实施。
 
     Args:
         project_path: Path to .cst file

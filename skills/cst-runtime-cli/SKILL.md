@@ -194,7 +194,7 @@ uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment
 
 每个管道**自管理 session 生命周期**——自行创建 DE、打开/关闭工程：
 
-- `prepare-experiment`: open → 改参(可批量) → 确认 → save → close(kill DE)
+- `prepare-experiment`: open → 改参(可批量，CST 未报错即视为已实施) → save → close(kill DE)
 - `run-experiment`: open → start_solver → poll → close → open(results) → 导出 → close
 - `inspect-project`: open → 读参数+实体 → close
 

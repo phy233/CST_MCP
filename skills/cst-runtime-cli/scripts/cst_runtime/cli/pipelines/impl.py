@@ -315,7 +315,7 @@ def pipeline_prepare_experiment(
     values: list[float] | None = None,
 ) -> dict[str, Any]:
     from ...lib.session import open_project as sm_open, close_project as sm_close
-    from ...lib.project import change_parameter, list_parameters, save_project
+    from ...lib.project import change_parameter, save_project
 
     resolved_names: list[str] = []
     resolved_values: list[float] = []
@@ -343,6 +343,8 @@ def pipeline_prepare_experiment(
     if open_result.get("status") != "success":
         return open_result
 
+    # 信任 CST：参数写入 VBA 已提交且未报错即视为已实施，不再做写后
+    # 枚举回读验证（额外查询不改变成功结论，只会增加 CST 往返与历史噪声）。
     all_changed: dict[str, Any] = {}
     for n, v in zip(resolved_names, resolved_values):
         cr = change_parameter(project_path=project_path, name=n, value=v)
@@ -355,15 +357,6 @@ def pipeline_prepare_experiment(
                 change_result=cr,
             )
         all_changed.update(cr.get("changed", {}))
-
-    confirm_result = list_parameters(project_path)
-    if confirm_result.get("status") != "success":
-        sm_close(project_path, save=False)
-        return error_response(
-            "pipeline_confirm_params_failed",
-            confirm_result.get("message", "failed to confirm parameter change"),
-            step="prepare-experiment:confirm",
-        )
 
     save_result = save_project(project_path)
     if save_result.get("status") != "success":
@@ -382,7 +375,6 @@ def pipeline_prepare_experiment(
         "changed": all_changed,
         "param_names": resolved_names,
         "param_values": resolved_values,
-        "parameters": confirm_result.get("parameters", {}),
     }
 
 

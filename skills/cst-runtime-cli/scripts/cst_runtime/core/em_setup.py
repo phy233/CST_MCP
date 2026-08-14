@@ -1,4 +1,4 @@
-"""超表面电磁设置、读回验收与监视器查询。"""
+"""超表面电磁设置与监视器查询（查询均为独立只读工具，不承担写后验收）。"""
 from __future__ import annotations
 
 import math
@@ -163,7 +163,7 @@ def define_unit_cell_boundary(
     phi: Any = 0.0,
     direction: str = "outward",
 ) -> dict[str, Any]:
-    """校验边界配对后提交，并在实际执行后读取 CST 状态比较。"""
+    """校验边界配对后提交；信任 CST，VBA 提交且未报错即视为已实施。"""
     normalized_project = abs_project_path(project_path)
     try:
         # 这段校验必须位于 builder 和任何 CST 调用之前。
