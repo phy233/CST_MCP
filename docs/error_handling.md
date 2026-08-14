@@ -162,6 +162,11 @@ python -m pytest -q -s --run-cst -m cst_integration
 - 自动回滚、Message Window 读取、完整事务和 History 修复不在本阶段范围内。
 - 求解器错误回传通过扫描工程 companion 目录 Result/*.log 的 *** Error *** 块实现（基线增量，
   避免历史错误误报）；这是诊断增强，权威成功信号仍是 run_solver 返回值与结果树中的新 Run ID。
+- run-experiment 的 Run ID 基线预检把“结果节点尚不存在”（CST 报 tree path not found，
+  并经 0D/1D 树枚举复核）视为空基线——这是首次仿真的正常初始状态，不返回
+  completion_result_preflight_failed；只有非缺失类错误（工程未打开、文件不存在等）
+  或“CST 报缺失但树枚举显示节点存在”的矛盾情形才按预检失败处理。求解后节点仍缺失
+  时归入 solver_did_not_create_new_run，并附 result_nodes_still_missing。
 - CST 2022 手册（VBA Background Object）只定义写入方法（Reset/Type/Epsilon/Mu/ElConductivity/
   空间/Thermal*/ApplyInAllDirections），没有读取接口；与 Boundary 手册中明确列出的
   GetXmin/GetXmax 等 Get* 方法不同。因此 get-background 绝不调用未文档化的属性读取，

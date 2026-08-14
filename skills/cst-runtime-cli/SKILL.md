@@ -213,8 +213,10 @@ uv run python -m cst_runtime describe-pipeline --pipeline prepare-experiment
   不声称求解成功。
 - run-experiment 在启动前预检监视器与背景：监视器通过手册文档化的 Monitor Get* 方法读取；
   背景仅依赖运行时跟踪状态（存在远场监视器且跟踪状态不兼容时返回
-  background_incompatible_with_farfield；未跟踪背景时不阻断求解）。停止后若日志含错误
-  则快速失败并回传原始文本（solver_reported_error）；无新 Run ID 时附 solver_log_tails。
+  background_incompatible_with_farfield；未跟踪背景时不阻断求解）。求解前结果节点
+  尚不存在视为空基线（首次仿真的正常初始状态，支持由本次仿真生成 S1,1 等节点）。
+  停止后若日志含错误则快速失败并回传原始文本（solver_reported_error）；无新 Run ID 时
+  附 solver_log_tails 与 result_nodes_still_missing。
 - 只读工具 get-background 返回本会话运行时跟踪的背景状态（source=runtime_tracked）与
   farfield_compatible 判定。CST 2022 手册的 Background 对象只定义写入方法、没有读取接口，
   因此本工具绝不调用未文档化的属性读取；没有跟踪状态时返回 background_state_unknown，

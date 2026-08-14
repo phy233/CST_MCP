@@ -29,6 +29,11 @@ def _patch_experiment_pipeline(monkeypatch, *, background=None, monitors=None,
         )
     monkeypatch.setattr(
         experiments,
+        "list_result_items",
+        lambda project_path=None, **kwargs: success_result(items=[]),
+    )
+    monkeypatch.setattr(
+        experiments,
         "capture_solver_log_baseline",
         lambda _path: {},
     )
@@ -284,3 +289,137 @@ def test_run_experiment_returns_cst_solver_error_text(monkeypatch) -> None:
     assert "Farfield monitors are not supported" in result["cst_errors"][0]
     assert result["log_files"] == ["Model.log"]
     assert close_calls == [True]
+
+# ---------------------------------------------------------------------------
+# 首次仿真：结果节点尚不存在是正常初始状态，预检应视为空基线而不是失败
+# ---------------------------------------------------------------------------
+
+MISSING_NODE_ERROR = error_result(
+    "list_run_ids_failed",
+    "tree path not found: '1D Results\\S-Parameters\\S1,1'",
+)
+
+
+def test_run_experiment_first_run_missing_node_is_empty_baseline(monkeypatch) -> None:
+    from cst_runtime.lib import experiments
+
+    _patch_experiment_pipeline(monkeypatch)
+
+    calls = []
+
+    def run_ids(_project_path, result_path):
+        calls.append(result_path)
+        # 预检：节点不存在；后检：本次求解生成了 Run 1
+        if len(calls) == 1:
+            return MISSING_NODE_ERROR
+        return success_result(run_ids=[1])
+
+    monkeypatch.setattr(experiments, "_run_ids_for_path", run_ids)
+    monkeypatch.setattr(
+        experiments,
+        "list_result_items",
+        lambda project_path=None, **kwargs: success_result(items=[]),
+    )
+    monkeypatch.setattr(
+        experiments,
+        "inspect_1d_result",
+        lambda _project, path, run_id, *, allow_interactive=False: success_result(
+            result_path=path,
+            run_id=run_id,
+            point_count=3,
+            xdata=[2.4, 2.5, 2.6],
+            ydata=[{"real": 0.1, "imag": 0.0}] * 3,
+        ),
+    )
+
+    result = experiments.run_experiment(
+        "model.cst",
+        ["1D Results\\S-Parameters\\S1,1"],
+        timeout_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert result["status"] == "success"
+    assert result["run_id"] == 1
+    assert result["solver_completed"] is True
+    assert result["missing_result_nodes"] == ["1D Results\\S-Parameters\\S1,1"]
+
+
+def test_run_experiment_preflight_other_errors_still_fail(monkeypatch) -> None:
+    from cst_runtime.lib import experiments
+
+    _patch_experiment_pipeline(monkeypatch)
+    monkeypatch.setattr(
+        experiments,
+        "_run_ids_for_path",
+        lambda *_args: error_result("list_run_ids_failed", "project file not found"),
+    )
+
+    result = experiments.run_experiment(
+        "model.cst",
+        ["1D Results\\S-Parameters\\S1,1"],
+        timeout_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "completion_result_preflight_failed"
+
+
+def test_run_experiment_preflight_present_but_list_failed_still_fails(monkeypatch) -> None:
+    from cst_runtime.lib import experiments
+
+    _patch_experiment_pipeline(monkeypatch)
+    monkeypatch.setattr(
+        experiments,
+        "_run_ids_for_path",
+        lambda *_args: MISSING_NODE_ERROR,
+    )
+    # CST 报缺失，但树枚举显示节点存在 → 矛盾，按真实失败处理
+    monkeypatch.setattr(
+        experiments,
+        "list_result_items",
+        lambda project_path=None, **kwargs: success_result(
+            items=["1D Results\\S-Parameters\\S1,1"]
+        ),
+    )
+
+    result = experiments.run_experiment(
+        "model.cst",
+        ["1D Results\\S-Parameters\\S1,1"],
+        timeout_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "completion_result_preflight_failed"
+
+
+def test_run_experiment_postflight_still_missing_reports_no_new_run(monkeypatch) -> None:
+    from cst_runtime.lib import experiments
+
+    _patch_experiment_pipeline(monkeypatch)
+    monkeypatch.setattr(
+        experiments,
+        "_run_ids_for_path",
+        lambda *_args: MISSING_NODE_ERROR,
+    )
+    monkeypatch.setattr(
+        experiments,
+        "list_result_items",
+        lambda project_path=None, **kwargs: success_result(items=[]),
+    )
+
+    result = experiments.run_experiment(
+        "model.cst",
+        ["1D Results\\S-Parameters\\S1,1"],
+        timeout_seconds=1,
+        poll_interval_seconds=0,
+    )
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "solver_did_not_create_new_run"
+    assert result["result_nodes_still_missing"] == [
+        "1D Results\\S-Parameters\\S1,1"
+    ]
+

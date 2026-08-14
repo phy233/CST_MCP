@@ -8,7 +8,7 @@ from typing import Any
 from ._pipeline_support import safe_log_db
 from .contracts import OperationResult, error_result, success_result
 from .modeling import get_background
-from .results import inspect_1d_result, list_run_ids
+from .results import inspect_1d_result, list_result_items, list_run_ids
 from .session import close_project, open_project
 from .simulation import is_simulation_running, start_simulation_async
 from ..core.em_setup import list_monitors
@@ -28,6 +28,42 @@ def _run_ids_for_path(project_path: str, result_path: str) -> OperationResult:
         skip_nonparametric=False,
         max_mesh_passes_only=True,
     )
+
+
+def _result_node_absent(
+    project_path: str,
+    result_path: str,
+    failure: dict[str, Any],
+) -> bool:
+    """判断 list_run_ids 失败是否因为结果节点尚不存在。
+
+    首次仿真前 S1,1 等节点当然不存在，这是正常初始状态而不是预检失败：
+    CST 结果 API 对不存在的节点报 "tree path not found"，再通过手册
+    文档化的树枚举通道（get_tree_items/0D/1D）复核该节点确实不在结果
+    树中；两者一致才视为合法空基线，其余错误仍按预检/后检失败处理。
+    """
+    if failure.get("error_type") != "list_run_ids_failed":
+        return False
+    message = str(failure.get("message", "")).casefold()
+    # CST 明确报目标节点缺失是必要条件；其余报错（工程未打开、文件不存在
+    # 等）即使树枚举恰好为空也不能当作“节点尚未创建”的正常初始状态。
+    if "tree path not found" not in message:
+        return False
+    enumerated = list_result_items(
+        project_path=project_path,
+        module_type="3d",
+        filter_type="0D/1D",
+        allow_interactive=True,
+    )
+    if enumerated.get("status") == "success":
+        items = {
+            str(item).strip().casefold()
+            for item in enumerated.get("items", [])
+        }
+        # 树枚举显示节点存在则与 CST 报错矛盾，按真实失败处理
+        return result_path.strip().casefold() not in items
+    # 树枚举通道不可用时，仍信任 CST 对目标节点给出的明确缺失报错文本
+    return True
 
 
 def _metric_from_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -78,15 +114,21 @@ def run_experiment(
         )
 
     before: dict[str, set[int]] = {}
+    missing_result_nodes: list[str] = []
     for result_path in normalized_paths:
         listed = _run_ids_for_path(project_path, result_path)
         if listed.get("status") == "error":
-            return error_result(
-                "completion_result_preflight_failed",
-                "求解前无法读取指定结果节点的 Run ID",
-                result_path=result_path,
-                detail=dict(listed),
-            )
+            if not _result_node_absent(project_path, result_path, dict(listed)):
+                return error_result(
+                    "completion_result_preflight_failed",
+                    "求解前无法读取指定结果节点的 Run ID",
+                    result_path=result_path,
+                    detail=dict(listed),
+                )
+            # 首次仿真的正常初始状态：节点尚不存在，基线为空集
+            before[result_path] = set()
+            missing_result_nodes.append(result_path)
+            continue
         before[result_path] = {int(item) for item in listed.get("run_ids", [])}
 
     opened = open_project(project_path)
@@ -186,15 +228,21 @@ def run_experiment(
         return error_result("pipeline_close_failed", closed.get("message", "关闭工程失败"))
 
     new_run_sets: list[set[int]] = []
+    result_nodes_still_missing: list[str] = []
     for result_path in normalized_paths:
         listed = _run_ids_for_path(project_path, result_path)
         if listed.get("status") == "error":
-            return error_result(
-                "completion_result_postflight_failed",
-                "求解后无法读取指定结果节点的 Run ID",
-                result_path=result_path,
-                detail=dict(listed),
-            )
+            if not _result_node_absent(project_path, result_path, dict(listed)):
+                return error_result(
+                    "completion_result_postflight_failed",
+                    "求解后无法读取指定结果节点的 Run ID",
+                    result_path=result_path,
+                    detail=dict(listed),
+                )
+            # 求解后节点仍不存在 → 视为本次没有生成该节点的新 Run ID
+            new_run_sets.append(set())
+            result_nodes_still_missing.append(result_path)
+            continue
         after = {int(item) for item in listed.get("run_ids", [])}
         new_run_sets.append(after - before[result_path])
     common_new_runs = set.intersection(*new_run_sets) if new_run_sets else set()
@@ -203,6 +251,8 @@ def run_experiment(
             "solver_did_not_create_new_run",
             "指定完成节点没有共同的新 Run ID，不能确认本次求解完成",
             completion_result_paths=normalized_paths,
+            missing_result_nodes=missing_result_nodes,
+            result_nodes_still_missing=result_nodes_still_missing,
             solver_log_tails=diagnostics.get("log_tails", {}),
             preflight_warnings=preflight_warnings,
         )
@@ -241,6 +291,7 @@ def run_experiment(
         result_metrics=metrics,
         s11_metric=s11_metric,
         solver_completed=True,
+        missing_result_nodes=missing_result_nodes,
         cst_errors=diagnostics.get("errors", []),
         preflight_warnings=preflight_warnings,
     )
