@@ -35,7 +35,13 @@ from cst_runtime.core.gateway import (
 )
 
 
-class GatewayRegistryTests:
+@pytest.fixture
+def project_path(tmp_path: Path) -> str:
+    """可写的临时工程路径；T2/T3 会在其伴随目录落盘标记文件。"""
+    return str(tmp_path / "test.cst")
+
+
+class TestGatewayRegistry:
     def test_normalize_windows_path(self):
         result = _normalize("C:\\foo\\bar\\test.cst")
         assert result == "C:/foo/bar/test.cst"
@@ -58,7 +64,7 @@ class GatewayRegistryTests:
         assert _get_state("C:/test.cst") is None
 
 
-class GatewayT10ProjectPathTests:
+class TestGatewayT10ProjectPath:
     def test_empty_path_raises(self):
         with pytest.raises(ValueError):
             validate_project_path("")
@@ -76,67 +82,68 @@ class GatewayT10ProjectPathTests:
         assert result == "C:/path/working.cst"
 
 
-class GatewayT2ParamsDirtyTests:
-    def test_mark_params_dirty_sets_stage(self):
-        _ensure_state("C:/test.cst")
-        mark_params_dirty("C:/test.cst")
-        st = _get_state("C:/test.cst")
+class TestGatewayT2ParamsDirty:
+    def test_mark_params_dirty_sets_stage(self, project_path):
+        _ensure_state(project_path)
+        mark_params_dirty(project_path)
+        st = _get_state(project_path)
         assert st.stage == "params_dirty"
 
-    def test_guard_refuses_dirty_simulation(self):
-        _ensure_state("C:/test.cst")
-        mark_params_dirty("C:/test.cst")
-        err = guard_before_simulation("C:/test.cst")
+    def test_guard_refuses_dirty_simulation(self, project_path):
+        _ensure_state(project_path)
+        mark_params_dirty(project_path)
+        err = guard_before_simulation(project_path)
         assert err is not None
         assert err["status"] == "error"
         assert err["error_type"] == "params_not_rebuilt"
         assert err["trap"] == "T2_params_not_rebuilt"
 
-    def test_guard_allows_clean_simulation(self):
-        _ensure_state("C:/test.cst")
-        err = guard_before_simulation("C:/test.cst")
+    def test_guard_allows_clean_simulation(self, project_path):
+        _ensure_state(project_path)
+        err = guard_before_simulation(project_path)
         assert err is None
 
     def test_guard_allows_unknown_project(self):
         err = guard_before_simulation("C:/unknown.cst")
         assert err is None
 
-    def test_clear_dirty_resets_stage(self):
-        _ensure_state("C:/test.cst")
-        mark_params_dirty("C:/test.cst")
-        clear_dirty("C:/test.cst")
-        st = _get_state("C:/test.cst")
+    def test_clear_dirty_resets_stage(self, project_path):
+        _ensure_state(project_path)
+        mark_params_dirty(project_path)
+        clear_dirty(project_path)
+        st = _get_state(project_path)
         assert st.stage == "clean"
 
 
-class GatewayT3FarfieldSaveTests:
-    def test_mark_farfield_exported(self):
-        _ensure_state("C:/test.cst")
-        mark_farfield_exported("C:/test.cst")
-        st = _get_state("C:/test.cst")
+class TestGatewayT3FarfieldSave:
+    def test_mark_farfield_exported(self, project_path):
+        _ensure_state(project_path)
+        mark_farfield_exported(project_path)
+        st = _get_state(project_path)
         assert st.stage == "farfield_exported"
 
-    def test_guard_forces_save_false_after_export(self):
-        _ensure_state("C:/test.cst")
-        mark_farfield_exported("C:/test.cst")
-        effective, msg = guard_before_close_save("C:/test.cst", True)
+    def test_guard_forces_save_false_after_export(self, project_path):
+        _ensure_state(project_path)
+        mark_farfield_exported(project_path)
+        effective, msg = guard_before_close_save(project_path, True)
         assert not effective
         assert "T3" in msg
 
-    def test_guard_allows_save_false(self):
-        _ensure_state("C:/test.cst")
-        mark_farfield_exported("C:/test.cst")
-        effective, msg = guard_before_close_save("C:/test.cst", False)
+    def test_guard_allows_save_false(self, project_path):
+        _ensure_state(project_path)
+        mark_farfield_exported(project_path)
+        effective, msg = guard_before_close_save(project_path, False)
         assert not effective
         assert msg == ""
 
-    def test_guard_allows_save_on_clean_project(self):
-        _ensure_state("C:/test.cst")
-        effective, msg = guard_before_close_save("C:/test.cst", True)
+    def test_guard_allows_save_on_clean_project(self, project_path):
+        _ensure_state(project_path)
+        effective, msg = guard_before_close_save(project_path, True)
         assert effective
         assert msg == ""
 
-class GatewayT4ComplexDBTests:
+
+class TestGatewayT4ComplexDB:
     def test_compute_db_basic(self):
         ydata = [{"real": 0.3, "imag": 0.0}, {"real": 0.1, "imag": 0.0}]
         db = compute_db(ydata)
@@ -155,7 +162,7 @@ class GatewayT4ComplexDBTests:
         assert abs(db[0] - 20 * math.log10(1e-30)) < 1e-9
 
 
-class GatewayT5T12SessionIsolationTests:
+class TestGatewayT5T12SessionIsolation:
     def test_guard_allows_matching_session(self):
         _ensure_state("C:/test.cst")
         on_session_open("C:/test.cst", "modeler")
@@ -175,7 +182,7 @@ class GatewayT5T12SessionIsolationTests:
         assert err is None
 
 
-class GatewayT8FarfieldQuantityTests:
+class TestGatewayT8FarfieldQuantity:
     def test_realized_gain_passes(self):
         assert guard_farfield_quantity("Realized Gain") is None
 
@@ -203,7 +210,8 @@ class GatewayT8FarfieldQuantityTests:
         assert err is not None
         assert err["error_type"] == "unsupported_quantity"
 
-class GatewayT13ChangeParamAnnotationTests:
+
+class TestGatewayT13ChangeParamAnnotation:
     def test_success_gets_warning(self):
         result = annotate_change_param_result({"status": "success", "changed": {"g": 23.0}})
         assert "warning" in result
@@ -214,7 +222,7 @@ class GatewayT13ChangeParamAnnotationTests:
         assert "warning" not in result
 
 
-class GatewayT14FilterTypeTests:
+class TestGatewayT14FilterType:
     def test_0d1d_passes(self):
         assert guard_result_filter("0D/1D") is None
 

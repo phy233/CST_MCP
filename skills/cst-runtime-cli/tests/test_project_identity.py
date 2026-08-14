@@ -38,7 +38,7 @@ class FakeDesignEnvironment:
         return self.active_project is not None
 
 
-class ProjectIdentityTests:
+class TestProjectIdentity:
     def test_multi_project_attach_activates_expected_project(self, mocker) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -46,7 +46,7 @@ class ProjectIdentityTests:
             second = str(root / "second.cst")
             de = FakeDesignEnvironment(paths=[first, second], active_path=first)
 
-            mocker.patch("cst_runtime.project_identity._connected_design_environments", return_value=([(de, 1234)], ""))
+            mocker.patch("cst_runtime.core.identity._connected_design_environments", return_value=([(de, 1234)], ""))
             project, status = project_identity.attach_expected_project(second)
 
             assert project is de.projects[second]
@@ -62,7 +62,7 @@ class ProjectIdentityTests:
             missing = str(root / "missing.cst")
             de = FakeDesignEnvironment(paths=[first, second], active_path=first)
 
-            mocker.patch("cst_runtime.project_identity._connected_design_environments", return_value=([(de, 1234)], ""))
+            mocker.patch("cst_runtime.core.identity._connected_design_environments", return_value=([(de, 1234)], ""))
             project, status = project_identity.attach_expected_project(missing)
 
             assert project is None
@@ -79,7 +79,7 @@ class ProjectIdentityTests:
             de_b = FakeDesignEnvironment(paths=[second], active_path=second)
 
             mocker.patch(
-                "cst_runtime.project_identity._connected_design_environments",
+                "cst_runtime.core.identity._connected_design_environments",
                 return_value=([(de_a, 1111), (de_b, 2222)], ""),
             )
             project, status = project_identity.attach_expected_project(second)

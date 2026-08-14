@@ -34,7 +34,7 @@ def get_all_pipeline_names() -> list[str]:
     return [p["name"] for p in payload["pipelines"]]
 
 
-class CliContractOutputFormatTests:
+class TestCliContractOutputFormat:
     """All CLI output follows the JSON contract."""
 
     def test_all_outputs_have_required_fields(self) -> None:
@@ -58,7 +58,7 @@ class CliContractOutputFormatTests:
             json.loads(r.stdout)
 
 
-class CliContractSessionTests:
+class TestCliContractSession:
     """Session/process management tools (no CST needed for dry-runs)."""
 
     def test_session_inspect_no_project_safe_json(self) -> None:

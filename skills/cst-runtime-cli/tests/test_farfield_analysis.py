@@ -25,7 +25,7 @@ from cst_runtime.analysis.farfield.flatness import (
 )
 
 
-class ParserExtractFrequencyTest:
+class TestParserExtractFrequency:
     """_extract_farfield_frequency_ghz"""
 
     def test_standard_format(self) -> None:
@@ -44,7 +44,7 @@ class ParserExtractFrequencyTest:
         assert _extract_farfield_frequency_ghz("farfield (x=28.5) [1]") is None
 
 
-class ParserInspectAsciiGridTest:
+class TestParserInspectAsciiGrid:
     """inspect_farfield_ascii_grid"""
 
     def _make_txt(self, tmpdir: str, lines: list[str]) -> str:
@@ -89,7 +89,7 @@ class ParserInspectAsciiGridTest:
             assert result["phi_count"] == 2
 
 
-class ParserParseCutPayloadTest:
+class TestParserParseCutPayload:
     """_parse_farfield_cut_payload"""
 
     def _make_json(self, tmpdir: str, data: dict, name: str = "cut.json") -> str:
@@ -153,7 +153,7 @@ class ParserParseCutPayloadTest:
                 _parse_farfield_cut_payload(path)
 
 
-class FlatnessBuildAngleValuesTest:
+class TestFlatnessBuildAngleValues:
     """_build_farfield_angle_values"""
 
     def test_basic_range(self) -> None:
@@ -195,7 +195,7 @@ class FlatnessBuildAngleValuesTest:
         assert result == [0]
 
 
-class FlatnessCalculateNeighborhoodTest:
+class TestFlatnessCalculateNeighborhood:
     """calculate_farfield_neighborhood_flatness"""
 
     def _make_cut_json(self, tmpdir: str, angles: list[float], gains: list[float], name: str) -> str:
