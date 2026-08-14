@@ -80,6 +80,8 @@ def _normalize_farfield_plot_mode(plot_mode: str) -> dict[str, str]:
 
 
 def _gui_open_project(fullpath: str, session_type: str = "modeler") -> dict[str, Any]:
+    # session_type 参数保留以兼容历史调用方；会话登记统一由
+    # core.session.open_project 完成，本函数不再重复登记。
     normalized = abs_project_path(fullpath)
     if not os.path.isfile(normalized):
         return error_response("project_file_missing", "project file does not exist", project_path=normalized)
@@ -109,7 +111,8 @@ def _gui_open_project(fullpath: str, session_type: str = "modeler") -> dict[str,
                 project_path=normalized,
                 runtime_module="cst_runtime.farfield",
             )
-        gateway.on_session_open(normalized, session_type)
+        # core.session.open_project 已登记过 on_session_open，这里不再重复，
+        # 否则会覆盖本会话内刚标记的 params_dirty/farfield_exported 状态。
         return {
             "status": "success",
             "project": project,

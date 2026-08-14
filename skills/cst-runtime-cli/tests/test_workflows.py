@@ -100,7 +100,7 @@ def test_sweep_records_sparameter_export(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         sweep,
         "get_sparam",
-        lambda project_path, result_path: {
+        lambda project_path, result_path, **kwargs: {
             "ydata": [{"frequency": 8.0, "real": 1.0, "imag": 0.0}]
         },
     )

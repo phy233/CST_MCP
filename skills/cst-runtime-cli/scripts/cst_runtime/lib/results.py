@@ -154,8 +154,13 @@ def get_sparam(
     treepath: str,
     run_id: int = 0,
     export_path: str = "",
+    allow_interactive: bool = True,
 ) -> OperationResult:
-    """Read S-parameter data (offline, no CST needed).
+    """Read S-parameter data.
+
+    allow_interactive=True 时允许工程同时在 CST 中打开，读取最近保存到
+    磁盘的工程状态（与 list-sparameter-results 契约一致）；求解器已把
+    新 Run 写入磁盘，因此扫描流程可在模型会话保持打开时读取最新结果。
 
     Args:
         project_path: Path to .cst file
@@ -174,13 +179,20 @@ def get_sparam(
         treepath,
         run_id=run_id,
         export_path=export_path,
+        allow_interactive=allow_interactive,
     )
     if result.get("status") == "error":
         return result
     return _hydrate_sparam_export(result)
 
 
-def get_sparam_at_freq(project_path: str, treepath: str, freq_ghz: float, run_id: int = 0) -> OperationResult:
+def get_sparam_at_freq(
+    project_path: str,
+    treepath: str,
+    freq_ghz: float,
+    run_id: int = 0,
+    allow_interactive: bool = True,
+) -> OperationResult:
     """Get S-parameter at specific frequency (linear interpolation).
 
     Args:
@@ -195,7 +207,12 @@ def get_sparam_at_freq(project_path: str, treepath: str, freq_ghz: float, run_id
     Raises:
         RuntimeError: If result cannot be read or interpolated
     """
-    result = get_sparam(project_path, treepath, run_id=run_id)
+    result = get_sparam(
+        project_path,
+        treepath,
+        run_id=run_id,
+        allow_interactive=allow_interactive,
+    )
     if result.get("status") == "error":
         return result
     if isinstance(freq_ghz, bool):

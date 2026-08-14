@@ -55,15 +55,22 @@ def _result_node_absent(
         filter_type="0D/1D",
         allow_interactive=True,
     )
-    if enumerated.get("status") == "success":
-        items = {
-            str(item).strip().casefold()
-            for item in enumerated.get("items", [])
-        }
-        # 树枚举显示节点存在则与 CST 报错矛盾，按真实失败处理
-        return result_path.strip().casefold() not in items
-    # 树枚举通道不可用时，仍信任 CST 对目标节点给出的明确缺失报错文本
-    return True
+    if enumerated.get("status") != "success":
+        # 树枚举通道故障时保守处理：不能证明节点缺失，按真实预检失败上报，
+        # 避免把读取通道损坏误判为“首次仿真的正常空基线”。
+        return False
+    normalized_target = _normalize_result_path(result_path)
+    items = {
+        _normalize_result_path(str(item))
+        for item in enumerated.get("items", [])
+    }
+    # 树枚举显示节点存在则与 CST 报错矛盾，按真实失败处理
+    return normalized_target not in items
+
+
+def _normalize_result_path(path: str) -> str:
+    """统一结果树路径格式：反斜杠分隔、去首尾空白、大小写不敏感。"""
+    return str(path).strip().replace("/", "\\").casefold()
 
 
 def _metric_from_result(result: dict[str, Any]) -> dict[str, Any]:

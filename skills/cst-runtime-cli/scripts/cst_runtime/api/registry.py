@@ -74,35 +74,53 @@ def _array_build(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sweep_run(args: dict[str, Any]) -> dict[str, Any]:
+    """quick-sweep：本工具自行管理会话（open → sweep → close）。"""
+    from ..lib.session import close_project, open_project
     from ..workflows.sweep import quick_sweep
 
-    return quick_sweep(
-        project_path=args["project_path"],
-        parameters=args["parameters"],
-        target_freq_ghz=float(args["target_freq_ghz"]),
-        result_path=args.get(
-            "result_path",
-            "1D Results\\S-Parameters\\S1,1",
-        ),
-        output_dir=args.get("output_dir"),
-        continue_on_error=bool(args.get("continue_on_error", True)),
-        restore_parameters=bool(args.get("restore_parameters", True)),
-    ).to_dict()
+    project_path = args["project_path"]
+    opened = open_project(project_path)
+    if opened.get("status") == "error":
+        return dict(opened)
+    try:
+        return quick_sweep(
+            project_path=project_path,
+            parameters=args["parameters"],
+            target_freq_ghz=float(args["target_freq_ghz"]),
+            result_path=args.get(
+                "result_path",
+                "1D Results\\S-Parameters\\S1,1",
+            ),
+            output_dir=args.get("output_dir"),
+            continue_on_error=bool(args.get("continue_on_error", True)),
+            restore_parameters=bool(args.get("restore_parameters", True)),
+        ).to_dict()
+    finally:
+        close_project(project_path, save=False)
 
 
 def _cross_process_run(args: dict[str, Any]) -> dict[str, Any]:
+    """cross-process-sweep：本工具自行管理会话（open → sweep → close）。"""
+    from ..lib.session import close_project, open_project
     from ..workflows.cross_process import quick_cross_sweep
 
-    result = quick_cross_sweep(
-        project_path=args["project_path"],
-        lx_range=args["lx_range"],
-        ly1_range=args["ly1_range"],
-        target_freq_ghz=float(args["target_freq_ghz"]),
-        output_dir=args.get("output_dir"),
-        continue_on_error=bool(args.get("continue_on_error", True)),
-        restore_parameters=bool(args.get("restore_parameters", True)),
-    )
-    return result.to_dict()
+    project_path = args["project_path"]
+    opened = open_project(project_path)
+    if opened.get("status") == "error":
+        return dict(opened)
+    try:
+        result = quick_cross_sweep(
+            project_path=project_path,
+            lx_range=args["lx_range"],
+            ly1_range=args["ly1_range"],
+            target_freq_ghz=float(args["target_freq_ghz"]),
+            output_dir=args.get("output_dir"),
+            continue_on_error=bool(args.get("continue_on_error", True)),
+            restore_parameters=bool(args.get("restore_parameters", True)),
+        )
+        return result.to_dict()
+    finally:
+        close_project(project_path, save=False)
 
 
 def _workflow_operations() -> dict[str, OperationSpec]:

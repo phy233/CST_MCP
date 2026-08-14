@@ -206,7 +206,7 @@ def close_project(
         a_status = {"status": "success", "attachment_source": "runtime_cache"}
     de_pid: int | None = a_status.get("design_environment_pid")
     _OPENED_PROJECTS.pop(normalized_project, None)
-    gateway.on_session_close(normalized_project)
+    had_dirty_state = gateway.has_dirty_state(normalized_project)
     close_result: dict[str, Any] = a_status if project is None else {"status": "success"}
     if project is not None:
         try:
@@ -240,13 +240,25 @@ def close_project(
                 close_result["t3_warning"] = t3_warning
                 close_result["requested_save"] = True
                 close_result["trap"] = "T3_farfield_export_save_forced_false"
+            # 保存与关闭成功后才清理运行时状态（含 T2 脏标记）；
+            # 若提前清理，save=False/保存失败会静默丢失未落盘的参数改动。
+            gateway.on_session_close(normalized_project)
+            if not effective_save and had_dirty_state:
+                close_result["warning"] = (
+                    "close 时 save=False 且存在未保存的参数改动；"
+                    "改动未落盘，重新打开将使用磁盘上的旧参数"
+                )
         except Exception as exc:
+            # 关闭失败：保留注册表与脏标记，便于上层重试与诊断
             close_result = error_response(
                 "close_project_failed",
                 str(exc),
                 project_path=normalized_project,
                 runtime_module="cst_runtime.core.session",
             )
+    else:
+        # 无法取得工程对象时仍要清理本 Worker 的运行时注册状态
+        gateway.on_session_close(normalized_project)
 
     unlock_result: dict[str, Any] | None = None
     if close_result.get("status") != "error" and wait_unlock:

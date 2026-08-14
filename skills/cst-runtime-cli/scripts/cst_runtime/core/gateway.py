@@ -137,6 +137,12 @@ def on_session_close(project_path: str) -> None:
 
 
 def guard_cross_session(project_path: str, expected_type: str) -> dict[str, Any] | None:
+    """跨会话隔离守卫（T5）。
+
+    注意：当前架构下结果读取走独立的 cst.results.ProjectFile 通道，
+    不占用 modeler COM 会话，因此本守卫尚未接入生产调用路径；保留以
+    备未来引入第二种 COM 会话类型（如显式 results 会话）时启用。
+    """
     st = _get_state(project_path)
     if st is None:
         return None
@@ -194,6 +200,12 @@ def clear_background_state(project_path: str) -> None:
 # ---------------------------------------------------------------------------
 # T2 — params-dirty guard
 # ---------------------------------------------------------------------------
+def has_dirty_state(project_path: str) -> bool:
+    """当前工程是否存在未落盘的参数改动（params_dirty 阶段）。"""
+    state = _get_state(project_path)
+    return state is not None and state.stage == "params_dirty"
+
+
 def mark_params_dirty(project_path: str, param_name: str = "", param_value: Any = None) -> None:
     st = _ensure_state(project_path)
     st.stage = "params_dirty"
@@ -373,12 +385,8 @@ def guard_result_filter(filter_type: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # T15 — save-before-close order
 # ---------------------------------------------------------------------------
-def guard_close_save_order(project: Any, save: bool) -> None:
-    if save and project is not None:
-        try:
-            project.save()
-        except Exception:
-            pass
+# 已弃用：close_project 内联实现了先 save 后 close，且保存异常必须浮出
+# （吞掉保存异常会静默丢失参数改动），不再通过本守卫间接调用。
 
 
 # ---------------------------------------------------------------------------

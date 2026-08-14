@@ -245,6 +245,7 @@ class ParameterSweep:
                     self.project_path,
                     result_path,
                     self.target_freq_ghz,
+                    allow_interactive=True,
                 )
                 _raise_if_error(sparam_result)
                 results["sparams"][result_path] = sparam_result
@@ -275,7 +276,11 @@ class ParameterSweep:
             params: Parameter values
             sparam_dir: Directory for exports
         """
-        sparam_data = get_sparam(self.project_path, result_path)
+        sparam_data = get_sparam(
+            self.project_path,
+            result_path,
+            allow_interactive=True,
+        )
         _raise_if_error(sparam_data)
         ydata = sparam_data.get("ydata")
         if not isinstance(ydata, list) or not ydata:
