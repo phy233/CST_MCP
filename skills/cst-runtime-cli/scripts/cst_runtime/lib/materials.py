@@ -56,7 +56,7 @@ def define(
     .Reset
     .Name "{name}"
     .Epsilon {epsilon}
-    .Mue {mue}
+    .Mu {mue}
     .TanD {tan_d}
     .TanDFreq {tan_d_freq}
     .TanDGiven "True"

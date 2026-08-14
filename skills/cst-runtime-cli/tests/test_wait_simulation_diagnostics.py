@@ -23,6 +23,7 @@ def _fake_wait_context(monkeypatch, running_values, diagnostics):
         project_module,
         "_sv",
         SimpleNamespace(
+            load_log_baseline=lambda path: success_result(baseline={}),
             capture_log_baseline=lambda path: success_result(baseline={"x": 0}),
             read_solver_errors=lambda path, baseline=None, since=None: diagnostics,
         ),
@@ -160,7 +161,8 @@ def test_lib_solver_wait_unknown_completion_without_errors(monkeypatch):
 
     assert result["status"] == "success"
     assert result["solver_completed"] == "unknown"
-    assert result["completed"] is True
+    # 仅凭 running=False 不能证明求解成功，completed 不得为 True
+    assert result["completed"] is None
 
 
 def test_lib_solver_wait_timeout(monkeypatch):

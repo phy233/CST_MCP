@@ -30,6 +30,7 @@ from ..core.simulation import delete_results as _delete_results
 from ..core.simulation import get_solver_type as _get_solver_type
 from ..core.solver_diagnostics import (
     capture_solver_log_baseline as _capture_solver_log_baseline,
+    load_solver_log_baseline as _load_solver_log_baseline,
     read_appended_solver_logs as _read_appended_solver_logs,
 )
 from ._facade import call_core
@@ -82,6 +83,19 @@ def capture_log_baseline(project_path: str) -> OperationResult:
         return error_result("solver_log_baseline_failed", str(exc), project_path=project_path)
 
 
+def load_log_baseline(project_path: str) -> OperationResult:
+    """读取 start-simulation-async 落盘的启动时日志基线；无 marker 返回空。"""
+    try:
+        baseline = _load_solver_log_baseline(project_path)
+        return success_result(baseline=baseline or {})
+    except Exception as exc:
+        return error_result(
+            "solver_log_baseline_load_failed",
+            str(exc),
+            project_path=project_path,
+        )
+
+
 def read_solver_errors(
     project_path: str,
     baseline: dict[str, int] | None = None,
@@ -113,12 +127,16 @@ def wait(project_path: str, timeout: int = 3600, interval: int = 10) -> Operatio
         interval: 轮询状态的间隔 (秒)，默认 10 秒
     """
     started_wall = time.time()
-    baseline_result = capture_log_baseline(project_path)
-    baseline = (
-        dict(baseline_result.get("baseline", {}))
-        if baseline_result.get("status") == "success"
-        else {}
-    )
+    # 优先使用 start_simulation_async 落盘的启动时基线（跨进程可靠）；
+    # 没有 marker 时回退为在本函数内现取基线。
+    baseline = _load_solver_log_baseline(project_path)
+    if baseline is None:
+        baseline_result = capture_log_baseline(project_path)
+        baseline = (
+            dict(baseline_result.get("baseline", {}))
+            if baseline_result.get("status") == "success"
+            else {}
+        )
     start_time = time.time()
     while time.time() - start_time < timeout:
         running_result = is_running(project_path)
@@ -148,7 +166,7 @@ def wait(project_path: str, timeout: int = 3600, interval: int = 10) -> Operatio
             return success_result(
                 project_path=project_path,
                 running=False,
-                completed=True,
+                completed=None,
                 solver_completed="unknown",
                 cst_errors=[],
             )

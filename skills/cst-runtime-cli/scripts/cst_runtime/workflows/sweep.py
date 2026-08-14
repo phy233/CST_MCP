@@ -222,8 +222,13 @@ class ParameterSweep:
         _raise_if_error(delete_results(self.project_path))
         _raise_if_error(rebuild(self.project_path))
 
-        # Run simulation
-        _raise_if_error(start(self.project_path))
+        # Run simulation（同步 run_solver；日志含错误块时即使返回 True 也按失败处理）
+        started = start(self.project_path)
+        _raise_if_error(started)
+        if isinstance(started, dict) and started.get("cst_errors"):
+            raise RuntimeError(
+                "求解完成后 Result 日志含 CST 报错：" + str(started["cst_errors"][0])
+            )
 
         # Extract results
         results = {

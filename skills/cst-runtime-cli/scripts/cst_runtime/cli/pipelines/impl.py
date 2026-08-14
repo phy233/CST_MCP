@@ -427,9 +427,9 @@ def pipeline_run_probe_phase(
     probes = design["probes"]
     param_names = design["parameters"]
 
-    # 3. Simulate each probe
+    # 3. Simulate each probe（信任 CST：求解失败即为失败，
+    # 绝不从失败结果计算目标函数，原始报错文本完整保留在 failed_probes 中）
     simulated: list[dict] = []
-    cached: list[dict] = []
     failed: list[dict] = []
     for probe in probes:
         names = list(probe.keys())
@@ -440,18 +440,20 @@ def pipeline_run_probe_phase(
             continue
         sim = pipeline_run_experiment(probe_path, completion_result_paths)
         if sim.get("status") != "success":
-            obj = compute_objective(objective or {}, sim)
-            if not obj.get("error"):
-                simulated.append({"params": probe, "value": obj["value"]})
-            else:
-                failed.append({"params": probe, "error": sim.get("error_type", "sim_failed")})
+            failed.append(
+                {
+                    "params": probe,
+                    "error": sim.get("error_type", "sim_failed"),
+                    "message": sim.get("message", ""),
+                    "cst_errors": sim.get("cst_errors", []),
+                    "cst_error_lines": sim.get("cst_error_lines", []),
+                    "log_files": sim.get("log_files", []),
+                }
+            )
             continue
         obj = compute_objective(objective or {}, sim)
         if not obj.get("error"):
-            result = {"params": probe, "value": obj["value"]}
-            simulated.append(result)
-            if not sim.get("solver_completed", True):
-                cached.append(result)
+            simulated.append({"params": probe, "value": obj["value"]})
         else:
             failed.append({"params": probe, "error": obj.get("error", "objective_failed")})
 
@@ -495,7 +497,6 @@ def pipeline_run_probe_phase(
         "pipeline": "run-probe-phase",
         "n_probes": len(probes),
         "n_simulated": len(simulated),
-        "n_cached": len(cached),
         "n_failed": len(failed),
         "failed_probes": failed,
         "mean_value": analysis.get("mean_value"),
@@ -553,23 +554,19 @@ def pipeline_run_optimization_step(
     # 3. Run simulation and export
     sim = pipeline_run_experiment(project_path, completion_result_paths)
     if sim.get("status") != "success":
-        obj = compute_objective(objective or {}, sim)
-        if not obj.get("error"):
-            _opt.tell_study(study_storage, study_name, trial_number, value=obj["value"])
-            return {
-                "status": "success",
-                "pipeline": "run-optimization-step",
-                "trial_id": trial_number,
-                "params_used": params,
-                "objective_value": obj["value"],
-                "s11_metric": sim.get("s11_metric"),
-                "study_best": None,
-                "cache_hit": not sim.get("solver_completed", True),
-                "steps_since_improvement": 0,
-            }
+        # 信任 CST：求解未成功即为失败，绝不从失败结果计算目标函数；
+        # 原始报错文本完整透传给调用方，避免错误只在 study 内部消失。
         _opt.tell_study(study_storage, study_name, trial_number, value=0.0, state="pruned")
-        return error_response("simulation_failed",
-            sim.get("message", "simulation did not complete"), step="opt-step:simulate")
+        return error_response(
+            "simulation_failed",
+            sim.get("message", "simulation did not complete"),
+            step="opt-step:simulate",
+            sim_error_type=sim.get("error_type"),
+            cst_errors=sim.get("cst_errors", []),
+            cst_error_lines=sim.get("cst_error_lines", []),
+            log_files=sim.get("log_files", []),
+            solver_log_tails=sim.get("solver_log_tails", {}),
+        )
 
     # 4. Compute objective
     obj = compute_objective(objective or {}, sim)
@@ -604,6 +601,5 @@ def pipeline_run_optimization_step(
         "objective_value": objective_value,
         "s11_metric": sim.get("s11_metric"),
         "study_best": study_best,
-        "cache_hit": not sim.get("solver_completed", True),
         "steps_since_improvement": steps_since_improvement,
     }

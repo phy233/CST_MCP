@@ -7,7 +7,9 @@ import time
 from cst_runtime.core.solver_diagnostics import (
     _extract_error_blocks,
     capture_solver_log_baseline,
+    load_solver_log_baseline,
     read_appended_solver_logs,
+    save_solver_log_baseline,
     solver_log_files,
 )
 
@@ -132,3 +134,50 @@ def test_missing_result_dir_is_empty(tmp_path):
     assert result["errors"] == []
     assert result["log_files"] == []
     assert result["log_tails"] == {}
+
+
+def test_baseline_marker_roundtrip(tmp_path):
+    """启动时落盘基线，wait 跨进程读回。"""
+    project = _write_model_log(tmp_path, WARNING_ONLY_LOG)
+    marker = save_solver_log_baseline(project)
+    assert marker is not None
+
+    loaded = load_solver_log_baseline(project)
+    assert loaded == capture_solver_log_baseline(project)
+
+
+def test_baseline_marker_rejects_wrong_project(tmp_path):
+    project = _write_model_log(tmp_path, WARNING_ONLY_LOG)
+    save_solver_log_baseline(project)
+    # 不同工程路径不得复用该工程的基线
+    assert load_solver_log_baseline(str(tmp_path / "other.cst")) is None
+
+
+def test_baseline_marker_expires(tmp_path):
+    import json
+    from pathlib import Path
+
+    project = _write_model_log(tmp_path, WARNING_ONLY_LOG)
+    save_solver_log_baseline(project)
+    marker = Path(tmp_path) / "working" / ".cst_solver_log_baseline.json"
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    payload["created_at"] = time.time() - 48 * 3600
+    marker.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert load_solver_log_baseline(project) is None
+
+
+def test_baseline_marker_ignores_corrupt_file(tmp_path):
+    from pathlib import Path
+
+    project = _write_model_log(tmp_path, WARNING_ONLY_LOG)
+    marker = Path(tmp_path) / "working" / ".cst_solver_log_baseline.json"
+    marker.write_text("{not-json", encoding="utf-8")
+
+    assert load_solver_log_baseline(project) is None
+
+
+def test_baseline_marker_missing_companion(tmp_path):
+    assert save_solver_log_baseline(str(tmp_path / "noop.cst")) is None
+    assert load_solver_log_baseline(str(tmp_path / "noop.cst")) is None
+

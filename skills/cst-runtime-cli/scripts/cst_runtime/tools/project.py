@@ -1131,12 +1131,21 @@ def tool_wait_simulation(args: dict) -> dict:
     poll_interval_seconds = float(args.get("poll_interval_seconds", 10.0))
     started = time.monotonic()
     started_wall = time.time()
-    baseline_result = _sv.capture_log_baseline(project_path)
+    # 优先使用 start-simulation-async 落盘的启动时基线，避免求解器在
+    # start 与 wait 两次调用之间报错退出时漏检；无 marker 再回退现取基线。
+    baseline_result = _sv.load_log_baseline(project_path)
     log_baseline = (
         dict(baseline_result.get("baseline", {}))
         if baseline_result.get("status") == "success"
         else {}
     )
+    if not log_baseline:
+        fallback = _sv.capture_log_baseline(project_path)
+        log_baseline = (
+            dict(fallback.get("baseline", {}))
+            if fallback.get("status") == "success"
+            else {}
+        )
     polls = 0
     last_result = None
     while True:

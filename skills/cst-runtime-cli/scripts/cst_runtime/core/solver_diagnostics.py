@@ -7,8 +7,10 @@ CST 会把错误写入工程 companion 目录的 Result\\*.log（如 Model.log�
 """
 from __future__ import annotations
 
+import json
 import locale
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +31,8 @@ _ERROR_LINE_MARKERS = re.compile(
 _DEFAULT_LOG_GLOB = "*.log"
 _MAX_BLOCK_LINES = 40
 _TAIL_LINES = 40
+_BASELINE_MARKER_NAME = ".cst_solver_log_baseline.json"
+_BASELINE_MAX_AGE_SECONDS = 24 * 3600.0
 
 
 def _decode_log_bytes(raw: bytes) -> str:
@@ -173,8 +177,67 @@ def read_appended_solver_logs(
     }
 
 
+def save_solver_log_baseline(project_path: str) -> str | None:
+    """把求解启动前的日志基线落盘到 companion 目录，供跨进程的 wait 读取。
+
+    异步启动与 wait 是两次独立调用；若求解器在两次调用之间就报错退出，
+    wait 无法在内存中取得启动时基线。落盘 marker 沿用 gateway 磁盘标记
+    模式，让 wait 精确跳过启动前已有的日志字节。写入失败不阻断求解。
+    """
+    companion = _project_companion_dir(project_path)
+    if not companion.is_dir():
+        return None
+    baseline = capture_solver_log_baseline(project_path)
+    marker_path = companion / _BASELINE_MARKER_NAME
+    payload = {
+        "project_path": str(Path(project_path).expanduser().resolve()),
+        "baseline": baseline,
+        "created_at": time.time(),
+    }
+    try:
+        marker_path.write_text(
+            json.dumps(payload, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return str(marker_path)
+    except OSError:
+        return None
+
+
+def load_solver_log_baseline(
+    project_path: str,
+    max_age_seconds: float = _BASELINE_MAX_AGE_SECONDS,
+) -> dict[str, int] | None:
+    """读取启动时落盘的日志基线；校验工程路径与时效，失败返回 None。"""
+    companion = _project_companion_dir(project_path)
+    marker_path = companion / _BASELINE_MARKER_NAME
+    try:
+        if not marker_path.is_file():
+            return None
+        payload = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if payload.get("project_path") != str(Path(project_path).expanduser().resolve()):
+        return None
+    try:
+        created = float(payload.get("created_at", 0.0))
+    except (TypeError, ValueError):
+        return None
+    if time.time() - created > max_age_seconds:
+        return None
+    baseline = payload.get("baseline")
+    if not isinstance(baseline, dict) or not all(
+        isinstance(key, str) and isinstance(value, int)
+        for key, value in baseline.items()
+    ):
+        return None
+    return baseline
+
+
 __all__ = [
     "capture_solver_log_baseline",
+    "load_solver_log_baseline",
     "read_appended_solver_logs",
+    "save_solver_log_baseline",
     "solver_log_files",
 ]

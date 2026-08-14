@@ -19,7 +19,11 @@ from .compatibility.modeling import (
     solver_acceleration_vba,
 )
 from .identity import attach_expected_project
-from .solver_diagnostics import capture_solver_log_baseline, read_appended_solver_logs
+from .solver_diagnostics import (
+    capture_solver_log_baseline,
+    read_appended_solver_logs,
+    save_solver_log_baseline,
+)
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _single_vba, _submit_versioned_vba
 
@@ -64,7 +68,7 @@ def start_simulation(project_path: str) -> dict[str, Any]:
             log_files=diagnostics.get("log_files", []),
             runtime_module="cst_runtime.simulation",
         )
-    return {
+    success_payload: dict[str, Any] = {
         "status": "success",
         "project_path": normalized_project,
         "message": "simulation completed",
@@ -72,6 +76,14 @@ def start_simulation(project_path: str) -> dict[str, Any]:
         "cst_errors": diagnostics.get("errors", []),
         "runtime_module": "cst_runtime.simulation",
     }
+    errors = diagnostics.get("errors") or []
+    if errors:
+        # run_solver 返回 True 但日志仍出现 Error 块：求解“完成”但 CST 已报错，
+        # 用 warning 明确标记，调用方（如 sweep）应将其视为步骤失败。
+        success_payload["warning"] = (
+            "求解器返回成功，但 Result 日志中包含 CST 错误块：" + errors[0]
+        )
+    return success_payload
 
 
 def start_simulation_async(project_path: str) -> dict[str, Any]:
@@ -85,6 +97,9 @@ def start_simulation_async(project_path: str) -> dict[str, Any]:
     if project is None:
         return status
     try:
+        # 落盘日志基线：start 与 wait 是两次独立调用，若求解器在两次调用
+        # 之间就报错退出，wait 必须能跳过启动前已有的日志字节才能检出错误。
+        save_solver_log_baseline(normalized_project)
         project.modeler.start_solver()
         return {
             "status": "success",

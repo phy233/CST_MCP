@@ -398,6 +398,7 @@ def discover_farfield_monitors(project_path: str) -> dict[str, Any]:
             runtime_module="cst_runtime.farfield",
         )
     project = None
+    reused = False
     try:
         open_result = _gui_open_project(normalized_project)
         if open_result.get("status") != "success":
@@ -408,6 +409,7 @@ def discover_farfield_monitors(project_path: str) -> dict[str, Any]:
                 runtime_module="cst_runtime.farfield",
             )
         project = open_result["project"]
+        reused = bool(open_result.get("reused", False))
         discovered: list[str] = []
         for item in get_tree_items(project):
             tree_path = str(item)
@@ -431,7 +433,9 @@ def discover_farfield_monitors(project_path: str) -> dict[str, Any]:
             runtime_module="cst_runtime.farfield",
         )
     finally:
-        if project is not None:
+        # 只在本次调用自行打开工程时才负责关闭；复用已有会话时不得关闭，
+        # 否则会误关调用方（用户 GUI）打开的项目。
+        if project is not None and not reused:
             try:
                 _gui_close_project(project, normalized_project, save=False)
             except Exception:
