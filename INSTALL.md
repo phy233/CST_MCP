@@ -13,7 +13,7 @@ MCP 客户端 (Claude Desktop / opencode / ...)
 ┌─────────────────────────────────────────────────┐
 │ MCP 层 — 高版本 Python (≥3.12)                   │
 │   .venv (uv 管理, 当前为 CPython 3.14)           │
-│   mcp_server/ → FastMCP, 注册 20 个工具          │
+│   mcp_server/ → FastMCP, 动态注册 agent 工具     │
 │   mcp_server/proxy.py → 启动并管理 Worker 子进程 │
 └─────────────────────────────────────────────────┘
     │  配置的 Python 3.9 worker executable -m cst_runtime.worker
@@ -104,19 +104,19 @@ uv sync --extra dev
 ## 验证
 
 ```powershell
-# 1. MCP Server 冒烟测试：应输出 20 个工具
+# 1. MCP Server 冒烟测试：应输出全部 agent 工具（数量随 Runtime Registry 动态变化，当前 131 个）
 uv run python -c "from mcp_server.server import create_mcp_server; import asyncio; m = create_mcp_server(); print(len(asyncio.run(m.list_tools())))"
 
 # 2. 端到端测试：真实拉起 cst39 Worker，测试 JSONL、会话保持、崩溃自重启
-uv run python tests\verify_mcp.py
+uv run python -m pytest mcp_server\tests -q -m worker_proxy
 
-# 3. 完整测试套件
-uv run pytest tests\ -v
+# 3. 完整测试套件（分层命令详见 docs/testing.md）
+uv run python -m pytest -q
 ```
 
 预期结果：
 
-- `verify_mcp.py`：Worker 启动成功，`list_open` 返回 `{'status': 'success', ...}`；kill 后自动重启（PID 变化）
+- `worker_proxy` 用例：Worker 启动成功，`list_open` 返回 `{'status': 'success', ...}`；kill 后自动重启（PID 变化）
 
 ## MCP 客户端配置示例
 
@@ -149,11 +149,3 @@ Claude Desktop（`claude_desktop_config.json`）或其他 MCP 客户端：
 ### `uv sync` 报 Python 版本不足
 
 系统 Python 为 3.11 时 uv 会自动下载受管 Python，无需手动安装。若下载失败，检查网络或配置镜像。
-
-### 交互式测试脚本
-
-`tests/test_cst_connection.py`、`test_open_save.py`、`test_geometry.py` 是**手动脚本**（含 `input()` 等待、会启动真实 CST GUI），不是 pytest 用例，需单独运行：
-
-```powershell
-uv run python tests\test_cst_connection.py
-```

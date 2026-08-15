@@ -79,6 +79,6 @@ MCP 层与 Runtime 层由进程边界隔离，互不要求对方的解释器。
 3. **远场导出真机验收缺失**：`export-farfield-grid/cut` 需要带远场结果的第二
    基准工程（可经 `CST_TEST_PROJECT` 注入），列入后续扩展。
 4. **上游对比受限**：GitHub 直连经代理不可达，尚未做 `git fetch upstream` 全面
-   diff；上游事实暂以 `docs/CST_RUNTIME_MCP_CODE_REVIEW_2026-07-31.md` §13
+   diff；上游事实暂以 `docs/archive/CST_RUNTIME_MCP_CODE_REVIEW_2026-07-31.md` §13
    记录为准（上游源码树无 mcp_server/worker/lib/api/compatibility 层，
    本 Fork 为实质性架构新增，不应回退）。

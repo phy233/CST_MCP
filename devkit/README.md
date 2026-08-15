@@ -8,7 +8,7 @@
 
 cst-runtime-cli 是 opencode skill 源码仓库。两个 skill：
 
-- `cst-runtime-cli/` — 基础设施（CLI 入口、100+ 工具、管道）
+- `cst-runtime-cli/` — 基础设施（CLI 入口、134 个工具、管道）
 - `cst-runtime-optimization/` — 优化闭环（仅 SKILL.md，不含代码）
 
 ### 绝对禁止
@@ -24,30 +24,23 @@ cst-runtime-cli 是 opencode skill 源码仓库。两个 skill：
 
 ### 前提条件
 
-- CST Studio Suite 2026 已安装
+- CST Studio Suite 2022（含 `python_cst_libraries`）已安装
 - 测试区已初始化（`bootstrap.py` → `health-check --auto-fix`）
 
-### 新增 VBA 工具
+### 新增 VBA 工具（手工扩展路径）
 
 ```powershell
 # 1. 查阅官方文档
 start "<CST_INSTALL>\\Online Help\\mergedProjects\\VBA_3D\\index.htm"
 
-# 2. 编写 TOML 定义（参考 tools/vba_defs/ 中的示例）
-# 3. 生成 Python 工具
-uv run python tools/generate_tools.py
-# → 输出到 tools/generated/gen_<object>.py
+# 2. 按 references/tool-development-guide.md 的 6 步流程实现：
+#    改函数签名（带默认值的新参数，VBA 模板中 "{param}" 替代硬编码）
+#    → 同步 JSON Schema → 在真实 CST 上逐个工具测试（每个工具独立 run）
 
-# 4. 部署到测试区
-Copy-Item -LiteralPath "tools\generated\gen_*.py" -Destination "<test_workspace>\\.cst_runtime\\cst_runtime\\tools\\" -Force
+# 3. 跑合约测试
+uv run pytest <repo>\\skills\\cst-runtime-cli\\tests -v
 
-# 5. 在真实 CST 上逐个工具测试（每个工具独立 run）
-#    测试体系详见 references/Test_kit_README.md
-cd <test_workspace>
-uv run python _test_gen_tools.py
-
-# 6. 通过后注册到 CLI
-# 在 cli.py 的 TOOLS dict 中添加: **_NEW_TOOLS
+# 4. 注册到 CLI（tools 模块 Registry）
 ```
 
 ### 增强现有工具
@@ -71,23 +64,21 @@ uv run pytest <repo>\\skills\\cst-runtime-cli\\tests -v
 | `references/vba-official-reference.md`     | VBA 官方对象参考——150+ 对象方法签名/参数类型/枚举值                     |
 | `references/cst-official-api-reference.md` | CST Python API 参考（cst.interface / cst.results / cst.units / C 扩展层） |
 | `references/tool-development-guide.md`     | 工具开发集成指南——从查文档到 CLI 上线的完整 6 步流程                    |
-| `references/Test_kit_README.md`            | 测试体系全貌——单元测试 + 管道合约测试 + 生成工具验证                    |
+| `../docs/testing.md`                       | 测试体系全貌——分层测试命令与真机集成门控                                |
 
 ### 开发工具
 
-| 工具                        | 内容                                            |
-| --------------------------- | ----------------------------------------------- |
-| `tools/generate_tools.py` | VBA 代码生成器：读 TOML → 生成 Python 工具函数 |
-| `tools/vba_defs/`         | TOML 定义模板 — 10 个参考实现                  |
-| `tools/generated/`        | 生成器输出（gen_*.py，不入 git，按需重新生成）  |
+| 工具                              | 内容                                        |
+| --------------------------------- | ------------------------------------------- |
+| `tools/generate_agent_tools_list.py` | 从统一 Registry 生成 agent 暴露面快照 `tools-list.json` |
 
 ---
 
-## 4. 两条开发路径
+## 4. 开发路径
 
 | 场景                    | 路径       | 步骤                                                        |
 | ----------------------- | ---------- | ----------------------------------------------------------- |
-| **新对象/新方法** | 代码生成器 | 写 TOML →`generate_tools.py` → `gen_*.py` → CST 实测 |
+| **新对象/新方法** | 手工扩展   | 查官方文档 → 改函数签名 → 同步 JSON Schema → CST 实测 |
 | **现有工具增强**  | 手工修补   | 改`core/*.py` 函数签名 → 同步 JSON Schema → 合约测试    |
 
 ### 管道与原子工具的分工
@@ -152,20 +143,12 @@ uv run pytest <repo>\\skills\\cst-runtime-cli\\tests -v
 
 ---
 
-## 6. TOML 编写规则
-
-- **只加优化流程相关方法**——不照抄官方文档
-- **布尔**：`type = "bool"`，默认值 `"true"` / `"false"`（TOML 小写，生成器转 Python True/False）
-- **枚举**：`[enums.EnumName]` 下 `values = [...]`，值必须与 VBA_3D HTML 一致
-- **硬编码参数**：标注 `hardcoded = "Literal"`，不暴露到函数签名
-- **参数去重**：同名同类型自动合并，同名不同类型生成器报错
-- **block_end**：标记 With 块的最后一个方法
-
-### Schema 规则
+## 6. Schema 规则
 
 - 参数类型 `number`（非 `integer`），布尔用 `"boolean"`
 - `default` 字段必填（保证 agent 知道可选参数的存在）
 - `description` 描述功能而非实现
+- 未知字段会被拒绝——Schema 是工具对外契约，改动必须同步合约测试
 
 ---
 
@@ -177,12 +160,9 @@ devkit/
 ├── references/
 │   ├── vba-official-reference.md
 │   ├── cst-official-api-reference.md
-│   ├── tool-development-guide.md
-│   └── Test_kit_README.md
+│   └── tool-development-guide.md
 └── tools/
-    ├── generate_tools.py
-    ├── vba_defs/           ← 10 个 TOML 参考实现
-    └── generated/           ← 生成器输出（不入 git）
+    └── generate_agent_tools_list.py
 ```
 
 ---

@@ -38,7 +38,20 @@
 ### 缺失的关键能力
 我们在公有与私有属性中检索了 `error`, `log`, `message`, `output` 等关键字，**未发现任何可以直接读取 CST Message Window 日志或获取最后一次错误的端点**。
 
-## 3. 后续架构的破局思路
+## 3. 其他官方 API 行为结论（行为实验实测）
+
+- **`execute_vba_code()`**：**同步阻塞执行**，存在于 `project.schematic` 等对象；强制要求 VBA 采用 `Public Sub Main()` 结构（不允许 `Function Main()` 返回值）。VBA 存在语法错误或运行时异常时，会同步抛出 Python `RuntimeError`，可被 `try...except` 捕获。适合执行需要严格感知执行状态的验证与短代码。
+- **`cst_env.open_project()`**：传入不存在的路径时会准确抛出 `FileNotFoundError`。
+- **`full_history_rebuild()`**：即使 History Tree 中包含语法错误的块，依然返回 `1` (True)，不抛出异常，**不能作为模型健康度的判据**。
+- **`project.save()`**：传入非法路径（如非法盘符）时不抛异常，仅静默返回 `None`——所有文件路径操作都需要在 Python 层自行做合法性与写权限校验（防御性 IO）。
+
+## 4. Python 与 VBA 之间的数据通信实测
+
+- **文件 I/O（可行且最可靠）**：VBA 使用 `Scripting.FileSystemObject` 将结果写入本地临时文件；由于提交是同步的，Python 可在 `add_to_history` / `execute_vba_code` 返回后立即读取。
+- **函数返回值（不可行）**：`execute_vba_code` 强制入口为 `Public Sub Main()`，无法通过 `Function Main()` 返回值取数。
+- **参数（受限）**：VBA 可用 `StoreDouble` 写入参数，但官方 Python 对象没有暴露直接的参数字典查询接口，读取不便。
+
+## 5. 框架错误处理策略落地
 
 既然无法指望 `add_to_history` 自带异常捕获，框架层必须引入“后置校验（Post-validation）”机制来保证运行时的鲁棒性：
 
@@ -48,7 +61,13 @@
    解析工程同名目录下的日志文件（如 Log 文件夹内的 txt），动态嗅探 Error 关键字。
 3. **方案 C（实体存在性校验）**：
    通过生成一段查询 VBA，将模型树内的实体列表输出到本地临时文件，Python 读取文件确认目标对象（如 `component:name`）是否被真实创建。
+4. **方案 D（探针文件验证 `add_to_history`）**：
+   在 VBA 代码末尾追加“向特定临时文件写入成功标志”的探针代码，Python 在接口返回后检查该文件是否存在，以此判断 VBA 是否中途抛错中断。
+5. **优先使用 `execute_vba_code()` 执行验证和短代码**：
+   需要严格感知 VBA 执行状态（抛错）时，尽量使用 `project.schematic.execute_vba_code` 包裹 `Public Sub Main()`，直接利用 Python 的 `try...except`。
+6. **不要依赖 `full_history_rebuild()` 判断模型健康度**：它不会对内部块的错误做出异常反馈。
 
 ---
-*记录时间：2026-07-16*
+
+*记录时间：2026-07-16（行为实验部分合并自 docs/api_analysis.md，2026-07-31）*
 *相关 Commit: e113955 及之前*

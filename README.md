@@ -1,8 +1,6 @@
-[English](README.en.md) | **中文**
-
 # CST Runtime CLI
 
-CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 120 个原子命令覆盖建模、仿真、结果读取、参数优化、远场导出全链路，统一的 JSON 契约接口，内建运行时守卫层拦截已知 CST 陷阱。CLI 工具不等于 MCP 暴露面；只有明确标记为 `agent` 的工具才会注册到 MCP。
+CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 134 个原子命令（131 个 `agent` 暴露 + 3 个 `cli_only`）覆盖建模、仿真、结果读取、参数优化、远场导出全链路，统一的 JSON 契约接口，内建运行时守卫层拦截已知 CST 陷阱。CLI 工具不等于 MCP 暴露面；只有明确标记为 `agent` 的工具才会注册到 MCP。
 
 项目同时以 AI 工具 skill 形式发布，但工具链本身是通用设计——可独立使用、作为 skill 集成、或作为 Python 包二次开发。
 
@@ -10,21 +8,21 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 120 �
 
 ## 核心能力
 
-| 分类               | 工具数 | 代表工具                                                                                                      |
-| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------- |
-| **几何建模** | 42     | `define-brick`, `define-cylinder`, `boolean-subtract`, `change-material`, `transform-shape`         |
-| **工程操作** | 25     | `change-parameter`, `define-port`, `define-mesh`, `inspect-project`, `capture-3d-view`              |
-| **结果读取** | 结果树驱动 | `list-sparameter-results`, `export-sparameter`, `list-field-results`, `export-touchstone`       |
-| **优化**     | 11     | `create-study`, `ask-study`, `tell-study`, `run-probe-phase`, `run-optimization-step`               |
-| **会话管理** | 7      | `cst-session-open`, `cst-session-close`, `cst-session-quit`, `create-blank-project`, `save-project` |
-| **远场**     | 4      | `export-farfield-grid`, `export-farfield-cut`, `inspect-farfield-monitors`, `inspect-model-view`      |
-| **工作区**   | 5      | `init-workspace`, `init-task`, `health-check`, `health-repair`, `install-cst-libraries`               |
-| **项目身份** | 4      | `verify-project-identity`, `infer-run-dir`, `wait-project-unlocked`, `list-open-projects`             |
-| **审计**     | 3      | `record-stage`, `update-status`, `stage-evidence`                                                       |
-| **DOE**      | 2      | `design-probes`, `analyze-probes`                                                                         |
-| **运行**     | 2      | `prepare-run`, `get-run-context`                                                                          |
+| 分类               | 代表工具                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| **几何建模** | `define-brick`, `define-cylinder`, `boolean-subtract`, `change-material`, `transform-shape`         |
+| **工程操作** | `change-parameter`, `define-port`, `define-mesh`, `inspect-project`, `capture-3d-view`              |
+| **结果读取** | `list-sparameter-results`, `export-sparameter`, `list-field-results`, `export-touchstone`       |
+| **优化**     | `create-study`, `ask-study`, `tell-study`, `run-probe-phase`, `run-optimization-step`               |
+| **会话管理** | `cst-session-open`, `cst-session-close`, `cst-session-quit`, `create-blank-project`, `save-project` |
+| **远场**     | `export-farfield-grid`, `export-farfield-cut`, `inspect-farfield-monitors`, `inspect-model-view`      |
+| **工作区**   | `init-workspace`, `init-task`, `health-check`, `health-repair`, `install-cst-libraries`               |
+| **项目身份** | `verify-project-identity`, `infer-run-dir`, `wait-project-unlocked`, `list-open-projects`             |
+| **审计**     | `record-stage`, `update-status`, `stage-evidence`                                                       |
+| **DOE**      | `design-probes`, `analyze-probes`                                                                         |
+| **运行**     | `prepare-run`, `get-run-context`                                                                          |
 
-120 个工具各含严格 JSON Schema 定义，未知字段会被拒绝，输出格式以通用 `OperationResult` 为基础。
+134 个工具各含严格 JSON Schema 定义，未知字段会被拒绝，输出格式以通用 `OperationResult` 为基础。分类工具数由 Registry 动态清册生成，不在文档中手工维护；可用 `devkit/tools/generate_agent_tools_list.py` 生成 agent 暴露面快照 `tools-list.json`。
 
 ---
 
@@ -80,19 +78,7 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 120 �
 
 ## 扩展开发
 
-当前 120 个工具不是能力上限。只要 CST 2022 文档明确支持的 VBA 或 COM API 可执行操作，即可通过开发包扩展为 CLI 命令；未经审核的能力保持 `cli_only` 或 `experimental`。
-
-### 代码生成器路径（新 VBA 对象）
-
-```powershell
-# 1. 在 devkit/tools/vba_defs/ 写 TOML 定义
-# 2. 运行生成器
-uv run python devkit/tools/generate_tools.py
-# 3. 产出 gen_<object>.py，在真实 CST 上验证
-# 4. 注册到 CLI
-```
-
-TOML 定义参考：`devkit/tools/vba_defs/`（10 个参考实现）。
+当前 134 个工具不是能力上限。只要 CST 2022 文档明确支持的 VBA 或 COM API 可执行操作，即可通过开发包扩展为 CLI 命令；未经审核的能力保持 `cli_only` 或 `experimental`。
 
 ### 手工增强路径（现有工具修改）
 
@@ -100,7 +86,7 @@ TOML 定义参考：`devkit/tools/vba_defs/`（10 个参考实现）。
 
 ### 开发参考
 
-`devkit/references/` 包含完整的 VBA 官方 API 参考（1890 行）、CST Python API 参考（1377 行）、开发流程指南和测试体系说明。
+`devkit/references/` 包含完整的 VBA 官方 API 参考（2143 行）、CST Python API 参考（1414 行）和开发流程指南；测试体系说明见 [docs/testing.md](docs/testing.md)。
 
 ---
 
@@ -175,11 +161,9 @@ data = get_1d_result(
 ```
 cst-runtime-cli/
 ├── devkit/                              # 扩展开发工具包
-│   ├── references/                      # VBA/CST API 官方参考、开发流程指南、测试体系文档
+│   ├── references/                      # VBA/CST API 官方参考、开发流程指南
 │   └── tools/
-│       ├── generate_tools.py            # 代码生成器：TOML → Python
-│       ├── vba_defs/                    # TOML 定义（10 个参考实现）
-│       └── generated/                   # 生成器输出（不入 git）
+│       └── generate_agent_tools_list.py # 生成 agent 暴露面快照 tools-list.json
 │
 ├── skills/
 │   ├── cst-runtime-cli/                 # 基础设施 skill
@@ -190,9 +174,10 @@ cst-runtime-cli/
 │   │   │   └── cst_runtime/             # 全部源码
 │   │   │       ├── cli/                 # 分发层（dispatch + pipeline 编排）
 │   │   │       ├── core/                # 核心模块（session/建模/仿真/结果/远场/守卫/审计/工作区等 20 模块）
-│   │   │       ├── tools/               # 工具层（10 模块，120 命令）
+│   │   │       ├── tools/               # 工具层（13 模块，134 命令）
 │   │   │       ├── render/              # 自包含 HTML/SVG/WebGL 报告
 │   │   │       └── analysis/            # 远场解析与平坦度分析
+│   │   ├── docs/                        # 行为分析与排雷指南（api_analysis.md 等）
 │   │   ├── references/                  # 用户文档
 │   │   └── tests/
 │   │       ├── refs/ref_0/              # 参考工程（四脊喇叭天线，8-12 GHz）
@@ -201,8 +186,22 @@ cst-runtime-cli/
 │   └── cst-runtime-optimization/        # 优化 skill（仅 SKILL.md，不含代码）
 │       └── SKILL.md
 │
-└── docs/                                # 设计文档
+└── docs/                                # 设计文档（archive/ 存放历史报告快照）
 ```
+
+## 文档索引
+
+| 文档 | 内容 |
+| --- | --- |
+| [INSTALL.md](INSTALL.md) | 双 Python 版本隔离架构与安装验证流程 |
+| [docs/testing.md](docs/testing.md) | 分层测试体系：离线单元 / 子进程 CLI / Worker 代理 / 真机集成 |
+| [docs/error_handling.md](docs/error_handling.md) | 错误模型与 OperationResult 契约 |
+| [docs/lib_usage_guide.md](docs/lib_usage_guide.md) | `cst_runtime.lib` 稳定公开 API 用法 |
+| [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | lib API 参考 |
+| [docs/MCP_EXPOSURE.md](docs/MCP_EXPOSURE.md) | MCP 暴露面策略（agent / cli_only） |
+| [docs/WORKFLOW_REFERENCE.md](docs/WORKFLOW_REFERENCE.md) | 工作流编排参考 |
+| [docs/cst_2022_compatibility.md](docs/cst_2022_compatibility.md) | CST 2022 兼容性问题记录与兼容层架构 |
+| [docs/archive/](docs/archive/README.md) | 历史报告与验收记录快照（冻结，不更新） |
 
 ## License
 

@@ -55,11 +55,11 @@ Python 安装后若 `python` 仍不可用，注销重登录或手动刷新 PATH�
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### CST Studio Suite 2026
+### CST Studio Suite 2022+
 
-需 GUI 安装 + 商业许可。安装后确认 `python_cst_libraries` 目录存在于：
+需 GUI 安装 + 商业许可（本仓库以 CST 2022 为基线，新版同样可用）。安装后确认 `python_cst_libraries` 目录存在于：
 ```
-C:\Program Files\CST Studio Suite 2026\AMD64\python_cst_libraries
+D:\Program Files (x86)\CST Studio Suite 2022\AMD64\python_cst_libraries
 ```
 
 ## 常见问题
@@ -71,10 +71,10 @@ C:\Program Files\CST Studio Suite 2026\AMD64\python_cst_libraries
 检查工作区目录写权限，或手动创建空 `pyproject.toml` 后重试。
 
 ### CST 导入验证失败
-确认 CST Studio Suite 2026 已安装，`python_cst_libraries` 路径正确。
+确认 CST Studio Suite 2022（或更高版本）已安装，`python_cst_libraries` 路径正确。
 可指定自定义路径：
 ```powershell
-python <skill-root>\scripts\cst_runtime_cli.py install-cst-libraries --cst-path "D:\CST\AMD64\python_cst_libraries"
+python -m cst_runtime install-cst-libraries --cst-path "D:\CST\AMD64\python_cst_libraries"
 ```
 
 ### uv sync 失败

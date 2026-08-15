@@ -1,5 +1,7 @@
 # CST Runtime 2022 人工兼容冒烟测试
 
+> 归档自 docs/CST2022_MANUAL_COMPATIBILITY_SMOKE_TEST.md（一次性人工验收记录，冻结保存）。
+
 本文只用于人工操作。自动化测试不得启动、连接或控制 CST。
 
 ## 1. 测试前准备

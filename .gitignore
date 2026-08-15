@@ -17,3 +17,6 @@ dist/
 # 否则新 clone 无法复现 --run-cst 套件。放在 *.json/*.cst 等宽规则之后。
 !skills/cst-runtime-cli/tests/refs/
 !skills/cst-runtime-cli/tests/refs/**
+
+# 真机运行会在基准工程目录内生成 ModelCache 求解缓存，属可再生运行残留，不入库。
+skills/cst-runtime-cli/tests/refs/**/ModelCache/
