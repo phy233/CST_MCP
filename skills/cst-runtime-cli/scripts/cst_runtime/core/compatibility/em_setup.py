@@ -5,6 +5,7 @@ import math
 import re
 from typing import Any, Sequence
 
+from ..errors import ValidationError
 from .base import CompatibilityProfile, unsupported_feature
 from .execution import vba_string
 from .modeling import CompatibleVBA
@@ -146,6 +147,12 @@ def plane_wave_vba(
 ) -> CompatibleVBA:
     """生成真正创建 PlaneWave 源的 CST 2022 VBA。"""
     _require_cst2022(profile, "plane_wave")
+    if polarization in {"Circular", "Elliptical"} and reference_frequency is None:
+        raise ValidationError("Circular/Elliptical 极化必须提供 reference_frequency")
+    if polarization == "Elliptical" and phase_difference is None:
+        raise ValidationError("Elliptical 极化必须提供 phase_difference")
+    if polarization == "Elliptical" and axial_ratio is None:
+        raise ValidationError("Elliptical 极化必须提供 axial_ratio")
     lines = [
         "With PlaneWave",
         "    .Reset",

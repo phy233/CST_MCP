@@ -233,7 +233,11 @@ def polygon_solid_vba(
                 profile=resolved,
             ).lines
         )
-    return CompatibleVBA(tuple(lines), resolved.label)
+    return CompatibleVBA(
+        tuple(lines),
+        resolved.label,
+        not_applied={"delete_profile": False} if resolved.is_2022 else {},
+    )
 
 
 def waveguide_port_vba(

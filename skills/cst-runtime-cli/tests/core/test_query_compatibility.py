@@ -101,6 +101,23 @@ def test_filtered_tree_items_use_get_tree_results(monkeypatch) -> None:
     assert '"0D/1D recursive"' in "\n".join(captured)
 
 
+def test_filter_all_rewrites_to_documented_folder_list(monkeypatch) -> None:
+    captured: list[str] = []
+
+    def query(_project, lines, *, timeout):
+        captured.extend(lines)
+        return []
+
+    monkeypatch.setattr(tree, "execute_text_query", query)
+
+    tree._legacy_filtered_result_items(object(), "all")
+
+    script = "\n".join(captured)
+    assert "folder 0D/1D 2D/3D farfield colormap matrix" in script
+    assert "recursive" in script
+    assert '"Farfields"' in script
+
+
 def test_result_metadata_uses_documented_get_tree_results_outputs(monkeypatch) -> None:
     captured: list[str] = []
 

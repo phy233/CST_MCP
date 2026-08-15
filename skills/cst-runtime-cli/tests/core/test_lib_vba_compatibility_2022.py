@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from cst_runtime.core.compatibility.base import CompatibilityProfile
 from cst_runtime.core.compatibility.lib import (
+    _floquet_modes,
     activate_wcs_vba,
     arc_vba,
     boundary_per_face_vba,
@@ -108,7 +111,7 @@ def test_polygon_builds_2d_profile_then_extrudes_without_unsafe_cleanup() -> Non
     assert '.Curve "__cst_runtime_plate:profile"' in text
     assert "Curve.DeleteCurve" not in text
     assert ".DeleteProfile" not in text
-    assert generated.not_applied == {}
+    assert generated.not_applied == {"delete_profile": False}
 
 
 def test_waveguide_port_uses_structure_box_and_legacy_ranges() -> None:
@@ -144,3 +147,14 @@ def test_floquet_port_uses_dedicated_2022_object() -> None:
     assert '.AddMode "TM", "0", "0"' in text
     assert '.SetDistanceToReferencePlane "-2"' in text
     assert "CreateFloquetPort" not in text
+
+
+def test_floquet_modes_order_and_ten_mode_cap() -> None:
+    linear = _floquet_modes(2, circular=False)
+    assert linear == [("TE", 0, 0), ("TM", 0, 0)]
+    circular = _floquet_modes(1, circular=True)
+    assert circular == [("LCP", 0, 0)]
+    with pytest.raises(ValueError):
+        _floquet_modes(0, circular=False)
+    with pytest.raises(ValueError):
+        _floquet_modes(11, circular=False)
