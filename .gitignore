@@ -9,5 +9,11 @@ dist/
 .pytest_cache/
 .pytest_basetemp/
 .pytest_bt_py/
-refs/
-tasks/
+.cst_runtime/
+/refs/
+/tasks/
+
+# 真机集成测试的基准工程必须完整入库（.cst + Model/Result 伴随目录），
+# 否则新 clone 无法复现 --run-cst 套件。放在 *.json/*.cst 等宽规则之后。
+!skills/cst-runtime-cli/tests/refs/
+!skills/cst-runtime-cli/tests/refs/**

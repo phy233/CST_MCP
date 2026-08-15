@@ -33,7 +33,14 @@ class TestCapture3DViewSchema:
     
     def test_project_not_found(self):
         """Verify error when project file doesn't exist."""
-        r = run_cli("capture-3d-view", "--project-path", "C:/nonexistent/path.cst")
+        # 会话级临时 cwd 没有 workspace 标记，显式指向仓库工作区以命中路径检查。
+        r = run_cli(
+            "capture-3d-view",
+            "--project-path",
+            "C:/nonexistent/path.cst",
+            "--workspace",
+            str(REPO_ROOT),
+        )
         assert r.returncode == 1, r.stderr
         result = json.loads(r.stdout)
         assert result["status"] == "error"

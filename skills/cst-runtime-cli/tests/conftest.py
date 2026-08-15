@@ -22,6 +22,31 @@ import pytest
 SKILL_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SKILL_SCRIPTS))
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """记录仓库根 .cst_runtime/tmp 的基线，供会话末段清理测试新建文件。"""
+    tmp_dir = REPO_ROOT / ".cst_runtime" / "tmp"
+    baseline: set[str] = set()
+    if tmp_dir.is_dir():
+        baseline = {path.name for path in tmp_dir.glob("args_*.json")}
+    session.config._cst_cli_args_baseline = baseline  # type: ignore[attr-defined]
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """兜底删除本测试会话新建的 args 捕获文件，避免仓库根残留。"""
+    baseline = getattr(session.config, "_cst_cli_args_baseline", set())
+    tmp_dir = REPO_ROOT / ".cst_runtime" / "tmp"
+    if not tmp_dir.is_dir():
+        return
+    for path in tmp_dir.glob("args_*.json"):
+        if path.name not in baseline:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
 
 @pytest.fixture
 def mocker(monkeypatch: pytest.MonkeyPatch):
@@ -68,7 +93,12 @@ def clear_gateway_registry():
 
 @pytest.fixture
 def run_cli_json():
-    """在子进程中运行 cst_runtime CLI，并解析 JSON 响应。"""
+    """在子进程中运行 cst_runtime CLI，并解析 JSON 响应。
+
+    与 helpers.run_cli 共用会话级临时 cwd，避免向仓库根写运行时状态。
+    """
+    from helpers import _cli_cwd
+
     python = sys.executable
     inherited_pythonpath = os.environ.get("PYTHONPATH", "")
     pythonpath = (
@@ -82,7 +112,7 @@ def run_cli_json():
             [python, "-m", "cst_runtime", *args],
             capture_output=True,
             text=True,
-            cwd=str(Path.cwd()),
+            cwd=str(_cli_cwd()),
             env={**os.environ, "PYTHONPATH": pythonpath},
             check=False,
         )
