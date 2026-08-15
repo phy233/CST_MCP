@@ -8,13 +8,18 @@
 
 | 层级 | 内容 | 命令 | 典型耗时 |
 |---|---|---|---|
-| 默认（离线全量） | 纯单元 + 子进程 CLI + Worker 代理（均不启动 CST） | `python -m pytest -q` | ~45s |
-| 快速通道（纯单元） | 不含子进程与 Worker 代理 | `python -m pytest -q -m "not subprocess and not worker_proxy"` | ~6s |
-| 子进程 CLI | `subprocess` 标记：`cli/test_*.py`、`test_cli_remaining.py`、`test_cli_hygiene.py` | `python -m pytest -q -m subprocess` | ~35s |
-| Worker 代理 | `worker_proxy` 标记：`mcp_server/tests` 中拉起 py39 Worker 的用例 | `python -m pytest -q -m worker_proxy` | ~10s |
-| 真机集成（非求解器） | `cst_integration` 标记 | `python -m pytest -q -s --run-cst -m cst_integration` | ~7 分钟 |
-| 真机求解器 | `cst_solver` 标记（真机子集） | `python -m pytest -q -s --run-cst --run-cst-solver -m cst_solver` | 另加 ~2 分钟 |
-| 真机全量 | 上述两者合并 | `python -m pytest -q -s --run-cst --run-cst-solver -m cst_integration` | ~9 分钟 |
+| 默认（离线全量） | 纯单元 + 子进程 CLI + Worker 代理（均不启动 CST） | `.venv\Scripts\python.exe -m pytest -q` | ~45s |
+| 快速通道（纯单元） | 不含子进程与 Worker 代理 | `.venv\Scripts\python.exe -m pytest -q -m "not subprocess and not worker_proxy"` | ~6s |
+| 子进程 CLI | `subprocess` 标记：`cli/test_*.py`、`test_cli_remaining.py`、`test_cli_hygiene.py` | `.venv\Scripts\python.exe -m pytest -q -m subprocess` | ~35s |
+| Worker 代理 | `worker_proxy` 标记：`mcp_server/tests` 中拉起 py39 Worker 的用例 | `.venv\Scripts\python.exe -m pytest -q -m worker_proxy` | ~10s |
+| 真机集成（非求解器） | `cst_integration` 标记 | `.venv\Scripts\python.exe -m pytest -q -s --run-cst -m "cst_integration and not cst_solver"` | ~7 分钟 |
+| 真机求解器 | `cst_solver` 标记（真机子集） | `.venv\Scripts\python.exe -m pytest -q -s --run-cst --run-cst-solver -m cst_solver` | 另加 ~2 分钟 |
+| 真机全量 | 上述两者合并 | `.venv\Scripts\python.exe -m pytest -q -s --run-cst --run-cst-solver -m cst_integration` | ~9 分钟 |
+
+> **必须用仓库 venv（Python 3.12+）运行**：根套件在 Python 3.9（如 conda `cst39`
+> 环境）下会因缺少 `tomllib`/`jsonschema` 与类型注解语法而大面积收集失败；
+> 根 conftest 检测到 Python < 3.12 会直接报 UsageError。`cst39` 只供 CST
+> Worker 使用，由 `mcp_server.proxy` 自动拉起，测试进程自身不要切换进去。
 
 标记在 `pyproject.toml [tool.pytest.ini_options] markers` 中统一声明；门控与跳过逻辑
 只存在于根 `conftest.py`。默认命令会收集真机用例但全部跳过，绝不打开 CST、不要求许可证。

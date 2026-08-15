@@ -1,4 +1,6 @@
 """Shared test factory functions for cst-runtime-cli tests."""
+from __future__ import annotations
+
 import atexit
 import json
 import os

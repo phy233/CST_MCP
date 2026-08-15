@@ -98,6 +98,12 @@ def _worker_python_available() -> bool:
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
+    if sys.version_info < (3, 12):
+        raise pytest.UsageError(
+            "仓库根测试套件要求 Python >= 3.12，请使用 "
+            ".venv\\Scripts\\python.exe -m pytest；"
+            "cst39 环境仅供 CST Worker 使用（由 mcp_server.proxy 自动拉起）。"
+        )
     parser.addoption(
         "--run-cst",
         action="store_true",
