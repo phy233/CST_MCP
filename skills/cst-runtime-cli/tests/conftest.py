@@ -460,6 +460,13 @@ def shared_cst_project(
         pytest.skip("使用 --run-cst 后才创建真实 CST 工程")
     if os.environ.get("PYTEST_XDIST_WORKER"):
         pytest.fail("真实 CST 测试禁止使用 pytest-xdist 并行执行")
+    if os.environ.get("DSH_SESSION_ID"):
+        pytest.fail(
+            "真实 CST 测试不得在 Agent 沙箱内运行：沙箱阻断 COM 命名管道，"
+            "CST 窗口能启动但 Worker 永远无法连接（表现为构造/打开超时）。"
+            "请在普通 PowerShell 中运行同一命令。",
+            pytrace=False,
+        )
 
     from mcp_server.proxy import CSTWorkerProxy
 

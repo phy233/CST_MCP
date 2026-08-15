@@ -81,6 +81,13 @@ $env:CST_TEST_PROJECT = "D:\path\to\disposable-source.cst"
 环境变量指向的文件仍然只作为只读源。测试会复制 `.cst` 和同名伴随目录，并在副本上
 执行全部操作。
 
+> **必须在普通 PowerShell 中运行**：Agent 沙箱会阻断 COM 命名管道，CST 窗口能启动
+> 但 Worker 永远连不上（表现为 `Could not connect to a DE with pid` 或 5 分钟超时）。
+> fixture 检测到 `DSH_SESSION_ID` 环境变量时会立即失败并给出本提示。
+> 另外，CST 冷启动时启动器会转交进程：`core/session.py` 已内置 PID 交接回退
+> （构造失败等待真实 DE 后官方连接、open 失败换新句柄重试），单测覆盖于
+> `core/test_session.py`。
+
 ### 真机测试文件与覆盖
 
 | 文件 | 数量 | 覆盖 |

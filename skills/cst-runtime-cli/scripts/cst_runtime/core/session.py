@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
 from . import gateway
 from . import process as process_cleanup
 from . import identity as project_identity
-from .compatibility import create_design_environment
+from .compatibility import (
+    connect_design_environment,
+    connect_to_any_design_environment,
+    create_design_environment,
+    running_design_environment_pids,
+)
 from .errors import error_response
 from .utils import abs_project_path as _abs_project_path
 
@@ -21,6 +27,63 @@ def get_attached_project(project_path: str) -> dict[str, Any] | None:
 
 def _connect_new_design_environment():
     return create_design_environment()
+
+
+def _create_or_connect_design_environment(*, timeout_seconds: float = 120.0) -> Any:
+    """创建 DE；CST 2022 冷启动时启动器会转交进程后退出。
+
+    构造器与静态 new 都可能报 "Could not connect to a DE with pid"（实测
+    构造函数在冷启动时直接抛 TimeoutError）。此时等待实际运行的 DE 出现，
+    用官方连接路径（connect_to_any / 按 PID connect）接管。
+    """
+    try:
+        return _connect_new_design_environment()
+    except Exception as exc:
+        if "pid" not in str(exc).casefold():
+            raise
+        deadline = time.monotonic() + max(timeout_seconds, 0.0)
+        while True:
+            try:
+                return connect_to_any_design_environment()
+            except RuntimeError:
+                pass
+            for pid in running_design_environment_pids():
+                try:
+                    return connect_design_environment(pid)
+                except Exception:
+                    continue
+            if time.monotonic() >= deadline:
+                raise exc
+            time.sleep(0.5)
+
+
+def _open_project_with_pid_handoff_fallback(
+    normalized_project: str,
+    design_environment: Any,
+    *,
+    handoff_timeout_seconds: float = 30.0,
+) -> tuple[Any, Any]:
+    """de.open_project 的 CST 2022 PID 交接回退，返回 (project, design_environment)。
+
+    CST 2022 的启动器会把 DE 主窗口转交给另一个进程后退出；Python 对象
+    仍按旧 PID 查找，报 "Could not connect to a DE with pid: X"。此时等待
+    实际运行的 DE 出现，用官方连接路径取得新句柄再打开工程。
+    """
+    try:
+        return design_environment.open_project(normalized_project), design_environment
+    except Exception as exc:
+        if "pid" not in str(exc).casefold():
+            raise
+        deadline = time.monotonic() + max(handoff_timeout_seconds, 0.0)
+        while True:
+            try:
+                replacement = connect_to_any_design_environment()
+            except RuntimeError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.5)
+                continue
+            return replacement.open_project(normalized_project), replacement
 
 
 def inspect(project_path: str = "") -> dict[str, Any]:
@@ -109,7 +172,11 @@ def open_project(project_path: str) -> dict[str, Any]:
         # CST 2022 必须遵循官方顺序：先创建 DesignEnvironment，再由该对象打开工程。
         # 若把 --project-file 传给 DesignEnvironment.new()，启动器可能转交到其他进程，
         # 导致 Python 接口仍按原 PID 查找并报错“No DE found with pid”。
-        de = _connect_new_design_environment()
+        # 冷启动时构造/静态 new 也可能报 "Could not connect to a DE with pid"，
+        # 由 _create_or_connect_design_environment 等待真实 DE 后按官方路径接管；
+        # 旧句柄在 open_project 时报同样的 PID 错误时由
+        # _open_project_with_pid_handoff_fallback 换新句柄重试。
+        de = _create_or_connect_design_environment()
 
         # PROFILING
         import time
@@ -118,7 +185,10 @@ def open_project(project_path: str) -> dict[str, Any]:
         if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
             core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
 
-        project = de.open_project(normalized_project)
+        project, de = _open_project_with_pid_handoff_fallback(
+            normalized_project,
+            de,
+        )
 
         # PROFILING
         if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
