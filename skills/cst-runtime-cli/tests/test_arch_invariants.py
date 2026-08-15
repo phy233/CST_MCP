@@ -141,6 +141,15 @@ class TestHandlerRegistration:
             assert name in tools, \
                 f"{name}: in TOOL_DEFS but not in dispatch.TOOLS"
 
+    def test_every_tool_def_has_description(self):
+        """Each TOOL_DEFS must carry a non-empty description."""
+        missing = [
+            name
+            for name, defn in _load_all_defs().items()
+            if not defn.get("description")
+        ]
+        assert not missing, f"工具缺少 description: {sorted(missing)}"
+
     def test_every_handler_has_category(self):
         """All tools in dispatch.TOOLS have valid category."""
         invalid = {

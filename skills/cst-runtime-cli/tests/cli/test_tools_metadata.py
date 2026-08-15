@@ -1,65 +1,36 @@
-"""Tool metadata: listing, describe, args-template, and error paths."""
+"""Tool metadata: listing, sampled describe/args-template, and error paths.
+
+全量「每个工具都有合法 schema/模板/处理器」的不变量由进程内的
+test_arch_invariants.py 与 test_schema_type_consistency.py 承担；本文件只保留
+子进程 CLI 边界的抽样冒烟，避免每工具一次子进程的 ~60s 开销。
+"""
 
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-SKILL_ROOT = REPO_ROOT / "skills" / "cst-runtime-cli"
-PYTHON = sys.executable
-_PYTHONPATH = str(SKILL_ROOT / "scripts")
+import pytest
 
-_CST_REQUIRED_TOOLS = {
-    "cst-session-open", "cst-session-close", "cst-session-reattach",
-    "define-brick", "define-cylinder", "define-cone", "define-rectangle",
-    "boolean-subtract", "boolean-add", "boolean-intersect", "boolean-insert",
-    "delete-entity", "create-component", "change-material",
-    "list-entities", "list-parameters", "change-parameter",
-    "start-simulation-async", "is-simulation-running",
-    "wait-simulation", "stop-simulation", "pause-simulation", "resume-simulation",
-    "save-project", "verify-project-identity", "define-material-from-mtd",
-    "list-open-projects", "open-results-project", "list-subprojects",
-    "list-run-ids", "get-parameter-combination", "get-1d-result", "get-2d-result",
-    "create-blank-project",
-    "define-frequency-range", "change-solver-type",
-    "define-background", "define-boundary", "define-mesh", "define-solver",
-    "define-port", "define-farfield-monitor", "rename-entity", "set-entity-color",
-    "define-units", "set-efield-monitor",
-    "set-field-monitor", "set-probe", "delete-probe", "delete-monitor",
-    "set-background-with-space", "set-farfield-plot-cuts", "show-bounding-box",
-    "create-mesh-group", "set-solver-acceleration",
-    "define-fdsolver-stimulation",
-    "set-fdsolver-extrude-open-bc", "set-mesh-fpbavoid-nonreg-unite",
-    "set-mesh-minimum-step-number", "define-polygon-3d",
-    "define-analytical-curve", "define-extrude-curve",
-    "transform-shape", "transform-curve",
-    "create-horn-segment", "create-loft-sweep", "create-hollow-sweep",
-    "pick-face", "define-loft",
-    "list-field-results", "export-e-field", "export-h-field",
-    "export-surface-current", "export-power-flow", "export-current-density",
-    "export-power-loss-density", "export-voltage-result",
-    "define-parameters",
-    "export-farfield-fresh-session", "export-existing-farfield-cut-fresh-session",
-    "read-realized-gain-grid-fresh-session",
-}
+from helpers import run_cli
 
+pytestmark = pytest.mark.subprocess
 
-def run_cli(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "PYTHONPATH": _PYTHONPATH}
-    return subprocess.run(
-        [PYTHON, "-m", "cst_runtime", *args],
-        cwd=REPO_ROOT,
-        input=input_text,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
+_SAMPLE_TOOLS = [
+    "health-check",
+    "list-materials",
+    "init-workspace",
+    "record-stage",
+    "update-status",
+    "wait-project-unlocked",
+    "infer-run-dir",
+    "plot-exported-file",
+    "calculate-farfield-neighborhood-flatness",
+    "stage-evidence",
+    "create-study",
+    "analyze-metasurface-sparameters",
+]
 
 
 def get_all_tool_names() -> list[str]:
@@ -77,10 +48,8 @@ class TestToolsMetadata:
         assert "add-to-history" not in names
         assert "activate-post-process" not in names
 
-    def test_every_tool_describe_returns_success(self) -> None:
-        for tool in get_all_tool_names():
-            if tool in _CST_REQUIRED_TOOLS:
-                continue
+    def test_sampled_tools_describe_returns_success(self) -> None:
+        for tool in _SAMPLE_TOOLS:
             r = run_cli("describe-tool", "--tool", tool)
             assert r.returncode == 0, r.stderr[:200]
             p = json.loads(r.stdout)
@@ -90,10 +59,8 @@ class TestToolsMetadata:
             assert "risk" in p["tool"]
             assert "description" in p["tool"]
 
-    def test_every_tool_has_args_template(self) -> None:
-        for tool in get_all_tool_names():
-            if tool in _CST_REQUIRED_TOOLS:
-                continue
+    def test_sampled_tools_have_args_template(self) -> None:
+        for tool in _SAMPLE_TOOLS:
             r = run_cli("args-template", "--tool", tool)
             assert r.returncode == 0, r.stderr[:200]
             p = json.loads(r.stdout)
@@ -102,9 +69,7 @@ class TestToolsMetadata:
             assert isinstance(p["args_template"], dict)
 
     def test_args_template_writes_valid_json_file(self) -> None:
-        for tool in get_all_tool_names():
-            if tool in _CST_REQUIRED_TOOLS:
-                continue
+        for tool in _SAMPLE_TOOLS[:6]:
             with tempfile.TemporaryDirectory() as tmpdir:
                 out = Path(tmpdir) / f"{tool}_args.json"
                 r = run_cli("args-template", "--tool", tool, "--output", str(out))

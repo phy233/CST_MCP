@@ -23,43 +23,6 @@ SKILL_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SKILL_SCRIPTS))
 
 
-def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption(
-        "--run-cst",
-        action="store_true",
-        default=False,
-        help="显式运行需要真实 CST 2022 和许可证的串行集成测试",
-    )
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line(
-        "markers",
-        "cst_integration: 需要真实 CST 安装和许可证的串行集成测试",
-    )
-    config.addinivalue_line(
-        "markers",
-        "cst_solver: 会短暂启动并强制停止真实 CST 求解器的测试",
-    )
-    config.addinivalue_line(
-        "markers",
-        "cst_destructive: 会修改隔离工程但必须在测试内清理的真机测试",
-    )
-
-
-def pytest_collection_modifyitems(
-    config: pytest.Config,
-    items: list[pytest.Item],
-) -> None:
-    """普通 pytest 明确跳过真机层，只有 --run-cst 才允许执行。"""
-    if config.getoption("--run-cst"):
-        return
-    skip = pytest.mark.skip(reason="使用 --run-cst 后才运行真实 CST 集成测试")
-    for item in items:
-        if "cst_integration" in item.keywords:
-            item.add_marker(skip)
-
-
 @pytest.fixture
 def mocker(monkeypatch: pytest.MonkeyPatch):
     """项目内置的轻量 pytest-mock 兼容夹具。"""
@@ -104,7 +67,7 @@ def clear_gateway_registry():
 
 
 @pytest.fixture
-def run_cli():
+def run_cli_json():
     """在子进程中运行 cst_runtime CLI，并解析 JSON 响应。"""
     python = sys.executable
     inherited_pythonpath = os.environ.get("PYTHONPATH", "")
@@ -680,8 +643,8 @@ def cst_case(shared_cst_project: SharedCSTProject) -> CSTCase:
 
 
 @pytest.fixture
-def temp_workspace(tmp_path: Path, run_cli):
+def temp_workspace(tmp_path: Path, run_cli_json):
     """创建隔离的 Runtime 工作区。"""
-    result = run_cli("init-workspace", "--workspace", str(tmp_path))
+    result = run_cli_json("init-workspace", "--workspace", str(tmp_path))
     assert result["status"] == "success"
     return tmp_path

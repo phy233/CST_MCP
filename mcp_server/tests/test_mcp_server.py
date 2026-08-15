@@ -4,6 +4,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,6 +19,7 @@ def test_config_has_separate_worker_runtime() -> None:
     assert "IPC" in config.instructions
 
 
+@pytest.mark.worker_proxy
 def test_proxy_reads_runtime_owned_manifest() -> None:
     from mcp_server.proxy import CSTWorkerProxy
 

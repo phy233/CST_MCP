@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 
+@pytest.mark.worker_proxy
 def test_worker_ping_and_request_id() -> None:
     from mcp_server.proxy import CSTWorkerProxy
 
@@ -25,6 +26,7 @@ def test_worker_ping_and_request_id() -> None:
         proxy.shutdown()
 
 
+@pytest.mark.worker_proxy
 def test_worker_rejects_unknown_operation() -> None:
     from mcp_server.proxy import CSTWorkerProxy
 
@@ -53,6 +55,7 @@ def test_worker_emits_non_gbk_character_as_ascii_json(monkeypatch) -> None:
     assert json.loads(encoded_line) == {"message": "\ue045"}
 
 
+@pytest.mark.worker_proxy
 def test_proxy_restarts_after_worker_exit() -> None:
     from mcp_server.proxy import CSTWorkerProxy
 
@@ -70,6 +73,7 @@ def test_proxy_restarts_after_worker_exit() -> None:
         proxy.shutdown()
 
 
+@pytest.mark.worker_proxy
 def test_worker_rejects_arbitrary_module_dispatch() -> None:
     from mcp_server.proxy import CSTWorkerProxy
 

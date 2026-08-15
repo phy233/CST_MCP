@@ -2,37 +2,14 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
-from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-SKILL_ROOT = REPO_ROOT / "skills" / "cst-runtime-cli"
-PYTHON = sys.executable
-# Use skill scripts directory as PYTHONPATH
-_PYTHONPATH = str(SKILL_ROOT / "scripts")
+import pytest
+
+from helpers import REPO_ROOT, run_cli
+
+pytestmark = pytest.mark.subprocess
+
 _VALID_PROJECT = str(REPO_ROOT / "test_array.cst")
-
-
-def run_cli(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
-    """Run CLI command and return result."""
-    import os
-    inherited = os.environ.get("PYTHONPATH", "")
-    pythonpath = (
-        _PYTHONPATH
-        if not inherited
-        else os.pathsep.join([_PYTHONPATH, inherited])
-    )
-    env = {**os.environ, "PYTHONPATH": pythonpath}
-    return subprocess.run(
-        [PYTHON, "-m", "cst_runtime", *args],
-        cwd=REPO_ROOT,
-        input=input_text,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
 
 
 class TestCapture3DViewSchema:

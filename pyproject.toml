@@ -32,12 +32,14 @@ packages = ["mcp_server"]
 [tool.pytest.ini_options]
 testpaths = ["mcp_server/tests", "skills/cst-runtime-cli/tests"]
 asyncio_mode = "auto"
-pythonpath = [".", "skills/cst-runtime-cli/scripts"]
+pythonpath = [".", "skills/cst-runtime-cli/scripts", "skills/cst-runtime-cli/tests"]
 addopts = "--import-mode=importlib"
 markers = [
     "cst_integration: 需要真实 CST 安装和许可证的串行集成测试",
     "cst_solver: 会短暂启动并强制停止真实 CST 求解器的测试",
     "cst_destructive: 会修改隔离工程但必须在测试内清理的真机测试",
+    "subprocess: 通过 python -m cst_runtime 子进程验证 CLI 的离线测试",
+    "worker_proxy: 会拉起 Python 3.9 CST Worker 子进程的离线测试",
 ]
 
 [tool.uv]

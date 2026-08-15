@@ -3,29 +3,15 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-SKILL_ROOT = REPO_ROOT / "skills" / "cst-runtime-cli"
-PYTHON = sys.executable
-_PYTHONPATH = str(SKILL_ROOT / "scripts")
+import pytest
 
+from helpers import run_cli
 
-def run_cli(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "PYTHONPATH": _PYTHONPATH}
-    return subprocess.run(
-        [PYTHON, "-m", "cst_runtime", *args],
-        cwd=REPO_ROOT,
-        input=input_text,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
+pytestmark = pytest.mark.subprocess
 
 
 def _run_in_workspace(args: list[str]) -> subprocess.CompletedProcess[str]:
