@@ -1,0 +1,14 @@
+{
+   "execution": {
+      "classname": "SMAPowerByEmagHPCFrame",
+      "libname": "SMAPowerByEmagUI"
+   },
+   "inputVariables": [
+      {
+         "name": "pytest_length",
+         "type": "float",
+         "value": 10.0
+      }
+   ],
+   "outputVariables": []
+}
