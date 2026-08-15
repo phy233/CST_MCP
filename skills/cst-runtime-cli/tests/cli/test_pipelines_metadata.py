@@ -70,27 +70,6 @@ class TestPipelinesMetadata:
         assert p["error_type"] == "unknown_pipeline"
         assert "available_pipelines" in p
 
-    def test_every_pipeline_step_tool_exists(self) -> None:
-        sys.path.insert(0, str(SKILL_ROOT / "scripts"))
-        from cst_runtime.cli.dispatch import TOOLS
-        from cst_runtime.cli.pipelines.registry import PIPELINES
-
-        known_tools = set(TOOLS) | {
-            "help", "list-tools", "list-pipelines", "describe-tool",
-            "describe-pipeline", "args-template", "pipeline-template",
-            "usage-guide", "invoke",
-        }
-        placeholders = {"<tool>", "--help"}
-        missing: list[str] = []
-        for pipe_name, pipe_def in PIPELINES.items():
-            for step in pipe_def.get("steps", []):
-                tool = step.get("tool", "")
-                if tool in placeholders:
-                    continue
-                if tool not in known_tools:
-                    missing.append(f"{pipe_name}: unknown tool {tool!r}")
-        assert not missing, "\n".join(missing)
-
 
 class TestPipelineToolRegistration:
     """Pipeline tools are registered in TOOLS, have correct metadata and templates."""

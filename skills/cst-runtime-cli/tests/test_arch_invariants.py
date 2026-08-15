@@ -16,8 +16,6 @@ import ast
 import inspect
 from pathlib import Path
 
-import pytest
-
 SKILL_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SKILL_SCRIPTS))
 
@@ -43,7 +41,7 @@ def _load_pipelines():
 VALID_CATEGORIES = {
     "modeling", "project_ops", "simulation", "results", "farfield",
     "session_manager", "audit", "workspace", "run", "process_cleanup",
-    "project_identity",
+    "project_identity", "optimization",
 }
 
 VALID_RISK_LABELS = {"read", "write", "session", "process-control",
@@ -150,17 +148,10 @@ class TestHandlerRegistration:
             for name, rec in _load_dispatch_tools().items()
             if rec.get("category", "") not in VALID_CATEGORIES
         }
-        unexpected = {
-            name: category
-            for name, category in invalid.items()
-            if category != "optimization"
-        }
-        assert not unexpected, (
-            f"发现非预期的非法类别：{unexpected}。"
+        assert not invalid, (
+            f"发现非法类别：{invalid}。"
             f"有效类别：{sorted(VALID_CATEGORIES)}"
         )
-        if invalid:
-            pytest.xfail("optimization 工具类别尚未加入 VALID_CATEGORIES 或重新归类")
 
     def test_every_handler_has_valid_risk(self):
         """All tools have valid risk label."""
@@ -274,3 +265,15 @@ class TestGovernance:
             if rec.get("risk") == "read":
                 assert not rec.get("requires_check_solid", False), \
                     f"{name}: read tool should not require check_solid"
+
+    def test_session_tools_have_correct_risk_labels(self):
+        """Session 工具的风险标签必须与进程控制边界一致。"""
+        session_risks = {
+            "cst-session-open": "session",
+            "cst-session-close": "session",
+            "cst-session-quit": "process-control",
+            "cst-session-inspect": "read",
+            "cst-session-reattach": "read",
+        }
+        for name, expected_risk in session_risks.items():
+            assert _load_dispatch_tools()[name]["risk"] == expected_risk, name

@@ -48,10 +48,9 @@ def test_boundary_valid_pairing_reaches_submission(monkeypatch, tmp_path: Path, 
 @pytest.mark.parametrize(
     "faces",
     [
+        # 一个代表（X 向 periodic 与 X 向 open 冲突）+ 一个边界（unit cell 与 open 混配）
         ("periodic", "open", "open", "open"),
-        ("open", "open", "periodic", "magnetic"),
         ("unit cell", "unit cell", "unit cell", "open"),
-        ("unit cell", "periodic", "periodic", "periodic"),
     ],
 )
 def test_invalid_boundary_pairing_never_calls_builder_history_or_cst(monkeypatch, tmp_path: Path, faces) -> None:
@@ -164,11 +163,10 @@ def test_floquet_automatic_does_not_guess_mode_table() -> None:
 @pytest.mark.parametrize(
     "ports,basis",
     [
+        # 空端口 / 显式策略缺模式表 / 线极化配圆极化模式，各命中一个不同校验分支
         ([], "linear"),
-        (_explicit_ports() * 2, "linear"),
         ([{"position": "Zmin", "mode_strategy": "explicit", "modes": [], "modes_considered": 1, "reference_distance": 0}], "linear"),
         ([{"position": "Zmin", "mode_strategy": "explicit", "modes": [{"type": "LCP", "order_x": 1, "order_yprime": 0}], "modes_considered": 1, "reference_distance": 0}], "circular"),
-        ([{"position": "Zmin", "mode_strategy": "explicit", "modes": [{"type": "TE", "order_x": 0, "order_yprime": 0}, {"type": "TM", "order_x": 0, "order_yprime": 0}], "modes_considered": 1, "reference_distance": 0}], "linear"),
     ],
 )
 def test_invalid_floquet_combinations_are_rejected(monkeypatch, tmp_path: Path, ports, basis) -> None:

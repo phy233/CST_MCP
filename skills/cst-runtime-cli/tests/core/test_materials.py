@@ -25,3 +25,31 @@ def test_material_vba_uses_only_definition_section() -> None:
     assert lines[-1] == "End With"
     assert "FrqType: all" not in lines
     assert "EM(HF) properties measured @ 10GHz" not in lines
+
+
+def test_define_uses_documented_mu_method(monkeypatch):
+    """手册 Material 对象方法为 .Mu（GetMu 查询），不得出现未文档化的 .Mue。"""
+    from cst_runtime.lib import materials
+    from cst_runtime.lib.contracts import success_result
+
+    captured = {}
+
+    def fake_add_to_history(project_path, vba, history_name):
+        captured["vba"] = vba
+        return success_result()
+
+    monkeypatch.setattr(materials, "_add_to_history", fake_add_to_history)
+
+    result = materials.define(
+        "C:/work/working.cst",
+        name="FR4",
+        epsilon=4.3,
+        mue=1.2,
+        tan_d=0.02,
+    )
+
+    assert result["status"] == "success"
+    vba = captured["vba"]
+    assert ".Mu 1.2" in vba
+    assert ".Mue" not in vba
+    assert ".Epsilon 4.3" in vba

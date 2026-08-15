@@ -71,22 +71,6 @@ def test_proxy_restarts_after_worker_exit() -> None:
 
 
 def test_worker_rejects_arbitrary_module_dispatch() -> None:
-    from cst_runtime.worker import handle_request
-
-    result = handle_request(
-        {
-            "id": "request-1",
-            "action": "import_module",
-            "module": "os",
-            "function": "system",
-        }
-    )
-    assert result["id"] == "request-1"
-    assert result["status"] == "error"
-    assert result["error_type"] == "unsupported_action"
-
-
-def test_worker_rejects_arbitrary_module_dispatch() -> None:
     from mcp_server.proxy import CSTWorkerProxy
 
     proxy = CSTWorkerProxy()

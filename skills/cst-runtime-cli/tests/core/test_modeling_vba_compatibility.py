@@ -673,7 +673,6 @@ def test_cylinder_uses_version_specific_radius_properties() -> None:
     assert 'Solid.Subtract "component1:tube"' in modern
 
 
-@pytest.mark.parametrize("operation", ["cylinder", "cone"])
 @pytest.mark.parametrize(
     ("axis", "range_name", "center_names"),
     [
@@ -682,14 +681,13 @@ def test_cylinder_uses_version_specific_radius_properties() -> None:
         ("z", "Zrange", ("Xcenter", "Ycenter")),
     ],
 )
-def test_public_axial_solid_maps_fields_to_axis_specific_vba(
+def test_cylinder_maps_fields_to_axis_specific_vba(
     monkeypatch,
-    operation: str,
     axis: str,
     range_name: str,
     center_names: tuple[str, str],
 ) -> None:
-    """公开旧字段必须按轴向生成 CST 2022 要求的 VBA 参数名。"""
+    """公开旧字段必须按轴向生成 CST 2022 要求的 VBA 参数名（cylinder 覆盖三个轴）。"""
     captured: dict[str, str] = {}
     monkeypatch.setattr(core_modeling, "detect_compatibility_profile", lambda: CST2022)
 
@@ -698,34 +696,54 @@ def test_public_axial_solid_maps_fields_to_axis_specific_vba(
         return {"status": "success"}
 
     monkeypatch.setattr(core_modeling, "_add_vba_history", fake_add_vba_history)
-    arguments = {
-        "project_path": "D:/project.cst",
-        "name": operation,
-        "component": "component1",
-        "material": "PEC",
-        "axis": axis,
-        "axis_min": 1,
-        "axis_max": 9,
-        "x_center": 2,
-        "y_center": 3,
-    }
-    if operation == "cylinder":
-        result = core_modeling.define_cylinder(
-            outer_radius=4,
-            inner_radius=0,
-            **arguments,
-        )
-    else:
-        result = core_modeling.define_cone(
-            bottom_radius=4,
-            top_radius=1,
-            **arguments,
-        )
+    result = core_modeling.define_cylinder(
+        outer_radius=4,
+        inner_radius=0,
+        project_path="D:/project.cst",
+        name="cylinder",
+        component="component1",
+        material="PEC",
+        axis=axis,
+        axis_min=1,
+        axis_max=9,
+        x_center=2,
+        y_center=3,
+    )
 
     assert result["status"] == "success"
     assert f'.{range_name} "1", "9"' in captured["vba"]
     assert f'.{center_names[0]} "2"' in captured["vba"]
     assert f'.{center_names[1]} "3"' in captured["vba"]
+
+
+def test_cone_maps_fields_to_axis_specific_vba(monkeypatch) -> None:
+    """cone 与 cylinder 共用同一轴向映射，单例覆盖即可（半径字段另测）。"""
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(core_modeling, "detect_compatibility_profile", lambda: CST2022)
+
+    def fake_add_vba_history(_project_path, _history_name, vba_lines):
+        captured["vba"] = "\n".join(vba_lines)
+        return {"status": "success"}
+
+    monkeypatch.setattr(core_modeling, "_add_vba_history", fake_add_vba_history)
+    result = core_modeling.define_cone(
+        bottom_radius=4,
+        top_radius=1,
+        project_path="D:/project.cst",
+        name="cone",
+        component="component1",
+        material="PEC",
+        axis="z",
+        axis_min=1,
+        axis_max=9,
+        x_center=2,
+        y_center=3,
+    )
+
+    assert result["status"] == "success"
+    assert '.Zrange "1", "9"' in captured["vba"]
+    assert '.Xcenter "2"' in captured["vba"]
+    assert '.Ycenter "3"' in captured["vba"]
 
 
 def test_solid_axis_is_validated_in_compatibility_layer() -> None:

@@ -200,10 +200,6 @@ class TestSvgPage:
         assert "A" in html
         assert "B" in html
         assert "GHz" in html
-
-    def test_metric_cards_html_accent(self) -> None:
-        metrics = [{"label": "C", "value": "3", "css_class": "accent"}]
-        html = metric_cards_html(metrics)
         assert "accent" in html
 
 
@@ -219,17 +215,9 @@ class TestDashboard:
         assert len(result["ypositions"]) > 0
         assert len(result["data"]) > 0
 
-    def test_try_parse_cst_farfield_ascii_no_header(self) -> None:
-        result = _try_parse_cst_farfield_ascii("abc\n123")
-        assert result is None
-
-    def test_try_parse_cst_farfield_ascii_empty(self) -> None:
-        result = _try_parse_cst_farfield_ascii("")
-        assert result is None
-
-    def test_try_parse_cst_farfield_ascii_invalid_header(self) -> None:
-        result = _try_parse_cst_farfield_ascii("Theta\n0 0 14.5")
-        assert result is None
+    def test_try_parse_cst_farfield_ascii_negatives(self) -> None:
+        for text in ("abc\n123", "", "Theta\n0 0 14.5"):
+            assert _try_parse_cst_farfield_ascii(text) is None
 
     def test_try_parse_cst_farfield_ascii_with_phi_closure(self) -> None:
         text = "Theta Phi Abs(Gain)[dBi]\n0 0 10\n0 180 11\n0 359 12"
@@ -260,13 +248,9 @@ class TestDashboard:
 class TestCanvas3D:
     """Tests for render/canvas_3d.py"""
 
-    def test_empty_data(self) -> None:
-        html = render_3d_farfield({})
-        assert "无可用" in html
-
-    def test_missing_positions(self) -> None:
-        html = render_3d_farfield({"data": [[1]]})
-        assert "无可用" in html
+    def test_empty_or_missing_positions_reports_unavailable(self) -> None:
+        for payload in ({}, {"data": [[1]]}):
+            assert "无可用" in render_3d_farfield(payload)
 
     def test_minimal_valid_data(self) -> None:
         data = {

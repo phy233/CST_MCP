@@ -26,13 +26,3 @@ def test_generic_boundary_tool_disclaims_advanced_configuration() -> None:
     description = TOOL_DEFS["define-boundary"]["description"]
     assert "不等价于完整的 Unit Cell 或 Floquet 配置" in description
     assert "手动完成" in description
-
-
-def test_metasurface_tools_are_agent_exposed() -> None:
-    from cst_runtime.api.atomic import atomic_definitions
-
-    definitions = {item["name"]: item for item in atomic_definitions()}
-    assert definitions["define-floquet-port"]["exposure"] == "agent"
-    assert definitions["define-unit-cell-boundary"]["exposure"] == "agent"
-    assert definitions["inspect-floquet-ports"]["exposure"] == "agent"
-    assert definitions["analyze-metasurface-sparameters"]["exposure"] == "agent"

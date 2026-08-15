@@ -188,3 +188,10 @@ def test_version_specific_vba_markers_stay_in_compatibility_layer() -> None:
                 violations.append(f"{path.relative_to(RUNTIME)}:{marker}")
 
     assert not violations
+
+
+def test_deleted_s11_pipeline_helpers_are_not_public() -> None:
+    """run-experiment 已与导出解耦，不再保留按 s11_run 文件判定的辅助函数。"""
+    from cst_runtime.cli.pipelines import impl
+
+    assert not hasattr(impl, "_parse_s11_json")

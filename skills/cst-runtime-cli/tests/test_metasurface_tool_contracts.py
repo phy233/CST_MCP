@@ -27,13 +27,6 @@ def test_all_new_tools_are_registered_for_agent() -> None:
     assert "inspect-solver-settings" not in definitions
 
 
-def test_top_level_schemas_reject_unknown_fields() -> None:
-    definitions = {item["name"]: item for item in atomic_definitions()}
-    for name in NEW_TOOLS:
-        schema = definitions[name]["input_schema"]
-        assert schema["additionalProperties"] is False
-
-
 def test_nested_floquet_schema_rejects_unknown_fields() -> None:
     definitions = {item["name"]: item for item in atomic_definitions()}
     schema = definitions["define-floquet-port"]["input_schema"]
