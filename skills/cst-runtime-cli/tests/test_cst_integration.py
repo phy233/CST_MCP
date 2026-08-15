@@ -509,6 +509,132 @@ def test_50_solver_reaches_running_state_then_is_forcibly_stopped(cst_case: Any)
     assert saw_stopped, "强制停止后 30 秒内求解器仍处于运行状态"
 
 
+@pytest.mark.cst_solver
+def test_51_solver_pause_resume_then_stop(cst_case: Any) -> None:
+    """用短矩形波导观察运行态，验证 pause/resume 后无条件停止并清理。
+
+    必须排在本文件参数测试之前：change-parameter 会登记 params_dirty，
+    之后任何 start-simulation-async 都会被 T2 守卫拒绝。
+    """
+    wall_ranges = [
+        ("top", -11.43, 11.43, 5.08, 6.08, 0, 100),
+        ("bottom", -11.43, 11.43, -6.08, -5.08, 0, 100),
+        ("left", -12.43, -11.43, -6.08, 6.08, 0, 100),
+        ("right", 11.43, 12.43, -6.08, 6.08, 0, 100),
+    ]
+    walls: list[tuple[str, str]] = []
+    saw_running = False
+    saw_paused = False
+    saw_resumed = False
+    saw_stopped = False
+    stop_result: dict[str, Any] | None = None
+    try:
+        for suffix, x_min, x_max, y_min, y_max, z_min, z_max in wall_ranges:
+            name = cst_case.name(f"pw_waveguide_{suffix}")
+            assert not cst_case.shared.entity_exists(COMPONENT, name)
+            cst_case.require_success(
+                "define-brick",
+                _project_arguments(
+                    cst_case,
+                    name=name,
+                    component=COMPONENT,
+                    material="PEC",
+                    x_min=x_min,
+                    x_max=x_max,
+                    y_min=y_min,
+                    y_max=y_max,
+                    z_min=z_min,
+                    z_max=z_max,
+                ),
+            )
+            cst_case.shared.register_entity(COMPONENT, name)
+            walls.append((COMPONENT, name))
+
+        cst_case.require_success(
+            "define-frequency-range",
+            _project_arguments(cst_case, start_freq=8.0, end_freq=12.0),
+        )
+        for port_number, z_value, orientation in (
+            ("1", 0, "zmin"),
+            ("2", 100, "zmax"),
+        ):
+            cst_case.require_success(
+                "define-port",
+                _project_arguments(
+                    cst_case,
+                    port_number=port_number,
+                    x_min=-11.43,
+                    x_max=11.43,
+                    y_min=-5.08,
+                    y_max=5.08,
+                    z_min=z_value,
+                    z_max=z_value,
+                    orientation=orientation,
+                ),
+            )
+
+        cst_case.require_success(
+            "start-simulation-async",
+            {"project_path": cst_case.project_path},
+            timeout=60,
+        )
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            state = cst_case.require_success(
+                "is-simulation-running",
+                {"project_path": cst_case.project_path},
+            )
+            if state.get("running") is True:
+                saw_running = True
+                break
+            time.sleep(0.25)
+        assert saw_running, "求解器启动后 30 秒内未观察到 running=True"
+
+        paused = cst_case.call(
+            "pause-simulation",
+            {"project_path": cst_case.project_path},
+            timeout=60,
+        )
+        if paused.get("status") == "success":
+            saw_paused = True
+            assert paused.get("message") == "simulation paused", paused
+            resumed = cst_case.call(
+                "resume-simulation",
+                {"project_path": cst_case.project_path},
+                timeout=60,
+            )
+            if resumed.get("status") == "success":
+                saw_resumed = True
+                assert resumed.get("message") == "simulation resumed", resumed
+    finally:
+        stop_result = cst_case.call(
+            "stop-simulation",
+            {"project_path": cst_case.project_path},
+            timeout=60,
+        )
+        if stop_result.get("status") == "success":
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                state = cst_case.require_success(
+                    "is-simulation-running",
+                    {"project_path": cst_case.project_path},
+                )
+                if state.get("running") is False:
+                    saw_stopped = True
+                    break
+                time.sleep(0.25)
+        for component, name in reversed(walls):
+            if cst_case.shared.entity_exists(component, name):
+                cst_case.shared.delete_entity(component, name)
+
+    assert paused.get("status") == "success", paused
+    assert saw_paused, "pause-simulation 成功但未确认 paused=True"
+    assert resumed.get("status") == "success", resumed
+    assert saw_resumed, "resume-simulation 成功但未确认恢复 running=True"
+    assert stop_result.get("status") == "success", stop_result
+    assert saw_stopped, "强制停止后 30 秒内求解器仍处于运行状态"
+
+
 def test_80_material_definition_is_accepted_by_real_geometry(cst_case: Any) -> None:
     """材料定义必须由后续真实建模接受，而不是只检查提交状态。"""
     material_name = "FR-4 (loss free)"

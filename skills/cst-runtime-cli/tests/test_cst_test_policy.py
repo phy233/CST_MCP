@@ -83,14 +83,19 @@ def test_real_cst_launch_path_never_requests_hidden_mode() -> None:
 
 def test_real_cst_tests_do_not_use_decorator_level_xfail() -> None:
     """装饰器级 xfail 会吞掉传输超时，只允许在验证旧错误后条件式 xfail。"""
-    path = TEST_ROOT / "test_cst_integration.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    violations: list[int] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    failures: list[str] = []
+    for path in sorted(TEST_ROOT.rglob("test*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if not _is_cst_integration(tree):
             continue
-        for decorator in node.decorator_list:
-            function = decorator.func if isinstance(decorator, ast.Call) else decorator
-            if isinstance(function, ast.Attribute) and function.attr == "xfail":
-                violations.append(decorator.lineno)
-    assert not violations, f"真机测试仍有装饰器级 xfail：{violations}"
+        violations: list[int] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                function = decorator.func if isinstance(decorator, ast.Call) else decorator
+                if isinstance(function, ast.Attribute) and function.attr == "xfail":
+                    violations.append(decorator.lineno)
+        if violations:
+            failures.append(f"{path.relative_to(TEST_ROOT)}：{violations}")
+    assert not failures, "真机测试仍有装饰器级 xfail：\n" + "\n".join(failures)
