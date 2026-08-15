@@ -158,9 +158,10 @@ def test_boolean_insert_consumes_shape2(cst_case: Any) -> None:
             shape2=f"{COMPONENT}:{inner}",
         ),
     )
+    # CST Insert 在目标上挖腔但保留工具实体，两个实体都必须仍存在。
     assert cst_case.shared.entity_exists(COMPONENT, outer)
-    assert not cst_case.shared.entity_exists(COMPONENT, inner)
-    cst_case.shared.forget_entity(COMPONENT, inner)
+    assert cst_case.shared.entity_exists(COMPONENT, inner)
+    cst_case.shared.delete_entity(COMPONENT, inner)
     cst_case.shared.delete_entity(COMPONENT, outer)
 
 
@@ -262,6 +263,11 @@ def test_set_color_and_change_material(cst_case: Any) -> None:
     material = "Copper (pure)"
     listed = cst_case.require_success("list-materials", {})
     assert material in listed.get("material_names", []), listed
+    # 材料必须先经 define-material-from-mtd 落进工程，Solid.ChangeMaterial 才能解析。
+    cst_case.require_success(
+        "define-material-from-mtd",
+        project_arguments(cst_case, material_name=material),
+    )
     name = cst_case.name("colored")
     _brick(cst_case, name, x_min=170, x_max=171)
     cst_case.require_success(

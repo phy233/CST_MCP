@@ -106,14 +106,21 @@ def floquet_port_setup_vba(
         # 手册要求先用 Port 选定后续调用所针对的端口。
         lines.append(f'    .Port "{position}"')
         if index == 0:
+            # 可选数值对话框只在实际提供数值时生成；空字符串会让 CST 2022
+            # 的数字型 setter 抛 VBA 运行时错误。
+            optional_dialogs = (
+                ("SetDialogFrequency", _optional_number(sort_frequency)),
+                ("SetDialogMaxOrderX", _optional_number(max_order_x)),
+                ("SetDialogMaxOrderYPrime", _optional_number(max_order_yprime)),
+            )
+            lines.append(f'    .SetUseCircularPolarization "{circular_flag}"')
+            for setter, value in optional_dialogs:
+                if value != "":
+                    lines.append(f'    .{setter} "{value}"')
             lines.extend(
                 [
-                    f'    .SetUseCircularPolarization "{circular_flag}"',
-                    f'    .SetDialogFrequency "{_optional_number(sort_frequency)}"',
                     f'    .SetDialogTheta "{_number(sort_theta)}"',
                     f'    .SetDialogPhi "{_number(sort_phi)}"',
-                    f'    .SetDialogMaxOrderX "{_optional_number(max_order_x)}"',
-                    f'    .SetDialogMaxOrderYPrime "{_optional_number(max_order_yprime)}"',
                     f'    .SetSortCode "{normalized_sort}"',
                 ]
             )

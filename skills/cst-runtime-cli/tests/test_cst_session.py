@@ -16,7 +16,7 @@ pytestmark = [
 
 
 def test_session_inspect_reports_sole_project(cst_case: Any) -> None:
-    """cst-session-inspect 必须看到唯一隔离工程与唯一 DE。"""
+    """cst-session-inspect 必须看到唯一隔离工程与唯一 DE（打开中的工程持锁 → blocked）。"""
     result = cst_case.require_success(
         "cst-session-inspect",
         project_arguments(cst_case),
@@ -28,7 +28,9 @@ def test_session_inspect_reports_sole_project(cst_case: Any) -> None:
     assert normalized(projects[0]["project_path"]) == normalized(cst_case.project_path)
     assert open_status["design_environment_count"] == 1, result
     assert result["project_identity_status"]["status"] == "success", result
-    assert result["readiness"] in {"clear", "attention_required"}, result
+    # 工程处于打开状态，CST 持有锁文件，readiness 必须如实上报 blocked。
+    assert result["readiness"] == "blocked", result
+    assert result["lock_count"] >= 1, result
     cst_case.shared.require_visible_window()
 
 
@@ -42,14 +44,16 @@ def test_verify_project_identity_confirms_expected(cst_case: Any) -> None:
     assert result["design_environment_pid"] == cst_case.shared.design_environment_pid
 
 
-def test_wait_project_unlocked_returns_promptly(cst_case: Any) -> None:
-    """无锁工程应快速返回 locked=False。"""
-    result = cst_case.require_success(
+def test_wait_project_unlocked_reports_open_project_locks(cst_case: Any) -> None:
+    """打开中的工程持有锁文件：工具必须在超时后如实返回 lock_not_released。"""
+    result = cst_case.call(
         "wait-project-unlocked",
-        project_arguments(cst_case, timeout_seconds=5, poll_interval_seconds=0.5),
+        project_arguments(cst_case, timeout_seconds=2, poll_interval_seconds=0.5),
     )
-    assert result["locked"] is False, result
-    assert result["waited_seconds"] < 5, result
+    assert result.get("status") == "error", result
+    assert result.get("error_type") == "lock_not_released", result
+    assert result.get("locked") is True, result
+    assert result.get("lock_files"), result
 
 
 def test_save_project_roundtrip_advances_file(cst_case: Any) -> None:

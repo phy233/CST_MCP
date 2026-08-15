@@ -18,7 +18,7 @@ pytestmark = [
 
 
 COMPONENT = "component1"
-STANDARD_NO_RESULT_ERRORS = {"no_result", "result_not_found"}
+STANDARD_NO_RESULT_ERRORS = {"no_result", "result_not_found", "result_node_not_found"}
 
 
 def _entity_keys(items: list[dict[str, str]]) -> set[tuple[str, str]]:

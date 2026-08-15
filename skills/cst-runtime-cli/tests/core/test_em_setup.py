@@ -160,6 +160,21 @@ def test_floquet_automatic_does_not_guess_mode_table() -> None:
     assert '.SetUseCircularPolarization "True"' in script
 
 
+def test_floquet_omits_unset_optional_dialogs() -> None:
+    """未提供的可选数值对话框不得生成空字符串 setter（CST 2022 会报 VBA 运行时错误）。"""
+    generated = floquet_port_setup_vba(
+        ports=[{"position": "Zmin", "mode_strategy": "automatic", "modes": [], "modes_considered": 2, "reference_distance": 0}],
+        polarization_basis="linear", sort_code="+beta/pw", sort_frequency=None,
+        sort_theta=0, sort_phi=0, max_order_x=None, max_order_yprime=None, profile=PROFILE,
+    )
+    script = "\n".join(generated.lines)
+    assert "SetDialogFrequency" not in script
+    assert "SetDialogMaxOrderX" not in script
+    assert "SetDialogMaxOrderYPrime" not in script
+    assert '""' not in script
+    assert '.SetSortCode "+beta/pw"' in script
+
+
 @pytest.mark.parametrize(
     "ports,basis",
     [
