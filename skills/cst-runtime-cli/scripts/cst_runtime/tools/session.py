@@ -101,7 +101,11 @@ TOOL_DEFS = {
 "cst-session-open": {
     "category": "session_manager",
     "risk": "session",
-    "description": "Open a CST project through the central session manager and inspect the environment afterward.",
+    "description": (
+        "通过中央会话管理器打开 CST 工程。默认只自动接管本次启动后唯一新增的 PID；"
+        "若需要接管已有或归属不明确的会话，首次调用会返回候选 PID，调用方必须先询问用户，"
+        "再同时提供 confirm_existing_session_takeover=true 与用户确认的 existing_session_pid。"
+    ),
     "handler": "tool_cst_session_open",
     "json_schema": {
         "type": "object",
@@ -111,6 +115,17 @@ TOOL_DEFS = {
                 "examples": [
                     "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
                 ]
+            },
+            "confirm_existing_session_takeover": {
+                "type": "boolean",
+                "default": False,
+                "description": "仅在用户看到候选 PID 并明确同意接管后设为 true。"
+            },
+            "existing_session_pid": {
+                "type": ["integer", "null"],
+                "minimum": 1,
+                "default": None,
+                "description": "用户明确确认允许接管的 Design Environment PID。"
             }
         },
         "required": [
@@ -160,8 +175,11 @@ TOOL_DEFS = {
 
 "cst-session-reattach": {
     "category": "session_manager",
-    "risk": "read",
-    "description": "Reattach to the expected CST project only if it is the sole open project.",
+    "risk": "session",
+    "description": (
+        "重新附着已打开的 CST 工程。首次调用只返回候选 PID；"
+        "调用方询问用户后，必须同时传入确认标志和用户选择的 PID。"
+    ),
     "handler": "tool_cst_session_reattach",
     "json_schema": {
         "type": "object",
@@ -171,6 +189,17 @@ TOOL_DEFS = {
                 "examples": [
                     "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
                 ]
+            },
+            "confirm_existing_session_takeover": {
+                "type": "boolean",
+                "default": False,
+                "description": "仅在用户明确同意接管已有会话后设为 true。"
+            },
+            "existing_session_pid": {
+                "type": ["integer", "null"],
+                "minimum": 1,
+                "default": None,
+                "description": "用户明确确认允许接管的 Design Environment PID。"
             }
         },
         "required": [
@@ -228,7 +257,14 @@ def tool_cst_session_inspect(args: dict) -> dict:
 
 
 def tool_cst_session_open(args: dict) -> dict:
-    return _sm.open_project(project_path_from_args(args))
+    return _sm.open_project(
+        project_path_from_args(args),
+        confirm_existing_session_takeover=args.get(
+            "confirm_existing_session_takeover",
+            False,
+        ),
+        existing_session_pid=args.get("existing_session_pid"),
+    )
 
 
 def tool_cst_session_quit(args: dict) -> dict:
@@ -241,7 +277,14 @@ def tool_cst_session_quit(args: dict) -> dict:
 
 
 def tool_cst_session_reattach(args: dict) -> dict:
-    return _sm.reattach_project(project_path_from_args(args))
+    return _sm.reattach_project(
+        project_path_from_args(args),
+        confirm_existing_session_takeover=args.get(
+            "confirm_existing_session_takeover",
+            False,
+        ),
+        existing_session_pid=args.get("existing_session_pid"),
+    )
 
 
 def tool_save_project(args: dict) -> dict:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -9,15 +10,35 @@ from . import process as process_cleanup
 from . import identity as project_identity
 from .compatibility import (
     connect_design_environment,
-    connect_to_any_design_environment,
     create_design_environment,
+    design_environment_pid,
     running_design_environment_pids,
 )
 from .errors import error_response
 from .utils import abs_project_path as _abs_project_path
 
 _OPENED_PROJECTS: dict[str, Any] = {}
-_OPENED_DESIGN_ENVIRONMENTS: dict[str, Any] = {}
+
+
+@dataclass(frozen=True)
+class _DesignEnvironmentLease:
+    """记录 Design Environment 句柄及其关闭权限。"""
+
+    environment: Any | None
+    design_environment_pid: int | None
+    runtime_owned: bool
+
+
+class _ExistingSessionTakeoverRequired(RuntimeError):
+    """只有已存在或归属不明确的 CST 会话可用时，要求用户确认。"""
+
+    def __init__(self, candidate_pids: list[int], reason: str) -> None:
+        self.candidate_pids = tuple(sorted(set(candidate_pids)))
+        self.reason = reason
+        super().__init__("接管已存在的 CST 会话前需要用户确认")
+
+
+_OPENED_DESIGN_ENVIRONMENTS: dict[str, _DesignEnvironmentLease] = {}
 
 
 def get_attached_project(project_path: str) -> dict[str, Any] | None:
@@ -29,45 +50,115 @@ def _connect_new_design_environment():
     return create_design_environment()
 
 
-def _create_or_connect_design_environment(*, timeout_seconds: float = 120.0) -> Any:
+def _running_pid_set() -> set[int]:
+    """取得当前可见的有效 Design Environment PID 集合。"""
+    return {int(pid) for pid in running_design_environment_pids() if int(pid) > 0}
+
+
+def _confirmation_required(
+    project_path: str,
+    candidate_pids: list[int] | tuple[int, ...],
+    *,
+    reason: str,
+) -> dict[str, Any]:
+    """构造必须先询问用户的两阶段确认响应。"""
+    candidates = sorted(set(int(pid) for pid in candidate_pids))
+    return error_response(
+        "existing_session_confirmation_required",
+        "检测到本次调用前已存在或归属不明确的 CST 会话；未经用户明确同意，"
+        "Runtime 不会接管这些会话。",
+        phase="confirmation",
+        next_action=(
+            "请向用户展示 candidate_design_environment_pids；仅在用户明确同意后，"
+            "使用 confirm_existing_session_takeover=true 和 existing_session_pid 重试。"
+        ),
+        project_path=project_path,
+        runtime_module="cst_runtime.core.session",
+        requires_user_confirmation=True,
+        confirmation_reason=reason,
+        candidate_design_environment_pids=candidates,
+        confirmation_arguments={
+            "confirm_existing_session_takeover": True,
+            "existing_session_pid": "<用户确认的 PID>",
+        },
+    )
+
+
+def _connect_unique_new_design_environment(
+    baseline_pids: set[int],
+    *,
+    deadline: float,
+    original_error: Exception,
+) -> Any:
+    """仅连接基线之后唯一新增的 DE；旧 PID 或多候选必须由用户确认。"""
+    last_running_pids = set(baseline_pids)
+    last_connection_error: Exception | None = None
+    while True:
+        current_pids = _running_pid_set()
+        last_running_pids = current_pids
+        new_pids = sorted(current_pids - baseline_pids)
+        if len(new_pids) == 1:
+            try:
+                return connect_design_environment(new_pids[0])
+            except Exception as exc:
+                last_connection_error = exc
+        if time.monotonic() >= deadline:
+            if len(new_pids) > 1:
+                raise _ExistingSessionTakeoverRequired(
+                    new_pids,
+                    "multiple_new_sessions",
+                ) from original_error
+            preexisting_pids = sorted(last_running_pids & baseline_pids)
+            if not new_pids and preexisting_pids:
+                raise _ExistingSessionTakeoverRequired(
+                    preexisting_pids,
+                    "preexisting_sessions_only",
+                ) from original_error
+            if last_connection_error is not None:
+                raise last_connection_error from original_error
+            raise original_error
+        time.sleep(0.5)
+
+
+def _create_or_connect_design_environment(
+    *,
+    timeout_seconds: float = 120.0,
+) -> tuple[Any, set[int]]:
     """创建 DE；CST 2022 冷启动时启动器会转交进程后退出。
 
     构造器与静态 new 都可能报 "Could not connect to a DE with pid"（实测
-    构造函数在冷启动时直接抛 TimeoutError）。此时等待实际运行的 DE 出现，
-    用官方连接路径（connect_to_any / 按 PID connect）接管。
+    构造函数在冷启动时直接抛 TimeoutError）。此时只允许连接启动基线之后
+    唯一新增的 PID；已有 PID 或多个新增 PID 都必须先由用户确认。
     """
+    baseline_pids = _running_pid_set()
     try:
-        return _connect_new_design_environment()
+        return _connect_new_design_environment(), baseline_pids
     except Exception as exc:
         if "pid" not in str(exc).casefold():
             raise
         deadline = time.monotonic() + max(timeout_seconds, 0.0)
-        while True:
-            try:
-                return connect_to_any_design_environment()
-            except RuntimeError:
-                pass
-            for pid in running_design_environment_pids():
-                try:
-                    return connect_design_environment(pid)
-                except Exception:
-                    continue
-            if time.monotonic() >= deadline:
-                raise exc
-            time.sleep(0.5)
+        return (
+            _connect_unique_new_design_environment(
+                baseline_pids,
+                deadline=deadline,
+                original_error=exc,
+            ),
+            baseline_pids,
+        )
 
 
 def _open_project_with_pid_handoff_fallback(
     normalized_project: str,
     design_environment: Any,
     *,
+    baseline_pids: set[int],
     handoff_timeout_seconds: float = 30.0,
 ) -> tuple[Any, Any]:
     """de.open_project 的 CST 2022 PID 交接回退，返回 (project, design_environment)。
 
     CST 2022 的启动器会把 DE 主窗口转交给另一个进程后退出；Python 对象
     仍按旧 PID 查找，报 "Could not connect to a DE with pid: X"。此时等待
-    实际运行的 DE 出现，用官方连接路径取得新句柄再打开工程。
+    实际运行的 DE 出现，但只连接相对启动基线唯一新增的 PID。
     """
     try:
         return design_environment.open_project(normalized_project), design_environment
@@ -75,15 +166,12 @@ def _open_project_with_pid_handoff_fallback(
         if "pid" not in str(exc).casefold():
             raise
         deadline = time.monotonic() + max(handoff_timeout_seconds, 0.0)
-        while True:
-            try:
-                replacement = connect_to_any_design_environment()
-            except RuntimeError:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.5)
-                continue
-            return replacement.open_project(normalized_project), replacement
+        replacement = _connect_unique_new_design_environment(
+            baseline_pids,
+            deadline=deadline,
+            original_error=exc,
+        )
+        return replacement.open_project(normalized_project), replacement
 
 
 def inspect(project_path: str = "") -> dict[str, Any]:
@@ -109,7 +197,11 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
         project = de.new_mws()
         project.save(normalized_project)
         _OPENED_PROJECTS[normalized_project] = project
-        _OPENED_DESIGN_ENVIRONMENTS[normalized_project] = de
+        _OPENED_DESIGN_ENVIRONMENTS[normalized_project] = _DesignEnvironmentLease(
+            environment=de,
+            design_environment_pid=design_environment_pid(de),
+            runtime_owned=True,
+        )
         gateway.on_session_open(normalized_project, "modeler")
         return {
             "status": "success",
@@ -132,19 +224,55 @@ def create_blank_project(project_path: str) -> dict[str, Any]:
         )
 
 
-def open_project(project_path: str) -> dict[str, Any]:
+def open_project(
+    project_path: str,
+    *,
+    confirm_existing_session_takeover: bool = False,
+    existing_session_pid: int | None = None,
+) -> dict[str, Any]:
     """打开一个已经存在的 CST 工程。
     
     该方法会检查文件是否存在，然后调用 CST 的 COM 接口将其打开。
-    如果该工程已经被当前环境锁定（正在运行中），它会直接 Attach 到现有进程，而不会重复打开。
+    若工程已在其他会话打开，首次调用只返回候选 PID；取得用户确认后才会附着。
 
     Args:
         project_path: CST 工程文件的绝对或相对路径（如 "model.cst"）。
+        confirm_existing_session_takeover: 用户是否已明确同意接管已有 CST 会话。
+        existing_session_pid: 用户明确确认的已有 Design Environment PID。
 
     Returns:
         返回一个包含执行状态的字典。成功时 status 为 "success"。
     """
     normalized_project = _abs_project_path(project_path)
+    if type(confirm_existing_session_takeover) is not bool:
+        return error_response(
+            "invalid_arguments",
+            "confirm_existing_session_takeover 必须是布尔值",
+            phase="validation",
+            project_path=normalized_project,
+            runtime_module="cst_runtime.core.session",
+        )
+    if existing_session_pid is not None and (
+        type(existing_session_pid) is not int or existing_session_pid <= 0
+    ):
+        return error_response(
+            "invalid_arguments",
+            "existing_session_pid 必须是大于 0 的整数 PID",
+            phase="validation",
+            project_path=normalized_project,
+            runtime_module="cst_runtime.core.session",
+        )
+    has_confirmed_pid = existing_session_pid is not None
+    if confirm_existing_session_takeover != has_confirmed_pid:
+        return error_response(
+            "invalid_arguments",
+            "confirm_existing_session_takeover 与 existing_session_pid 必须同时提供；"
+            "不得在未取得用户明确同意时单独设置其中一个参数。",
+            phase="validation",
+            project_path=normalized_project,
+            runtime_module="cst_runtime.core.session",
+        )
+    confirmed_pid = existing_session_pid
     if not Path(normalized_project).is_file():
         return error_response(
             "project_file_missing",
@@ -153,21 +281,44 @@ def open_project(project_path: str) -> dict[str, Any]:
             runtime_module="cst_runtime.core.session",
         )
 
-    project, _ = project_identity.attach_expected_project(normalized_project)
-    if project is not None:
-        _OPENED_PROJECTS[normalized_project] = project
-        gateway.on_session_open(normalized_project, "modeler")
-        result = {
+    cached_project = _OPENED_PROJECTS.get(normalized_project)
+    if cached_project is not None:
+        return {
             "status": "success",
             "project_path": normalized_project,
             "already_open": True,
             "session_action": "open",
+            "attachment_source": "runtime_cache",
             "post_inspect": inspect(project_path),
             "runtime_module": "cst_runtime.core.session",
         }
-        return result
+
+    if confirmed_pid is None:
+        try:
+            preexisting_pids = _running_pid_set()
+            candidate_pids, _discovery_status = (
+                project_identity.discover_expected_project_pids(
+                    normalized_project,
+                    preexisting_pids,
+                )
+            )
+        except Exception as exc:
+            return error_response(
+                "existing_session_discovery_failed",
+                str(exc),
+                phase="discovery",
+                project_path=normalized_project,
+                runtime_module="cst_runtime.core.session",
+            )
+        if candidate_pids:
+            return _confirmation_required(
+                normalized_project,
+                candidate_pids,
+                reason="target_project_already_open",
+            )
 
     de = None
+    runtime_owned = False
     try:
         # CST 2022 必须遵循官方顺序：先创建 DesignEnvironment，再由该对象打开工程。
         # 若把 --project-file 传给 DesignEnvironment.new()，启动器可能转交到其他进程，
@@ -176,38 +327,94 @@ def open_project(project_path: str) -> dict[str, Any]:
         # 由 _create_or_connect_design_environment 等待真实 DE 后按官方路径接管；
         # 旧句柄在 open_project 时报同样的 PID 错误时由
         # _open_project_with_pid_handoff_fallback 换新句柄重试。
-        de = _create_or_connect_design_environment()
+        if confirmed_pid is not None:
+            project, de, attachment_status = (
+                project_identity.attach_expected_project_at_pid(
+                    normalized_project,
+                    confirmed_pid,
+                )
+            )
+            if de is None:
+                return {
+                    **attachment_status,
+                    "session_action": "open",
+                    "project_path": normalized_project,
+                    "confirmed_existing_session_pid": confirmed_pid,
+                    "runtime_module": "cst_runtime.core.session",
+                }
+            already_open = project is not None
+            if project is None:
+                if attachment_status.get("error_type") != "project_not_open":
+                    return {
+                        **attachment_status,
+                        "session_action": "open",
+                        "project_path": normalized_project,
+                        "confirmed_existing_session_pid": confirmed_pid,
+                        "runtime_module": "cst_runtime.core.session",
+                    }
+                # 用户只确认了这个 PID；这里不允许再回退到其他会话。
+                project = de.open_project(normalized_project)
+            runtime_owned = False
+        else:
+            de, startup_baseline_pids = _create_or_connect_design_environment()
+            runtime_owned = True
+            already_open = False
+            # 打开工程可能再次触发 PID 交接；把当前新建 DE 也纳入基线，
+            # 避免把它与随后真正新增的交接 PID 混在一起。
+            handoff_baseline_pids = startup_baseline_pids | _running_pid_set()
 
-        # PROFILING
-        import time
-        from . import utils as core_utils
-        is_profile = hasattr(core_utils, "_PROFILE_DATA")
-        if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
-            core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
+            # PROFILING
+            import time
+            from . import utils as core_utils
+            is_profile = hasattr(core_utils, "_PROFILE_DATA")
+            if is_profile and core_utils._PROFILE_DATA["t_com_begin"] == 0:
+                core_utils._PROFILE_DATA["t_com_begin"] = time.perf_counter()
 
-        project, de = _open_project_with_pid_handoff_fallback(
-            normalized_project,
-            de,
-        )
+            project, de = _open_project_with_pid_handoff_fallback(
+                normalized_project,
+                de,
+                baseline_pids=handoff_baseline_pids,
+            )
 
-        # PROFILING
-        if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
-            core_utils._PROFILE_DATA["t_com_end"] = time.perf_counter()
+            # PROFILING
+            if is_profile and core_utils._PROFILE_DATA["t_com_end"] == 0:
+                core_utils._PROFILE_DATA["t_com_end"] = time.perf_counter()
             
         _OPENED_PROJECTS[normalized_project] = project
-        _OPENED_DESIGN_ENVIRONMENTS[normalized_project] = de
+        _OPENED_DESIGN_ENVIRONMENTS[normalized_project] = _DesignEnvironmentLease(
+            environment=de,
+            design_environment_pid=(
+                confirmed_pid if confirmed_pid is not None else design_environment_pid(de)
+            ),
+            runtime_owned=runtime_owned,
+        )
         gateway.on_session_open(normalized_project, "modeler")
         return {
             "status": "success",
             "project_path": normalized_project,
-            "already_open": False,
+            "already_open": already_open,
             "session_action": "open",
+            "design_environment_ownership": (
+                "runtime_owned" if runtime_owned else "user_confirmed"
+            ),
+            "confirmed_existing_session_pid": confirmed_pid,
             "post_inspect": inspect(project_path),
             "runtime_module": "cst_runtime.core.session",
         }
+    except _ExistingSessionTakeoverRequired as exc:
+        if de is not None and runtime_owned:
+            try:
+                de.close()
+            except Exception:
+                pass
+        return _confirmation_required(
+            normalized_project,
+            exc.candidate_pids,
+            reason=exc.reason,
+        )
     except Exception as exc:
-        # 打开工程失败时释放由本次调用创建的空白 CST 窗口。
-        if de is not None:
+        # 仅释放本次调用创建的空白 CST 窗口；用户确认接管的 DE 绝不关闭。
+        if de is not None and runtime_owned:
             try:
                 de.close()
             except Exception:
@@ -220,18 +427,104 @@ def open_project(project_path: str) -> dict[str, Any]:
         )
 
 
-def reattach_project(project_path: str) -> dict[str, Any]:
-    status = project_identity.verify_project_identity(project_path)
-    if status.get("status") == "error":
+def reattach_project(
+    project_path: str,
+    *,
+    confirm_existing_session_takeover: bool = False,
+    existing_session_pid: int | None = None,
+) -> dict[str, Any]:
+    """在用户确认后，只按指定 PID 重新附着已有工程。"""
+    normalized_project = _abs_project_path(project_path)
+    if type(confirm_existing_session_takeover) is not bool:
+        return error_response(
+            "invalid_arguments",
+            "confirm_existing_session_takeover 必须是布尔值",
+            phase="validation",
+            project_path=normalized_project,
+            runtime_module="cst_runtime.core.session",
+        )
+    if existing_session_pid is not None and (
+        type(existing_session_pid) is not int or existing_session_pid <= 0
+    ):
+        return error_response(
+            "invalid_arguments",
+            "existing_session_pid 必须是大于 0 的整数 PID",
+            phase="validation",
+            project_path=normalized_project,
+            runtime_module="cst_runtime.core.session",
+        )
+    if confirm_existing_session_takeover != (existing_session_pid is not None):
+        return error_response(
+            "invalid_arguments",
+            "confirm_existing_session_takeover 与 existing_session_pid 必须同时提供",
+            phase="validation",
+            project_path=normalized_project,
+            runtime_module="cst_runtime.core.session",
+        )
+
+    if normalized_project in _OPENED_PROJECTS:
         return {
-            **status,
+            "status": "success",
             "session_action": "reattach",
+            "attachment_source": "runtime_cache",
             "post_inspect": inspect(project_path),
             "runtime_module": "cst_runtime.core.session",
         }
+
+    if existing_session_pid is None:
+        try:
+            candidate_pids, _discovery_status = (
+                project_identity.discover_expected_project_pids(
+                    normalized_project,
+                    _running_pid_set(),
+                )
+            )
+        except Exception as exc:
+            return error_response(
+                "existing_session_discovery_failed",
+                str(exc),
+                phase="discovery",
+                project_path=normalized_project,
+                runtime_module="cst_runtime.core.session",
+            )
+        if candidate_pids:
+            return _confirmation_required(
+                normalized_project,
+                candidate_pids,
+                reason="reattach_existing_project",
+            )
+        return error_response(
+            "project_not_open",
+            "目标工程未在可见的 CST 会话中打开",
+            project_path=normalized_project,
+            runtime_module="cst_runtime.core.session",
+        )
+
+    project, de, status = project_identity.attach_expected_project_at_pid(
+        normalized_project,
+        existing_session_pid,
+    )
+    if project is None or de is None:
+        return {
+            **status,
+            "session_action": "reattach",
+            "project_path": normalized_project,
+            "confirmed_existing_session_pid": existing_session_pid,
+            "runtime_module": "cst_runtime.core.session",
+        }
+
+    _OPENED_PROJECTS[normalized_project] = project
+    _OPENED_DESIGN_ENVIRONMENTS[normalized_project] = _DesignEnvironmentLease(
+        environment=de,
+        design_environment_pid=existing_session_pid,
+        runtime_owned=False,
+    )
+    gateway.on_session_open(normalized_project, "modeler")
     return {
         **status,
         "session_action": "reattach",
+        "design_environment_ownership": "user_confirmed",
+        "confirmed_existing_session_pid": existing_session_pid,
         "post_inspect": inspect(project_path),
         "runtime_module": "cst_runtime.core.session",
     }
@@ -269,13 +562,26 @@ def close_project(
         effective_save, t3_warning = gateway.guard_before_close_save(normalized_project, save)
 
     cached_project = _OPENED_PROJECTS.get(normalized_project)
-    owned_de = _OPENED_DESIGN_ENVIRONMENTS.pop(normalized_project, None)
-    project, a_status = project_identity.attach_expected_project(normalized_project)
-    if project is None and cached_project is not None:
+    environment_lease = _OPENED_DESIGN_ENVIRONMENTS.get(normalized_project)
+    registered_de = environment_lease.environment if environment_lease is not None else None
+    registered_de_pid = (
+        environment_lease.design_environment_pid
+        if environment_lease is not None
+        else None
+    )
+    runtime_owned_environment = bool(
+        environment_lease is not None and environment_lease.runtime_owned
+    )
+    if cached_project is not None:
         project = cached_project
-        a_status = {"status": "success", "attachment_source": "runtime_cache"}
-    de_pid: int | None = a_status.get("design_environment_pid")
-    _OPENED_PROJECTS.pop(normalized_project, None)
+        a_status = {
+            "status": "success",
+            "attachment_source": "runtime_cache",
+            "design_environment_pid": registered_de_pid,
+        }
+    else:
+        project, a_status = project_identity.attach_expected_project(normalized_project)
+    de_pid: int | None = registered_de_pid or a_status.get("design_environment_pid")
     had_dirty_state = gateway.has_dirty_state(normalized_project)
     close_result: dict[str, Any] = a_status if project is None else {"status": "success"}
     if project is not None:
@@ -291,9 +597,9 @@ def close_project(
                 project.save()
             project.close()
             environment_closed = False
-            if owned_de is not None:
-                # 仅关闭本 Worker 自己创建的环境，不触碰用户手动打开的其他 CST 会话。
-                owned_de.close()
+            if registered_de is not None and runtime_owned_environment:
+                # 只有 Runtime 明确创建的环境才有权关闭；用户确认接管的环境只关闭工程。
+                registered_de.close()
                 environment_closed = True
             
             # PROFILING
@@ -305,6 +611,7 @@ def close_project(
                 "project_path": normalized_project,
                 "saved": effective_save,
                 "environment_closed": environment_closed,
+                "environment_owned_by_runtime": runtime_owned_environment,
             }
             if t3_warning:
                 close_result["t3_warning"] = t3_warning
@@ -312,6 +619,8 @@ def close_project(
                 close_result["trap"] = "T3_farfield_export_save_forced_false"
             # 保存与关闭成功后才清理运行时状态（含 T2 脏标记）；
             # 若提前清理，save=False/保存失败会静默丢失未落盘的参数改动。
+            _OPENED_PROJECTS.pop(normalized_project, None)
+            _OPENED_DESIGN_ENVIRONMENTS.pop(normalized_project, None)
             gateway.on_session_close(normalized_project)
             if not effective_save and had_dirty_state:
                 close_result["warning"] = (
@@ -328,6 +637,8 @@ def close_project(
             )
     else:
         # 无法取得工程对象时仍要清理本 Worker 的运行时注册状态
+        _OPENED_PROJECTS.pop(normalized_project, None)
+        _OPENED_DESIGN_ENVIRONMENTS.pop(normalized_project, None)
         gateway.on_session_close(normalized_project)
 
     unlock_result: dict[str, Any] | None = None
@@ -339,7 +650,16 @@ def close_project(
         )
 
     kill_result: dict[str, Any] | None = None
-    if close_result.get("status") != "error" and kill_processes and de_pid:
+    if close_result.get("status") != "error" and kill_processes and not runtime_owned_environment:
+        kill_result = error_response(
+            "design_environment_not_owned",
+            "拒绝终止非 Runtime 所有的 CST Design Environment；"
+            "用户对接管工程的确认不等于同意关闭整个 CST 会话。",
+            phase="validation",
+            project_path=normalized_project,
+            design_environment_pid=de_pid,
+        )
+    elif close_result.get("status") != "error" and kill_processes and de_pid:
         kill_result = process_cleanup.stop_process(de_pid, "CST DESIGN ENVIRONMENT_AMD64")
     else:
         kill_result = None
@@ -383,8 +703,8 @@ def quit_cst(
 ) -> dict[str, Any]:
     """彻底退出整个 CST 应用程序实例并清理所有相关的后台子进程。
     
-    在长时间运行批量仿真（Batch Sweep）后，CST 偶尔会残留无界面的求解器后台进程。
-    此方法会扫描全系统进程表，找出属于当前工程的残余进程并一次性销毁。
+    默认只允许终止本 Runtime 明确创建并登记的 Design Environment；
+    全局扫描仅用于 dry_run 或显式 force_global_cleanup。
 
     Args:
         project_path: 可选的工程路径，用于精准定位它的子进程。
@@ -408,13 +728,23 @@ def quit_cst(
             runtime_module="cst_runtime.core.session",
         )
     else:
-        _project, attach_status = project_identity.attach_expected_project(
-            _abs_project_path(project_path)
-        )
-        owned_pid = attach_status.get("design_environment_pid")
-        if owned_pid:
+        normalized_project = _abs_project_path(project_path)
+        environment_lease = _OPENED_DESIGN_ENVIRONMENTS.get(normalized_project)
+        if environment_lease is None or not environment_lease.runtime_owned:
+            cleanup = error_response(
+                "design_environment_not_owned",
+                "拒绝终止非 Runtime 所有或所有权未知的 CST Design Environment",
+                project_path=project_path,
+                design_environment_pid=(
+                    environment_lease.design_environment_pid
+                    if environment_lease is not None
+                    else None
+                ),
+                runtime_module="cst_runtime.core.session",
+            )
+        elif environment_lease.design_environment_pid:
             cleanup = process_cleanup.stop_process(
-                int(owned_pid),
+                environment_lease.design_environment_pid,
                 "CST DESIGN ENVIRONMENT_AMD64",
             )
         else:

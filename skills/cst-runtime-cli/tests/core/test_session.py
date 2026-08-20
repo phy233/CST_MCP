@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def test_open_project_falls_back_when_constructor_pid_handoff_fails(monkeypatch, tmp_path):
-    """构造器冷启动报 PID 错误时，必须用官方连接路径接管真实 DE。"""
+    """构造器 PID 交接时只连接启动后唯一新增的 DE。"""
     from cst_runtime.core import session
 
     project_path = tmp_path / "working.cst"
@@ -21,17 +21,28 @@ def test_open_project_falls_back_when_constructor_pid_handoff_fails(monkeypatch,
             return object()
 
     live = LiveDE()
+    pid_snapshots = iter(([41], [41], [41, 11308], [41, 11308]))
+    connected_pids = []
     monkeypatch.setattr(
         session.project_identity,
-        "attach_expected_project",
-        lambda _path: (None, {"status": "error"}),
+        "discover_expected_project_pids",
+        lambda _path, _pids: ([], {"status": "success"}),
+    )
+    monkeypatch.setattr(
+        session,
+        "running_design_environment_pids",
+        lambda: next(pid_snapshots),
     )
     monkeypatch.setattr(
         session,
         "_connect_new_design_environment",
         lambda: (_ for _ in ()).throw(TimeoutError("Could not connect to a DE with pid: 11308")),
     )
-    monkeypatch.setattr(session, "connect_to_any_design_environment", lambda: live)
+    def connect(pid):
+        connected_pids.append(pid)
+        return live
+
+    monkeypatch.setattr(session, "connect_design_environment", connect)
     monkeypatch.setattr(session, "inspect", lambda _path="": {"status": "success"})
 
     result = session.open_project(str(project_path))
@@ -41,7 +52,9 @@ def test_open_project_falls_back_when_constructor_pid_handoff_fails(monkeypatch,
     registered = session._OPENED_DESIGN_ENVIRONMENTS[
         session._abs_project_path(str(project_path))
     ]
-    assert registered is live
+    assert connected_pids == [11308]
+    assert registered.environment is live
+    assert registered.runtime_owned is True
 
 
 def test_open_project_falls_back_on_open_pid_handoff(monkeypatch, tmp_path):
@@ -67,19 +80,31 @@ def test_open_project_falls_back_on_open_pid_handoff(monkeypatch, tmp_path):
             return object()
 
     live = LiveDE()
+    pid_snapshots = iter(([41], [41], [41, 8920], [41, 8930]))
+    connected_pids = []
     monkeypatch.setattr(
         session.project_identity,
-        "attach_expected_project",
-        lambda _path: (None, {"status": "error"}),
+        "discover_expected_project_pids",
+        lambda _path, _pids: ([], {"status": "success"}),
+    )
+    monkeypatch.setattr(
+        session,
+        "running_design_environment_pids",
+        lambda: next(pid_snapshots),
     )
     monkeypatch.setattr(session, "_connect_new_design_environment", lambda: StaleDE())
-    monkeypatch.setattr(session, "connect_to_any_design_environment", lambda: live)
+    def connect(pid):
+        connected_pids.append(pid)
+        return live
+
+    monkeypatch.setattr(session, "connect_design_environment", connect)
     monkeypatch.setattr(session, "inspect", lambda _path="": {"status": "success"})
 
     result = session.open_project(str(project_path))
 
     assert result["status"] == "success", result
     assert live.opened_path == str(project_path)
+    assert connected_pids == [8930]
 
 
 def test_open_project_keeps_non_pid_failure(monkeypatch, tmp_path):
@@ -102,15 +127,11 @@ def test_open_project_keeps_non_pid_failure(monkeypatch, tmp_path):
     broken = BrokenDE()
     monkeypatch.setattr(
         session.project_identity,
-        "attach_expected_project",
-        lambda _path: (None, {"status": "error"}),
+        "discover_expected_project_pids",
+        lambda _path, _pids: ([], {"status": "success"}),
     )
+    monkeypatch.setattr(session, "running_design_environment_pids", lambda: [])
     monkeypatch.setattr(session, "_connect_new_design_environment", lambda: broken)
-    monkeypatch.setattr(
-        session,
-        "connect_to_any_design_environment",
-        lambda: (_ for _ in ()).throw(AssertionError("非 PID 错误不得回退")),
-    )
 
     result = session.open_project(str(project_path))
 
@@ -128,24 +149,125 @@ def test_open_project_keeps_non_pid_constructor_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr(
         session.project_identity,
-        "attach_expected_project",
-        lambda _path: (None, {"status": "error"}),
+        "discover_expected_project_pids",
+        lambda _path, _pids: ([], {"status": "success"}),
     )
+    monkeypatch.setattr(session, "running_design_environment_pids", lambda: [])
     monkeypatch.setattr(
         session,
         "_connect_new_design_environment",
         lambda: (_ for _ in ()).throw(RuntimeError("license server unavailable")),
     )
-    monkeypatch.setattr(
-        session,
-        "connect_to_any_design_environment",
-        lambda: (_ for _ in ()).throw(AssertionError("非 PID 错误不得回退")),
-    )
-
     result = session.open_project(str(project_path))
 
     assert result["status"] == "error"
     assert result["error_type"] == "open_project_failed"
+
+
+def test_open_project_requires_confirmation_before_existing_session(monkeypatch, tmp_path):
+    """首次发现目标工程已打开时，只返回精确候选 PID。"""
+    from cst_runtime.core import session
+
+    project_path = tmp_path / "working.cst"
+    project_path.write_bytes(b"")
+    monkeypatch.setattr(session, "running_design_environment_pids", lambda: [41])
+    monkeypatch.setattr(
+        session.project_identity,
+        "discover_expected_project_pids",
+        lambda _path, pids: ([41], {"status": "success"}) if pids == {41} else ([], {}),
+    )
+    monkeypatch.setattr(
+        session.project_identity,
+        "attach_expected_project_at_pid",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("确认前不得附着")),
+    )
+    monkeypatch.setattr(
+        session,
+        "_connect_new_design_environment",
+        lambda: (_ for _ in ()).throw(AssertionError("确认前不得新建会话")),
+    )
+
+    result = session.open_project(str(project_path))
+    reattach_result = session.reattach_project(str(project_path))
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "existing_session_confirmation_required"
+    assert result["requires_user_confirmation"] is True
+    assert result["candidate_design_environment_pids"] == [41]
+    assert reattach_result["error_type"] == "existing_session_confirmation_required"
+
+
+def test_confirmed_existing_session_is_not_closed_as_owned(monkeypatch, tmp_path):
+    """确认附着的外部 DE 只关闭工程，不关闭或终止整个会话。"""
+    from cst_runtime.core import session
+
+    project_path = tmp_path / "working.cst"
+    project_path.write_bytes(b"")
+
+    class FakeProject:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    class FakeDesignEnvironment:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    project = FakeProject()
+    de = FakeDesignEnvironment()
+    attached_pids = []
+
+    def attach_at_pid(_path, pid):
+        attached_pids.append(pid)
+        return project, de, {"status": "success", "design_environment_pid": pid}
+
+    monkeypatch.setattr(
+        session.project_identity,
+        "attach_expected_project_at_pid",
+        attach_at_pid,
+    )
+    monkeypatch.setattr(
+        session.project_identity,
+        "discover_expected_project_pids",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("确认后不得全局发现")),
+    )
+    monkeypatch.setattr(
+        session.project_identity,
+        "attach_expected_project",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("已有缓存时不得重新扫描")),
+    )
+    monkeypatch.setattr(
+        session.project_identity,
+        "wait_project_unlocked",
+        lambda **_kwargs: {"status": "success"},
+    )
+    monkeypatch.setattr(
+        session.process_cleanup,
+        "stop_process",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("外部 DE 不得被终止")),
+    )
+    monkeypatch.setattr(session, "inspect", lambda _path="": {"status": "success"})
+
+    opened = session.open_project(
+        str(project_path),
+        confirm_existing_session_takeover=True,
+        existing_session_pid=41,
+    )
+    quit_result = session.quit_cst(str(project_path))
+    closed = session.close_project(str(project_path), save=False, kill_processes=True)
+
+    assert opened["status"] == "success"
+    assert opened["design_environment_ownership"] == "user_confirmed"
+    assert attached_pids == [41]
+    assert project.closed is True
+    assert de.closed is False
+    assert quit_result["cleanup_result"]["error_type"] == "design_environment_not_owned"
+    assert closed["kill_result"]["error_type"] == "design_environment_not_owned"
 
 
 def test_close_project_reports_process_stop_failure(monkeypatch):
@@ -155,13 +277,19 @@ def test_close_project_reports_process_stop_failure(monkeypatch):
         def close(self):
             return None
 
+    normalized = session._abs_project_path("C:/temporary-test.cst")
+    project = FakeProject()
+    monkeypatch.setattr(session, "_OPENED_PROJECTS", {normalized: project})
     monkeypatch.setattr(
-        session.project_identity,
-        "attach_expected_project",
-        lambda _path: (
-            FakeProject(),
-            {"status": "success", "design_environment_pid": 12345},
-        ),
+        session,
+        "_OPENED_DESIGN_ENVIRONMENTS",
+        {
+            normalized: session._DesignEnvironmentLease(
+                environment=None,
+                design_environment_pid=12345,
+                runtime_owned=True,
+            )
+        },
     )
     monkeypatch.setattr(
         session.project_identity,
@@ -208,7 +336,13 @@ def test_close_project_closes_runtime_owned_design_environment(monkeypatch):
     monkeypatch.setattr(
         session,
         "_OPENED_DESIGN_ENVIRONMENTS",
-        {normalized: design_environment},
+        {
+            normalized: session._DesignEnvironmentLease(
+                environment=design_environment,
+                design_environment_pid=12345,
+                runtime_owned=True,
+            )
+        },
     )
     monkeypatch.setattr(
         session.project_identity,
@@ -249,9 +383,10 @@ def test_open_project_failure_closes_new_design_environment(monkeypatch, tmp_pat
     design_environment = FakeDesignEnvironment()
     monkeypatch.setattr(
         session.project_identity,
-        "attach_expected_project",
-        lambda _path: (None, {"status": "error"}),
+        "discover_expected_project_pids",
+        lambda _path, _pids: ([], {"status": "success"}),
     )
+    monkeypatch.setattr(session, "running_design_environment_pids", lambda: [])
     monkeypatch.setattr(
         session,
         "_connect_new_design_environment",
@@ -262,3 +397,28 @@ def test_open_project_failure_closes_new_design_environment(monkeypatch, tmp_pat
 
     assert result["status"] == "error"
     assert design_environment.closed is True
+
+
+def test_session_open_tool_forwards_confirmation_without_coercion(monkeypatch):
+    """工具层原样转发确认参数，类型校验统一留给 Core。"""
+    from cst_runtime.tools import session as session_tools
+
+    captured = {}
+
+    def open_project(project_path, **kwargs):
+        captured.update(project_path=project_path, **kwargs)
+        return {"status": "success"}
+
+    monkeypatch.setattr(session_tools._sm, "open_project", open_project)
+    result = session_tools.tool_cst_session_open({
+        "project_path": "C:/confirmed.cst",
+        "confirm_existing_session_takeover": True,
+        "existing_session_pid": 41,
+    })
+
+    assert result["status"] == "success"
+    assert captured == {
+        "project_path": "C:/confirmed.cst",
+        "confirm_existing_session_takeover": True,
+        "existing_session_pid": 41,
+    }

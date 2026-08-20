@@ -169,48 +169,66 @@ def list_open_projects() -> dict[str, Any]:
     }
 
 
-def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, Any]]:
+def discover_expected_project_pids(
+    project_path: str,
+    design_environment_pids: set[int],
+) -> tuple[list[int], dict[str, Any]]:
+    """只读查找已打开目标工程的 PID，不激活工程或保留会话句柄。"""
     expected = normalize_project_path(project_path)
-    environments, errors = _connected_design_environments()
-    if not environments:
-        return None, error_response(
-            "no_cst_session",
-            errors or "No DEs found to connect to.",
-            expected_project_path=os.path.abspath(project_path),
-            runtime_module="cst_runtime.core.identity",
-        )
-
-    all_open_projects: list[str] = []
+    matches: list[int] = []
     failures: list[dict[str, Any]] = []
-    target: tuple[Any, int | None, Any, list[Any]] | None = None
-    for de, pid in environments:
+    for pid in sorted(design_environment_pids):
         try:
+            de = connect_design_environment(pid)
             open_projects = list_open_project_paths(de)
         except Exception as exc:
             failures.append({"design_environment_pid": pid, "error": str(exc)})
             continue
-        all_open_projects.extend(str(path) for path in open_projects)
-        normalized_open = [normalize_project_path(str(path)) for path in open_projects]
-        matching_projects = [
-            path
-            for path, normalized in zip(open_projects, normalized_open)
-            if normalized == expected
-        ]
-        if matching_projects:
-            target = (de, pid, matching_projects[0], open_projects)
-            break
+        if any(
+            normalize_project_path(str(path)) == expected
+            for path in open_projects
+        ):
+            matches.append(pid)
+    return matches, {
+        "status": "success",
+        "candidate_design_environment_pids": matches,
+        "failures": failures,
+        "runtime_module": "cst_runtime.core.identity",
+    }
 
-    if target is None:
+
+def _attach_expected_project_in_environment(
+    project_path: str,
+    de: Any,
+    pid: int | None,
+) -> tuple[Any | None, dict[str, Any]]:
+    """仅在给定 Design Environment 内取得并激活目标工程。"""
+    expected = normalize_project_path(project_path)
+    try:
+        open_projects = list_open_project_paths(de)
+    except Exception as exc:
+        return None, error_response(
+            "list_open_projects_failed",
+            str(exc),
+            expected_project_path=os.path.abspath(project_path),
+            design_environment_pid=pid,
+            runtime_module="cst_runtime.core.identity",
+        )
+
+    matching_projects = [
+        path
+        for path in open_projects
+        if normalize_project_path(str(path)) == expected
+    ]
+    if not matching_projects:
         return None, error_response(
             "project_not_open",
             "expected project is not open in CST",
             expected_project_path=os.path.abspath(project_path),
-            open_projects=all_open_projects,
-            failures=failures,
+            open_projects=[str(path) for path in open_projects],
+            design_environment_pid=pid,
             runtime_module="cst_runtime.core.identity",
         )
-
-    de, pid, target_project_path, open_projects = target
 
     was_activated = False
     try:
@@ -219,7 +237,7 @@ def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, An
         active_path = ""
     if active_path != expected:
         try:
-            activate_project(de, get_open_project(de, str(target_project_path)))
+            activate_project(de, get_open_project(de, str(matching_projects[0])))
             was_activated = True
         except Exception as exc:
             return None, error_response(
@@ -272,6 +290,66 @@ def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, An
             design_environment_pid=pid,
             runtime_module="cst_runtime.core.identity",
         )
+
+
+def attach_expected_project_at_pid(
+    project_path: str,
+    design_environment_pid: int,
+) -> tuple[Any | None, Any | None, dict[str, Any]]:
+    """只连接用户指定的 PID，并在该会话内取得目标工程。"""
+    try:
+        de = connect_design_environment(design_environment_pid)
+    except Exception as exc:
+        return None, None, error_response(
+            "design_environment_connect_failed",
+            str(exc),
+            expected_project_path=os.path.abspath(project_path),
+            design_environment_pid=design_environment_pid,
+            runtime_module="cst_runtime.core.identity",
+        )
+    project, status = _attach_expected_project_in_environment(
+        project_path,
+        de,
+        design_environment_pid,
+    )
+    return project, de, status
+
+
+def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, Any]]:
+    environments, errors = _connected_design_environments()
+    if not environments:
+        return None, error_response(
+            "no_cst_session",
+            errors or "No DEs found to connect to.",
+            expected_project_path=os.path.abspath(project_path),
+            runtime_module="cst_runtime.core.identity",
+        )
+
+    all_open_projects: list[str] = []
+    failures: list[dict[str, Any]] = []
+    for de, pid in environments:
+        project, status = _attach_expected_project_in_environment(project_path, de, pid)
+        all_open_projects.extend(status.get("open_projects", []))
+        if project is not None:
+            return project, status
+        error_type = status.get("error_type")
+        if error_type == "list_open_projects_failed":
+            failures.append({
+                "design_environment_pid": pid,
+                "error": status.get("message", "无法列出工程"),
+            })
+            continue
+        if error_type != "project_not_open":
+            return None, status
+
+    return None, error_response(
+        "project_not_open",
+        "expected project is not open in CST",
+        expected_project_path=os.path.abspath(project_path),
+        open_projects=all_open_projects,
+        failures=failures,
+        runtime_module="cst_runtime.core.identity",
+    )
 
 
 def verify_project_identity(project_path: str) -> dict[str, Any]:

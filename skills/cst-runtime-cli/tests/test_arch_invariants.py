@@ -282,7 +282,7 @@ class TestGovernance:
             "cst-session-close": "session",
             "cst-session-quit": "process-control",
             "cst-session-inspect": "read",
-            "cst-session-reattach": "read",
+            "cst-session-reattach": "session",
         }
         for name, expected_risk in session_risks.items():
             assert _load_dispatch_tools()[name]["risk"] == expected_risk, name

@@ -31,11 +31,18 @@ from ._facade import call_core
 from .contracts import OperationResult, success_result
 
 
-def open_project(project_path: str) -> OperationResult:
+def open_project(
+    project_path: str,
+    *,
+    confirm_existing_session_takeover: bool = False,
+    existing_session_pid: int | None = None,
+) -> OperationResult:
     """打开 CST 工程 (Public API)。
 
     Args (参数):
         project_path: .cst 文件的绝对路径。
+        confirm_existing_session_takeover: 仅在用户明确同意接管已有会话后设为 True。
+        existing_session_pid: 用户明确确认的 Design Environment PID。
 
     Returns (返回值):
         包含 CST 状态信息和工程详情的字典。
@@ -43,7 +50,12 @@ def open_project(project_path: str) -> OperationResult:
     Raises (抛出异常):
         RuntimeError: 如果由于进程卡死、路径错误或许可证问题导致工程无法打开时抛出。
     """
-    return call_core(_open_project, project_path)
+    return call_core(
+        _open_project,
+        project_path,
+        confirm_existing_session_takeover=confirm_existing_session_takeover,
+        existing_session_pid=existing_session_pid,
+    )
 
 
 def create_blank_project(project_path: str) -> OperationResult:
@@ -142,9 +154,19 @@ def quit_cst(
     )
 
 
-def reattach_project(project_path: str) -> OperationResult:
-    """重新附着到已打开的 CST 工程。"""
-    return call_core(_reattach_project, project_path)
+def reattach_project(
+    project_path: str,
+    *,
+    confirm_existing_session_takeover: bool = False,
+    existing_session_pid: int | None = None,
+) -> OperationResult:
+    """经用户确认后，按指定 PID 重新附着到已打开的 CST 工程。"""
+    return call_core(
+        _reattach_project,
+        project_path,
+        confirm_existing_session_takeover=confirm_existing_session_takeover,
+        existing_session_pid=existing_session_pid,
+    )
 
 
 def list_open() -> OperationResult:
