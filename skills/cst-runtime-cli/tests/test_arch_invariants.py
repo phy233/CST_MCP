@@ -41,7 +41,7 @@ def _load_pipelines():
 VALID_CATEGORIES = {
     "modeling", "project_ops", "simulation", "results", "farfield",
     "session_manager", "audit", "workspace", "run", "process_cleanup",
-    "project_identity", "optimization",
+    "project_identity", "optimization", "history", "interaction",
 }
 
 VALID_RISK_LABELS = {"read", "write", "session", "process-control",

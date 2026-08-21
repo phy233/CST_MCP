@@ -23,6 +23,8 @@ _TOOL_MODULES = (
     "doe",
     "em_setup",
     "metasurface",
+    "history",
+    "interaction",
 )
 
 

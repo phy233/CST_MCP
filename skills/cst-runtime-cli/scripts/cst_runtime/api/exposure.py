@@ -67,6 +67,7 @@ AGENT_TOOLS = frozenset(
         "delete-monitor",
         "delete-probe",
         "design-probes",
+        "diff-history-snapshots",
         "export-current-density",
         "export-e-field",
         "export-farfield-cut",
@@ -79,6 +80,7 @@ AGENT_TOOLS = frozenset(
         "export-touchstone",
         "export-voltage-result",
         "generate-report",
+        "generate-restore-plan",
         "get-background",
         "get-1d-result",
         "get-2d-result",
@@ -92,12 +94,16 @@ AGENT_TOOLS = frozenset(
         "inspect-boundary",
         "inspect-farfield-monitors",
         "inspect-floquet-ports",
+        "inspect-interaction-history",
         "inspect-model-view",
         "inspect-plane-wave",
         "inspect-project",
         "is-simulation-running",
+        "list-agent-notes",
         "list-entities",
         "list-field-results",
+        "list-history-log",
+        "list-interaction-log",
         "list-materials",
         "list-monitors",
         "list-open-projects",
@@ -113,6 +119,7 @@ AGENT_TOOLS = frozenset(
         "prepare-experiment",
         "prepare-run",
         "quick-sweep",
+        "record-agent-note",
         "record-stage",
         "rename-entity",
         "resume-simulation",
@@ -152,9 +159,16 @@ AGENT_TOOLS = frozenset(
 # 或直接退出进程，因此仅允许用户在 CLI 中显式调用。
 HIGH_RISK_CLI_ONLY_TOOLS = frozenset(
     {
+        "checkout-replay-copy",
+        "create-history-checkpoint",
+        "create-project-checkpoint",
         "cst-session-quit",
+        "export-history-snapshot",
         "health-repair",
+        "inspect-history-capabilities",
+        "inspect-history-status",
         "install-cst-libraries",
+        "reconcile-history-operation",
     }
 )
 

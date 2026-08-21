@@ -147,6 +147,8 @@ from . import optimization  # noqa: E402, F811
 from . import doe  # noqa: E402, F811
 from . import em_setup  # noqa: E402, F811
 from . import metasurface  # noqa: E402, F811
+from . import history  # noqa: E402, F811
+from . import interaction  # noqa: E402, F811
 
 
 def _template_to_schema(template: dict) -> dict:
