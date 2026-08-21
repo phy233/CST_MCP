@@ -14,23 +14,19 @@ from typing import Any, Mapping
 
 from ..context import get_current_execution_context
 from ..core.compatibility import (
-    activate_project,
-    active_project,
-    create_design_environment,
     detect_history_capabilities,
-    get_open_project,
     get_raw_history,
 )
 from ..core.error_gateway import submit_vba_history
 from ..core.identity import (
     _project_companion_dir,
-    attach_expected_project,
     normalize_project_path,
     wait_project_unlocked,
 )
 from ..core.project import save_project
 from ..core.session import (
     close_project,
+    get_attached_project,
     open_project,
 )
 from ..history.checkpoint import (
@@ -49,6 +45,33 @@ from ..history.journal import (
 )
 from ..history.models import HistoryOperationRecord, HistorySnapshot
 from ..history.recovery import evaluate_interrupted_operation, reconcile_operation
+
+
+def _resolved_project_path(project_path: str | None) -> str:
+    """取得显式或当前请求携带的工程路径，禁止回退到任意活动工程。"""
+    target = project_path or get_current_execution_context().get("project_path")
+    if not target:
+        raise ValueError("必须显式提供 project_path，不能使用任意活动工程作为回退目标")
+    return normalize_project_path(str(target))
+
+
+def _open_exact_project(project_path: str) -> tuple[Any, bool]:
+    """只取得路径完全匹配的 Runtime 工程；必要时按正式 session 入口打开。"""
+    normalized = normalize_project_path(project_path)
+    project = get_attached_project(normalized)
+    if project is not None:
+        return project, False
+
+    open_result = open_project(normalized)
+    if open_result.get("status") != "success":
+        error_type = open_result.get("error_type", "open_project_failed")
+        message = open_result.get("message", "无法打开目标工程")
+        raise RuntimeError(f"{error_type}: {message}")
+
+    project = get_attached_project(normalized)
+    if project is None:
+        raise RuntimeError(f"工程打开后仍无法按精确路径取得对象: {normalized}")
+    return project, True
 
 
 def _file_sha256(path: Path) -> str:
@@ -83,17 +106,8 @@ def export_history_snapshot(
 ) -> dict[str, Any]:
     """读取当前 CST 工程的真实 History 并持久化为快照。"""
     ctx = get_current_execution_context()
-    target_path = project_path or ctx.get("project_path")
-    if not target_path:
-        cur = active_project()
-        target_path = getattr(cur, "filename", None) if cur else None
-    if not target_path:
-        raise ValueError("需要提供 project_path 或确保存在活跃工程")
-
-    norm_path = normalize_project_path(target_path)
-    prj = get_open_project(str(norm_path))
-    if prj is None:
-        prj = open_project(str(norm_path))
+    norm_path = _resolved_project_path(project_path)
+    prj, _ = _open_exact_project(norm_path)
 
     raw_data = get_raw_history(prj)
     caps = detect_history_capabilities(prj)
@@ -166,9 +180,7 @@ def plan_restore(
 ) -> dict[str, Any]:
     """纯只读分析基线与目标快照的前缀关系，生成恢复计划。"""
     norm_base = normalize_project_path(baseline_project_path)
-    prj = get_open_project(str(norm_base))
-    if prj is None:
-        prj = open_project(str(norm_base))
+    prj, _ = _open_exact_project(norm_base)
 
     raw_base = get_raw_history(prj)
     caps = detect_history_capabilities(prj)
@@ -192,11 +204,8 @@ def plan_restore(
 
 def inspect_capabilities(project_path: str | None = None) -> dict[str, Any]:
     """探测当前工程的 History 接口能力。"""
-    if project_path:
-        np = normalize_project_path(project_path)
-        prj = get_open_project(str(np)) or open_project(str(np))
-    else:
-        prj = active_project()
+    np = _resolved_project_path(project_path)
+    prj, _ = _open_exact_project(np)
     return detect_history_capabilities(prj)
 
 
@@ -244,14 +253,7 @@ def create_physical_checkpoint(
     project_path: str | None = None,
 ) -> dict[str, Any]:
     """创建物理工程全量副本（.cst 与伴随目录）。"""
-    p = project_path
-    if not p:
-        cur = active_project()
-        p = getattr(cur, "filename", None) if cur else None
-    if not p:
-        raise ValueError("需要提供 project_path 或确保存在活跃工程")
-
-    src_cst = Path(normalize_project_path(p))
+    src_cst = Path(_resolved_project_path(project_path))
     if not src_cst.is_file():
         raise FileNotFoundError(f"工程主文件不存在: {src_cst}")
 
@@ -261,15 +263,26 @@ def create_physical_checkpoint(
 
     dest_cst = dest_dir / src_cst.name
     dest_companion = dest_dir / src_companion.name
+    if dest_cst.exists() or dest_companion.exists():
+        raise FileExistsError(f"检查点目标已存在，拒绝覆盖: {dest_cst}")
 
-    save_res = save_project(str(src_cst))
-    if save_res.get("status") == "error":
-        code = save_res.get("code", "")
-        msg = str(save_res.get("message", "")).lower()
-        if code not in {"no_matching_project", "no_cst_sessions"} and "only python" not in msg and "not supported" not in msg and "cannot connect" not in msg:
-            raise RuntimeError(f"物理检查点前保存工程失败: {save_res.get('message')}")
+    source_was_open = get_attached_project(str(src_cst)) is not None
+    if source_was_open:
+        close_res = close_project(
+            str(src_cst),
+            save=True,
+            wait_unlock=True,
+            timeout_seconds=30.0,
+            kill_processes=False,
+        )
+        if close_res.get("status") != "success":
+            raise RuntimeError(f"物理检查点前关闭并保存工程失败: {close_res.get('message')}")
+        if not (close_res.get("close_result") or {}).get("saved"):
+            raise RuntimeError("工程未成功保存，拒绝创建可能不一致的物理检查点")
+        wait_res = close_res.get("unlock_result") or {}
+    else:
+        wait_res = wait_project_unlocked(str(src_cst), timeout_seconds=10.0)
 
-    wait_res = wait_project_unlocked(str(src_cst), timeout_seconds=10.0)
     if wait_res.get("status") != "success" or wait_res.get("locked") is True:
         raise TimeoutError(
             f"物理检查点锁文件等待超时或释放失败: {wait_res.get('message', 'locked')}, "
@@ -277,8 +290,6 @@ def create_physical_checkpoint(
         )
 
     shutil.copy2(src_cst, dest_cst)
-    if dest_companion.exists():
-        shutil.rmtree(dest_companion)
     if src_companion.is_dir():
         shutil.copytree(src_companion, dest_companion)
 
@@ -292,6 +303,8 @@ def create_physical_checkpoint(
         "source_project_path": str(src_cst),
         "checkpoint_project_path": str(dest_cst),
         "description": description.strip(),
+        "source_was_open": source_was_open,
+        "source_closed_for_consistent_copy": source_was_open,
         "cst_file_sha256": cst_sha256,
         "source_summary": src_summary,
         "checkpoint_summary": dest_summary,
@@ -322,20 +335,14 @@ def checkout_and_replay_copy(
         raise FileNotFoundError(f"基线工程不存在: {src_cst}")
 
     dest_cst = Path(normalize_project_path(new_copy_path))
-    if dest_cst.exists():
+    dest_companion = _project_companion_dir(str(dest_cst))
+    if dest_cst.exists() or dest_companion.exists():
         raise FileExistsError(f"目标重放工程路径已存在，请指定一个新路径: {dest_cst}")
 
     dest_dir = dest_cst.parent
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    base_prj, _ = attach_expected_project(str(src_cst))
-    if base_prj is None:
-        open_res = open_project(str(src_cst))
-        if open_res.get("status") != "success":
-            raise RuntimeError(f"打开基线工程失败: {open_res.get('message')}")
-        base_prj, _ = attach_expected_project(str(src_cst))
-    if base_prj is None:
-        base_prj = active_project()
+    base_prj, baseline_opened_here = _open_exact_project(str(src_cst))
 
     raw_base = get_raw_history(base_prj)
     baseline_snapshot = HistorySnapshot.from_raw_cst(
@@ -346,24 +353,44 @@ def checkout_and_replay_copy(
 
     plan = generate_restore_plan(baseline_snapshot, target_snapshot, operations)
     if not plan.get("can_execute"):
+        cleanup_result = None
+        if baseline_opened_here:
+            cleanup_result = close_project(
+                str(src_cst),
+                save=False,
+                wait_unlock=True,
+                timeout_seconds=30.0,
+                kill_processes=False,
+            )
+            if cleanup_result.get("status") != "success":
+                return {
+                    "status": "error",
+                    "error_type": "baseline_cleanup_failed",
+                    "message": "恢复计划不可执行，且 Runtime 打开的基线工程关闭失败。",
+                    "plan": plan,
+                    "cleanup_result": cleanup_result,
+                }
         return {
             "status": "error",
             "error_type": "restore_plan_unexecutable",
             "message": plan.get("message", "恢复计划无法执行"),
             "plan": plan,
+            "cleanup_result": cleanup_result,
         }
 
     src_companion = _project_companion_dir(str(src_cst))
-    dest_companion = _project_companion_dir(str(dest_cst))
-
-    save_res = save_project(str(src_cst))
-    if save_res.get("status") == "error":
-        code = save_res.get("code", "")
-        msg = str(save_res.get("message", "")).lower()
-        if code not in {"no_matching_project", "no_cst_sessions"} and "only python" not in msg and "not supported" not in msg and "cannot connect" not in msg:
-            raise RuntimeError(f"保存基线工程失败: {save_res.get('message')}")
-
-    wait_res = wait_project_unlocked(str(src_cst), timeout_seconds=10.0)
+    close_res = close_project(
+        str(src_cst),
+        save=True,
+        wait_unlock=True,
+        timeout_seconds=30.0,
+        kill_processes=False,
+    )
+    if close_res.get("status") != "success":
+        raise RuntimeError(f"保存并关闭基线工程失败: {close_res.get('message')}")
+    if not (close_res.get("close_result") or {}).get("saved"):
+        raise RuntimeError("基线工程未成功保存，拒绝复制并重放")
+    wait_res = close_res.get("unlock_result") or {}
     if wait_res.get("status") != "success" or wait_res.get("locked") is True:
         raise TimeoutError(f"基线工程锁释放失败: {wait_res.get('message', 'locked')}")
 
@@ -371,11 +398,7 @@ def checkout_and_replay_copy(
     if src_companion.is_dir():
         shutil.copytree(src_companion, dest_companion)
 
-    open_replay_res = open_project(str(dest_cst))
-    if open_replay_res.get("status") != "success":
-        raise RuntimeError(f"打开重放工程副本失败: {open_replay_res.get('message')}")
-    replay_prj = get_open_project(str(dest_cst)) or active_project()
-    activate_project(replay_prj)
+    replay_prj, _ = _open_exact_project(str(dest_cst))
 
     replayed_steps: list[dict[str, Any]] = []
     steps = plan.get("steps", [])

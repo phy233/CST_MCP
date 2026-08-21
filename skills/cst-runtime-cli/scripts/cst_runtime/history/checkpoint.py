@@ -106,14 +106,6 @@ def generate_restore_plan(
     len_b = len(b_blocks)
     len_t = len(t_blocks)
 
-    # 索引已知的 operations（优先按 label、before_hash、operation_id 索引）
-    ops_by_label: dict[str, HistoryOperationRecord] = {}
-    if operations:
-        op_list = list(operations.values()) if isinstance(operations, Mapping) else list(operations)
-        for op in op_list:
-            if op.history_label:
-                ops_by_label[op.history_label] = op
-
     # 情况一: 完全相同
     if baseline_snapshot.snapshot_sha256 == target_snapshot.snapshot_sha256 and len_b == len_t:
         return {
@@ -166,33 +158,47 @@ def generate_restore_plan(
             exp_after_sha = prefix_hashes[global_idx + 1]
             step_num = s_idx + 1
 
-            # 精准匹配 candidate operation：
-            # 1. 优先按 (label, before_hash) 匹配
+            candidates = [
+                op for op in op_list
+                if op.operation_id not in used_op_ids
+                and op.history_label == t_blk.name
+                and op.business_vba
+            ]
+            exact_hash_candidates = [
+                op for op in candidates
+                if op.before_snapshot_sha256 == exp_before_sha
+                and op.after_snapshot_sha256 == exp_after_sha
+            ]
+
             matched_op: HistoryOperationRecord | None = None
-            for op in op_list:
-                if op.operation_id in used_op_ids:
-                    continue
-                if op.history_label == t_blk.name and op.before_snapshot_sha256 == exp_before_sha:
-                    matched_op = op
-                    break
-
-            # 2. 次优先按 (label, after_hash) 匹配
-            if matched_op is None:
-                for op in op_list:
-                    if op.operation_id in used_op_ids:
+            match_warning = ""
+            if len(exact_hash_candidates) == 1:
+                matched_op = exact_hash_candidates[0]
+            elif len(exact_hash_candidates) > 1:
+                match_warning = "存在多个前后快照哈希均相同的候选 operation，无法唯一确定重放脚本。"
+            else:
+                # 日志快照不完整时，仅允许用目标原始包装 VBA 中的 operation ID 唯一对齐；
+                # 只按同名标签或列表顺序选择会在重复标签场景中重放错误脚本。
+                id_candidates = []
+                for op in candidates:
+                    if not op.operation_id or op.operation_id not in t_blk.contents:
                         continue
-                    if op.history_label == t_blk.name and op.after_snapshot_sha256 == exp_after_sha:
-                        matched_op = op
-                        break
-
-            # 3. 兜底：按顺序匹配未使用的同名 label
-            if matched_op is None:
-                for op in op_list:
-                    if op.operation_id in used_op_ids:
-                        continue
-                    if op.history_label == t_blk.name and op.business_vba:
-                        matched_op = op
-                        break
+                    before_conflict = bool(
+                        op.before_snapshot_sha256
+                        and op.before_snapshot_sha256 != exp_before_sha
+                    )
+                    after_conflict = bool(
+                        op.after_snapshot_sha256
+                        and op.after_snapshot_sha256 != exp_after_sha
+                    )
+                    if not before_conflict and not after_conflict:
+                        id_candidates.append(op)
+                if len(id_candidates) == 1:
+                    matched_op = id_candidates[0]
+                elif len(id_candidates) > 1:
+                    match_warning = "目标原始 VBA 中匹配到多个 operation ID，恢复关系存在歧义。"
+                elif candidates:
+                    match_warning = "同名 operation 无法通过前后哈希或原始 VBA 中的 operation ID 精确对齐。"
 
             if matched_op and matched_op.business_vba:
                 used_op_ids.add(matched_op.operation_id)
@@ -220,7 +226,8 @@ def generate_restore_plan(
                     "expected_after_snapshot_sha256": exp_after_sha,
                     "status": "requires_manual_vba_or_physical_checkpoint",
                     "warning": (
-                        f"历史块 [{t_blk.name}] 缺失 clean business_vba 记录（可能为 GUI/外部创建）；"
+                        f"历史块 [{t_blk.name}] 缺失可唯一验证的 clean business_vba 记录；"
+                        f"{match_warning}"
                         "为防止嵌套网关或未预期副作用，禁止自动重放，需人工提供脚本或使用物理工程检查点恢复。"
                     ),
                 })

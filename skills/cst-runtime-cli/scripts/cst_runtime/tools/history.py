@@ -91,7 +91,7 @@ TOOL_DEFS = {
                     "examples": ["C:\\path\\to\\project.cst"],
                 },
             },
-            "required": [],
+            "required": ["project_path"],
         },
     },
     "export-history-snapshot": {
@@ -112,7 +112,7 @@ TOOL_DEFS = {
                     "examples": ["manual_export"],
                 },
             },
-            "required": [],
+            "required": ["project_path"],
         },
     },
     "inspect-history-status": {
@@ -152,13 +152,13 @@ TOOL_DEFS = {
                     "examples": ["C:\\path\\to\\project.cst"],
                 },
             },
-            "required": ["checkpoint_name"],
+            "required": ["checkpoint_name", "project_path"],
         },
     },
     "create-project-checkpoint": {
         "category": "history",
         "risk": "filesystem-write",
-        "description": "显式保存工程、释放锁定并创建物理工程全量副本（.cst 与伴随目录）。",
+        "description": "显式保存并关闭目标工程、验证锁释放后创建物理工程全量副本（.cst 与伴随目录）。",
         "handler": "tool_create_project_checkpoint",
         "json_schema": {
             "type": "object",
@@ -176,13 +176,13 @@ TOOL_DEFS = {
                     "examples": ["物理工程备份"],
                 },
             },
-            "required": ["checkpoint_dir"],
+            "required": ["checkpoint_dir", "project_path"],
         },
     },
     "checkout-replay-copy": {
         "category": "history",
         "risk": "write",
-        "description": "在新的隔离工程副本中，按严格前缀逐步重放业务 VBA 以恢复至目标快照。",
+        "description": "保存并关闭基线工程后，在新的隔离副本中按严格前缀逐步重放业务 VBA。",
         "handler": "tool_checkout_replay_copy",
         "json_schema": {
             "type": "object",

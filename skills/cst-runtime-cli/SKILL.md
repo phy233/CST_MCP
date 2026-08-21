@@ -349,9 +349,9 @@ CLI 命令：`cst-session-inspect` / `cst-session-open` / `cst-session-reattach`
   - `record-agent-note`: 显式记录设计决策、用户确认或阶段总结。
   - `list-agent-notes`: 查询已保存的工作笔记列表。
 - **CLI-Only / 高风险运维工具（仅限用户显式调用）**：
-  - `create-project-checkpoint`: 显式保存工程、等待 `.lok` 释放并创建完整物理工程副本（`.cst` 与伴随目录）。
+  - `create-project-checkpoint`: 显式保存并关闭目标工程、等待 `.lok` 释放，再创建完整物理工程副本（`.cst` 与伴随目录）；不会终止非 Runtime 所有的 Design Environment。
   - `create-history-checkpoint`: 创建轻量快照命名检查点。
-  - `checkout-replay-copy`: 在新隔离副本中执行严格前缀单步安全重放。
+  - `checkout-replay-copy`: 保存并关闭基线、验证解锁后复制，在新隔离副本中执行严格前缀单步安全重放；必须显式提供精确工程路径。
   - `reconcile-history-operation`: 人工介入核对并标记歧义操作的处置结论。
   - `export-history-snapshot` / `inspect-history-capabilities` / `inspect-history-status`。
 

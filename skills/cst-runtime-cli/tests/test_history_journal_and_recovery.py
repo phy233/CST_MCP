@@ -182,6 +182,16 @@ def test_generate_restore_plan_4_cases():
         },
         project_path="C:/test/p.cst",
     )
+    s_abc = HistorySnapshot.from_raw_cst(
+        {
+            "list": [
+                {"name": "A", "contents": "vba A"},
+                {"name": "B", "contents": "vba B"},
+                {"name": "C", "contents": "vba C"},
+            ]
+        },
+        project_path="C:/test/p.cst",
+    )
     s_abx = HistorySnapshot.from_raw_cst(
         {
             "list": [
@@ -196,10 +206,14 @@ def test_generate_restore_plan_4_cases():
     op_c = HistoryOperationRecord(
         operation_id="op_c", history_label="C", business_vba="biz VBA C",
         business_vba_sha256="", project_path="C:/test/p.cst",
+        before_snapshot_sha256=s_ab.snapshot_sha256,
+        after_snapshot_sha256=s_abc.snapshot_sha256,
     )
     op_d = HistoryOperationRecord(
         operation_id="op_d", history_label="D", business_vba="biz VBA D",
         business_vba_sha256="", project_path="C:/test/p.cst",
+        before_snapshot_sha256=s_abc.snapshot_sha256,
+        after_snapshot_sha256=s_abcd.snapshot_sha256,
     )
 
     # 情况一: 完全相同 -> already_at_target
@@ -310,6 +324,36 @@ def test_generate_restore_plan_duplicate_labels_matching():
     assert plan["steps"][2]["expected_after_snapshot_sha256"] == h_step3
 
 
+def test_generate_restore_plan_rejects_label_only_fallback():
+    baseline = HistorySnapshot.from_raw_cst(
+        {"list": [{"name": "init", "contents": "init"}]},
+        project_path="C:/test/p.cst",
+    )
+    target = HistorySnapshot.from_raw_cst(
+        {
+            "list": [
+                {"name": "init", "contents": "init"},
+                {"name": "define brick", "contents": "目标包装 VBA"},
+            ]
+        },
+        project_path="C:/test/p.cst",
+    )
+    unrelated = HistoryOperationRecord(
+        operation_id="other_operation",
+        history_label="define brick",
+        business_vba="不属于目标块的 VBA",
+        business_vba_sha256="",
+        project_path="C:/test/p.cst",
+    )
+
+    plan = generate_restore_plan(baseline, target, operations=[unrelated])
+
+    assert plan["plan_type"] == "prefix_suffix_replay"
+    assert plan["can_execute"] is False
+    assert plan["steps"][0]["status"] == "requires_manual_vba_or_physical_checkpoint"
+    assert "无法通过前后哈希" in plan["steps"][0]["warning"]
+
+
 
 def test_history_checkpoint_persistence(tmp_path: Path):
     snap = HistorySnapshot.from_raw_cst(
@@ -379,22 +423,242 @@ def test_submit_vba_history_automatic_journaling_and_snapshots(tmp_path: Path):
     assert last_op["after_snapshot_sha256"] == res["after_snapshot_sha256"]
 
 
-def test_physical_checkpoint_locked_raises_timeout_error(tmp_path: Path):
-    from cst_runtime.lib.history import create_physical_checkpoint
+def test_submit_vba_history_marks_snapshot_recording_failure_incomplete(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from unittest.mock import MagicMock
+    from cst_runtime.core.error_gateway import submit_vba_history
+    from cst_runtime.history import journal as history_journal
+
+    proj_file = tmp_path / "test_proj.cst"
+    proj_file.touch()
+    history_state = [{"name": "init", "contents": "init vba"}]
+    mock_modeler = MagicMock()
+
+    def mock_add_to_history(name, script):
+        history_state.append({"name": name, "contents": script})
+        for arm_file in tmp_path.glob("cst-runtime-*.arm"):
+            status_file = tmp_path / arm_file.name.replace(".arm", ".status")
+            status_file.write_text("OK\n", encoding="utf-8")
+        return True
+
+    mock_modeler.add_to_history = mock_add_to_history
+    mock_modeler._GetHistory.side_effect = lambda: {"list": list(history_state)}
+    mock_project = MagicMock()
+    mock_project.modeler = mock_modeler
+    monkeypatch.setattr(
+        history_journal,
+        "save_snapshot",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("磁盘写入失败")),
+    )
+
+    result = submit_vba_history(
+        mock_project,
+        "define brick: b1",
+        ["With Brick", "End With"],
+        project_path=str(proj_file),
+        _status_directory=tmp_path,
+    )
+
+    assert result["status"] == "success"
+    assert result["recording_status"] == "incomplete"
+    assert result["before_snapshot_id"] is None
+    assert result["after_snapshot_id"] is None
+    assert {item["stage"] for item in result["recording_issues"]} == {
+        "before_submission",
+        "after_submission",
+    }
+
+
+def test_physical_checkpoint_locked_raises_timeout_error(tmp_path: Path, monkeypatch):
+    from cst_runtime.lib import history as history_lib
 
     proj_file = tmp_path / "sample.cst"
     proj_file.touch()
     comp_dir = tmp_path / "sample"
     comp_dir.mkdir(parents=True, exist_ok=True)
-    # 创建锁文件
-    lok_file = comp_dir / "Model.lok"
-    lok_file.touch()
-
     chk_dir = tmp_path / "chk_01"
+    monkeypatch.setattr(history_lib, "get_attached_project", lambda _path: None)
+    monkeypatch.setattr(
+        history_lib,
+        "wait_project_unlocked",
+        lambda *_args, **_kwargs: {
+            "status": "error",
+            "locked": True,
+            "message": "锁文件尚未释放",
+            "lock_files": [str(comp_dir / "Model.lok")],
+        },
+    )
 
     with pytest.raises(TimeoutError) as exc_info:
-        create_physical_checkpoint(chk_dir, project_path=str(proj_file))
+        history_lib.create_physical_checkpoint(chk_dir, project_path=str(proj_file))
 
     assert "锁文件" in str(exc_info.value)
     assert not (chk_dir / "sample.cst").exists()
 
+
+def test_physical_checkpoint_closes_open_project_before_copy(tmp_path: Path, monkeypatch):
+    from cst_runtime.lib import history as history_lib
+
+    proj_file = tmp_path / "sample.cst"
+    proj_file.write_bytes(b"cst-project")
+    comp_dir = tmp_path / "sample"
+    comp_dir.mkdir()
+    (comp_dir / "Model.dat").write_bytes(b"companion")
+    chk_dir = tmp_path / "chk_01"
+    close_calls = []
+
+    monkeypatch.setattr(history_lib, "get_attached_project", lambda _path: object())
+
+    def fake_close(project_path, **kwargs):
+        close_calls.append((project_path, kwargs))
+        return {
+            "status": "success",
+            "close_result": {"status": "success", "saved": True},
+            "unlock_result": {"status": "success", "locked": False},
+        }
+
+    monkeypatch.setattr(history_lib, "close_project", fake_close)
+    result = history_lib.create_physical_checkpoint(
+        chk_dir,
+        project_path=str(proj_file),
+    )
+
+    assert close_calls
+    assert close_calls[0][1]["save"] is True
+    assert close_calls[0][1]["kill_processes"] is False
+    assert (chk_dir / "sample.cst").read_bytes() == b"cst-project"
+    assert (chk_dir / "sample" / "Model.dat").read_bytes() == b"companion"
+    assert result["manifest"]["source_closed_for_consistent_copy"] is True
+
+
+def test_open_exact_project_rejects_non_matching_active_project(tmp_path: Path, monkeypatch):
+    from cst_runtime.lib import history as history_lib
+
+    project_path = tmp_path / "target.cst"
+    project_path.touch()
+    monkeypatch.setattr(history_lib, "get_attached_project", lambda _path: None)
+    monkeypatch.setattr(
+        history_lib,
+        "open_project",
+        lambda _path: {"status": "success", "project_path": str(project_path)},
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        history_lib._open_exact_project(str(project_path))
+
+    assert "精确路径" in str(exc_info.value)
+
+
+def test_checkout_replay_copy_closes_baseline_and_verifies_each_hash(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from cst_runtime.lib import history as history_lib
+
+    baseline_path = tmp_path / "baseline.cst"
+    baseline_path.write_bytes(b"baseline")
+    baseline_companion = tmp_path / "baseline"
+    baseline_companion.mkdir()
+    (baseline_companion / "Model.dat").write_bytes(b"model")
+    replay_path = tmp_path / "replayed.cst"
+
+    raw_a = [{"name": "A", "contents": "vba A"}]
+    raw_b = {"name": "重复标签", "contents": "wrapped op_b"}
+    raw_c = {"name": "重复标签", "contents": "wrapped op_c"}
+    target = HistorySnapshot.from_raw_cst(
+        {"list": [*raw_a, raw_b, raw_c]},
+        project_path=str(baseline_path),
+    )
+    snapshot_a = HistorySnapshot.from_raw_cst(
+        {"list": raw_a},
+        project_path=str(baseline_path),
+    )
+    snapshot_ab = HistorySnapshot.from_raw_cst(
+        {"list": [*raw_a, raw_b]},
+        project_path=str(baseline_path),
+    )
+    op_b = HistoryOperationRecord(
+        operation_id="op_b",
+        history_label="重复标签",
+        business_vba="business B",
+        business_vba_sha256="",
+        project_path=str(baseline_path),
+        before_snapshot_sha256=snapshot_a.snapshot_sha256,
+        after_snapshot_sha256=snapshot_ab.snapshot_sha256,
+    )
+    op_c = HistoryOperationRecord(
+        operation_id="op_c",
+        history_label="重复标签",
+        business_vba="business C",
+        business_vba_sha256="",
+        project_path=str(baseline_path),
+        before_snapshot_sha256=snapshot_ab.snapshot_sha256,
+        after_snapshot_sha256=target.snapshot_sha256,
+    )
+
+    class FakeModeler:
+        def __init__(self, blocks):
+            self.blocks = list(blocks)
+
+        def _GetHistory(self):
+            return {"list": list(self.blocks)}
+
+    class FakeProject:
+        def __init__(self, blocks):
+            self.modeler = FakeModeler(blocks)
+
+    base_project = FakeProject(raw_a)
+    replay_project = FakeProject(raw_a)
+    events = []
+
+    def fake_open_exact(path):
+        normalized = str(Path(path).resolve())
+        if normalized == str(baseline_path.resolve()):
+            events.append("open_baseline")
+            return base_project, False
+        if normalized == str(replay_path.resolve()):
+            events.append("open_replay")
+            return replay_project, True
+        raise AssertionError(f"意外工程路径: {path}")
+
+    def fake_close(path, **kwargs):
+        events.append("close_baseline")
+        assert str(Path(path).resolve()) == str(baseline_path.resolve())
+        assert kwargs["save"] is True
+        return {
+            "status": "success",
+            "close_result": {"status": "success", "saved": True},
+            "unlock_result": {"status": "success", "locked": False},
+        }
+
+    target_blocks = {"op_b": raw_b, "op_c": raw_c}
+    submit_calls = []
+
+    def fake_submit(project, label, vba_lines, **kwargs):
+        operation_id = kwargs["operation_id"]
+        submit_calls.append((label, list(vba_lines), operation_id))
+        project.modeler.blocks.append(target_blocks[operation_id])
+        return {"status": "success", "operation_id": operation_id}
+
+    monkeypatch.setattr(history_lib, "_open_exact_project", fake_open_exact)
+    monkeypatch.setattr(history_lib, "close_project", fake_close)
+    monkeypatch.setattr(history_lib, "submit_vba_history", fake_submit)
+    monkeypatch.setattr(
+        history_lib,
+        "save_project",
+        lambda _path: {"status": "success"},
+    )
+
+    result = history_lib.checkout_and_replay_copy(
+        str(baseline_path),
+        target,
+        str(replay_path),
+        operations=[op_c, op_b],
+    )
+
+    assert result["status"] == "success"
+    assert result["final_snapshot_sha256"] == target.snapshot_sha256
+    assert [call[2] for call in submit_calls] == ["op_b", "op_c"]
+    assert events.index("close_baseline") < events.index("open_replay")
