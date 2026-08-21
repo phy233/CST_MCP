@@ -308,6 +308,64 @@ CLI 命令：`cst-session-inspect` / `cst-session-open` / `cst-session-reattach`
 - `pyproject_update_failed`：`pyproject.toml` 无法修改；检查文件权限或手动编辑。
 - `overall=blocked`：`health-check` 返回阻塞状态；查看 `remaining_issues` 和 `user_instructions`。
 
+## History 版本管理、检查点与 MCP 交互审计
+
+系统引入了完整的 CST 历史操作流水、快照哈希、断点恢复判定、物理检查点与全生命周期 MCP 交互日志机制。
+
+### 1. 核心安全铁律与重放原则
+
+- **两类 CST 历史操作本质区别**：
+  1. *CST 原生 Full History Rebuild*：`History List` 的 Update/Full Rebuild 是从头按参数和拓扑几何重新构造模型；
+  2. *`add_to_history()` 重放*：在当前工程末尾增加新块并立即执行。**严禁向当前工程盲目重复提交全部历史**。
+- **严格前缀恢复规则 (Prefix-Suffix Replay)**：
+  - 设 $B$ = 基线工程已有 History，$T$ = 目标快照 History。
+  - **情况一（$B == T$）**：直接返回 `already_at_target`，无需执行任何重放；
+  - **情况二（$B$ 为 $T$ 的严格前缀）**：仅重放缺失的后缀块，绝对禁止重新执行前缀已包含的块；
+  - **情况三（$B$ 比 $T$ 更长）**：不可通过正向重放回退，必须使用更早的物理检查点；
+  - **情况四（$B$ 与 $T$ 分叉）**：禁止直接向 $B$ 追加，必须从共同前缀的物理检查点新建隔离副本再重放目标分支。
+- **单步前置哈希严格校验**：
+  - 每一步重放前必须读取 `_GetHistory()` 并校验当前哈希等于该步的 `before_snapshot_sha256`；若不匹配立即中止并保留故障现场供人工排查，绝不强行继续。
+- **业务 VBA 与原始 History 分离**：
+  - 只有 Runtime 自身提交的 `HistoryOperationRecord.business_vba` 具备可重放能力；外部/GUI 导入的块仅供查看与 unified diff，无业务 VBA 时不可自动重放。
+
+### 2. 崩溃断点防重复判定状态机
+
+两维状态机设计：`execution_state`（执行状态）与 `reconciliation_state`（生效对齐状态）。
+
+| 当前 History 状态 | 生效判定 | 自动处置策略 |
+|---|---|---|
+| `current_snapshot == expected_before` | `not_applied` | 确认未在 CST 中生效，用户明确确认后方可重新提交 |
+| `current_snapshot == expected_after` | `applied` | 确认已在 CST 中生效，自动跳过，**严禁重复提交** |
+| 两者均不相等（哈希分叉/歧义） | `ambiguous` | **【安全铁律】绝对禁止自动重试**，必须由用户通过 `reconcile-history-operation` 显式人工标记 |
+
+### 3. 工具暴露与权限划分
+
+- **Agent 常用白名单工具（支持只读与计划分析）**：
+  - `list-history-log`: 查询操作流水与哈希变更。
+  - `diff-history-snapshots`: 结构化比较任意两个快照并输出块级差异与 VBA unified diff。
+  - `generate-restore-plan`: 只读分析前缀关系并生成分步重放计划。
+  - `list-interaction-log`: 查询 MCP 工具调用的全生命周期日志。
+  - `inspect-interaction-history`: 查询单次 MCP 交互关联的快照与 Operation 变更。
+  - `record-agent-note`: 显式记录设计决策、用户确认或阶段总结。
+  - `list-agent-notes`: 查询已保存的工作笔记列表。
+- **CLI-Only / 高风险运维工具（仅限用户显式调用）**：
+  - `create-project-checkpoint`: 显式保存工程、等待 `.lok` 释放并创建完整物理工程副本（`.cst` 与伴随目录）。
+  - `create-history-checkpoint`: 创建轻量快照命名检查点。
+  - `checkout-replay-copy`: 在新隔离副本中执行严格前缀单步安全重放。
+  - `reconcile-history-operation`: 人工介入核对并标记歧义操作的处置结论。
+  - `export-history-snapshot` / `inspect-history-capabilities` / `inspect-history-status`。
+
+### 4. 存储与审计持久化规范
+
+- 工程级目录：`<project_dir>/.cst_runtime/history/<project_slug>/`
+  - `snapshots/<snapshot_id>.json`: 包含确定性规范 UTF-8 JSON SHA-256 计算的完整快照。
+  - `checkpoints/<checkpoint_id>.json`: 命名检查点记录。
+  - `operations.jsonl`: 追加式流水日志（内置尾行截断容错读取器）。
+- 会话级交互日志：`<workspace>/.cst_runtime/interactions/<session_id>/`
+  - `mcp_interactions.jsonl`: 记录 `interaction_id`, `tool_name`, `state` (`requested` -> `running` -> `succeeded` / `failed` / `timeout`), 耗时及关联 `operation_id`。
+  - `payloads/<sha256>.json`: 超过 16KB 的大型请求参数/结果自动外置内容寻址存储。
+  - `agent_notes.jsonl`: Agent 与人工显式工作说明与决策流水。
+
 ## 历史说明
 
 `skills/cst-runtime-optimization/`（仅 SKILL.md，无代码）是此 Skill 的优化闭环配套 skill，本 skill 只提供底层工具。
