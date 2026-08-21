@@ -24,6 +24,7 @@ from ..core.compatibility import (
 from ..core.error_gateway import submit_vba_history
 from ..core.identity import (
     _project_companion_dir,
+    attach_expected_project,
     normalize_project_path,
     wait_project_unlocked,
 )
@@ -261,14 +262,19 @@ def create_physical_checkpoint(
     dest_cst = dest_dir / src_cst.name
     dest_companion = dest_dir / src_companion.name
 
-    try:
-        open_prj = get_open_project(str(src_cst))
-        if open_prj is not None:
-            save_project(open_prj)
-    except Exception:
-        pass
+    save_res = save_project(str(src_cst))
+    if save_res.get("status") == "error":
+        code = save_res.get("code", "")
+        msg = str(save_res.get("message", "")).lower()
+        if code not in {"no_matching_project", "no_cst_sessions"} and "only python" not in msg and "not supported" not in msg and "cannot connect" not in msg:
+            raise RuntimeError(f"物理检查点前保存工程失败: {save_res.get('message')}")
 
-    wait_project_unlocked(str(src_cst), timeout_seconds=10.0)
+    wait_res = wait_project_unlocked(str(src_cst), timeout_seconds=10.0)
+    if wait_res.get("status") != "success" or wait_res.get("locked") is True:
+        raise TimeoutError(
+            f"物理检查点锁文件等待超时或释放失败: {wait_res.get('message', 'locked')}, "
+            f"锁文件: {wait_res.get('lock_files')}"
+        )
 
     shutil.copy2(src_cst, dest_cst)
     if dest_companion.exists():
@@ -322,10 +328,14 @@ def checkout_and_replay_copy(
     dest_dir = dest_cst.parent
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    de = create_design_environment()
-    base_prj = get_open_project(str(src_cst), de=de)
+    base_prj, _ = attach_expected_project(str(src_cst))
     if base_prj is None:
-        base_prj = open_project(str(src_cst), de=de)
+        open_res = open_project(str(src_cst))
+        if open_res.get("status") != "success":
+            raise RuntimeError(f"打开基线工程失败: {open_res.get('message')}")
+        base_prj, _ = attach_expected_project(str(src_cst))
+    if base_prj is None:
+        base_prj = active_project()
 
     raw_base = get_raw_history(base_prj)
     baseline_snapshot = HistorySnapshot.from_raw_cst(
@@ -346,12 +356,25 @@ def checkout_and_replay_copy(
     src_companion = _project_companion_dir(str(src_cst))
     dest_companion = _project_companion_dir(str(dest_cst))
 
-    save_project(base_prj)
+    save_res = save_project(str(src_cst))
+    if save_res.get("status") == "error":
+        code = save_res.get("code", "")
+        msg = str(save_res.get("message", "")).lower()
+        if code not in {"no_matching_project", "no_cst_sessions"} and "only python" not in msg and "not supported" not in msg and "cannot connect" not in msg:
+            raise RuntimeError(f"保存基线工程失败: {save_res.get('message')}")
+
+    wait_res = wait_project_unlocked(str(src_cst), timeout_seconds=10.0)
+    if wait_res.get("status") != "success" or wait_res.get("locked") is True:
+        raise TimeoutError(f"基线工程锁释放失败: {wait_res.get('message', 'locked')}")
+
     shutil.copy2(src_cst, dest_cst)
     if src_companion.is_dir():
         shutil.copytree(src_companion, dest_companion)
 
-    replay_prj = open_project(str(dest_cst), de=de)
+    open_replay_res = open_project(str(dest_cst))
+    if open_replay_res.get("status") != "success":
+        raise RuntimeError(f"打开重放工程副本失败: {open_replay_res.get('message')}")
+    replay_prj = get_open_project(str(dest_cst)) or active_project()
     activate_project(replay_prj)
 
     replayed_steps: list[dict[str, Any]] = []
@@ -363,6 +386,7 @@ def checkout_and_replay_copy(
             label = step["label"]
             business_vba = step["business_vba"]
             expected_before = step.get("expected_before_snapshot_sha256")
+            expected_after = step.get("expected_after_snapshot_sha256")
 
             raw_curr = get_raw_history(replay_prj)
             curr_snapshot = HistorySnapshot.from_raw_cst(
@@ -387,10 +411,22 @@ def checkout_and_replay_copy(
 
             submit_res = submit_vba_history(
                 replay_prj,
-                business_vba,
-                history_label=label,
+                label,
+                business_vba.splitlines() if isinstance(business_vba, str) else business_vba,
                 project_path=str(dest_cst),
+                operation_id=step.get("operation_id"),
             )
+
+            if submit_res.get("status") != "success":
+                return {
+                    "status": "error",
+                    "error_type": "vba_submission_failed",
+                    "message": f"步骤 {step_num} [{label}] VBA 提交执行失败: {submit_res.get('message')}",
+                    "new_copy_path": str(dest_cst),
+                    "failed_step": step,
+                    "replayed_steps": replayed_steps,
+                    "error_details": submit_res,
+                }
 
             raw_after = get_raw_history(replay_prj)
             after_snapshot = HistorySnapshot.from_raw_cst(
@@ -398,6 +434,20 @@ def checkout_and_replay_copy(
                 project_path=str(dest_cst),
                 reason=f"step_{step_num}_after_check",
             )
+
+            if expected_after and after_snapshot.snapshot_sha256 != expected_after:
+                return {
+                    "status": "error",
+                    "error_type": "after_hash_mismatch",
+                    "message": (
+                        f"步骤 {step_num} [{label}] 后置快照哈希不匹配！"
+                        f"期望 {expected_after}，实际 {after_snapshot.snapshot_sha256}。"
+                        "重放已被强制终止，故障副本现场已保留。"
+                    ),
+                    "new_copy_path": str(dest_cst),
+                    "failed_step": step,
+                    "replayed_steps": replayed_steps,
+                }
 
             replayed_steps.append({
                 "step": step_num,
@@ -407,7 +457,9 @@ def checkout_and_replay_copy(
                 "operation_id": submit_res.get("operation_id"),
             })
 
-        save_project(replay_prj)
+        save_res = save_project(str(dest_cst))
+        if save_res.get("status") != "success":
+            raise RuntimeError(f"保存重放后的工程副本失败: {save_res.get('message')}")
 
         final_raw = get_raw_history(replay_prj)
         final_snapshot = HistorySnapshot.from_raw_cst(
