@@ -82,6 +82,28 @@ def _log_mcp_interaction(
                     "_preview": f"<External payload stored at {p_file.name}, size {len(raw_b)} bytes>",
                 }
 
+        res_data = record_dict.get("result")
+        if res_data and isinstance(res_data, dict) and not record_dict.get("response_payload_ref"):
+            raw_res = json.dumps(res_data, ensure_ascii=False).encode("utf-8")
+            if len(raw_res) > 16384:
+                import hashlib
+                sha_res = hashlib.sha256(raw_res).hexdigest()
+                p_dir = root / "payloads"
+                p_dir.mkdir(parents=True, exist_ok=True)
+                p_file = p_dir / f"{sha_res}.json"
+                if not p_file.exists():
+                    p_file.write_bytes(raw_res)
+                record_dict["response_payload_ref"] = {
+                    "storage_path": str(p_file),
+                    "size_bytes": len(raw_res),
+                    "sha256": sha_res,
+                    "is_external": True,
+                }
+                record_dict["result"] = {
+                    "_payload_ref": record_dict["response_payload_ref"],
+                    "_preview": f"<External payload stored at {p_file.name}, size {len(raw_res)} bytes>",
+                }
+
         journal_path = root / "mcp_interactions.jsonl"
         line = json.dumps(record_dict, ensure_ascii=False, default=str)
         with journal_path.open("a", encoding="utf-8") as f:

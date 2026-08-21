@@ -108,3 +108,91 @@ def test_agent_work_notes(tmp_path: Path):
     # 按 category 过滤
     filtered = list_work_notes(workspace=str(tmp_path), category="decision")
     assert len(filtered) == 0
+
+
+def test_large_response_content_addressed_storage(tmp_path: Path):
+    large_result = {f"res_key_{i}": f"large_result_field_{i}" * 25 for i in range(100)}
+    rec = MCPInteractionRecord(
+        interaction_id="int_large_res",
+        tool_name="export-large-mesh",
+        tool_args={"mesh_id": 1},
+        workspace=str(tmp_path),
+        state="succeeded",
+        result=large_result,
+    )
+    append_interaction_event(rec, workspace=str(tmp_path))
+
+    items = list_interactions(workspace=str(tmp_path))
+    assert len(items) == 1
+    saved_rec = items[0]
+
+    assert "response_payload_ref" in saved_rec
+    ref = saved_rec["response_payload_ref"]
+    assert ref["size_bytes"] > 16384
+    assert Path(ref["storage_path"]).is_file()
+
+    reconstituted = read_payload_reference(ref)
+    assert isinstance(reconstituted, dict)
+    assert reconstituted["res_key_0"] == large_result["res_key_0"]
+
+
+def test_inspect_interaction_history_bidirectional_linkage(tmp_path: Path, monkeypatch):
+    from cst_runtime.history.models import HistoryOperationRecord, HistorySnapshot
+    from cst_runtime.history.journal import append_operation, save_snapshot
+    from cst_runtime.lib.interaction import inspect_interaction_history
+
+    monkeypatch.setenv("CST_WORKSPACE", str(tmp_path))
+
+    # 1. 建立前后快照
+    s_before = HistorySnapshot.from_raw_cst(
+        {"list": [{"name": "init", "contents": "init"}]},
+        project_path=str(tmp_path / "proj.cst"),
+    )
+    s_after = HistorySnapshot.from_raw_cst(
+        {"list": [{"name": "init", "contents": "init"}, {"name": "brick1", "contents": "brick code"}]},
+        project_path=str(tmp_path / "proj.cst"),
+    )
+    save_snapshot(s_before, project_path=str(tmp_path / "proj.cst"))
+    save_snapshot(s_after, project_path=str(tmp_path / "proj.cst"))
+
+    # 2. 建立 Operation
+    op = HistoryOperationRecord(
+        operation_id="op_linked_123",
+        history_label="brick1",
+        business_vba="brick code",
+        business_vba_sha256="",
+        project_path=str(tmp_path / "proj.cst"),
+        interaction_id="int_linked_999",
+        before_snapshot_id=s_before.snapshot_id,
+        before_snapshot_sha256=s_before.snapshot_sha256,
+        after_snapshot_id=s_after.snapshot_id,
+        after_snapshot_sha256=s_after.snapshot_sha256,
+        execution_state="succeeded",
+    )
+    append_operation(op, project_path=str(tmp_path / "proj.cst"))
+
+    # 3. 建立 MCP Interaction
+    rec = MCPInteractionRecord(
+        interaction_id="int_linked_999",
+        tool_name="define-brick",
+        tool_args={"name": "brick1"},
+        workspace=str(tmp_path),
+        project_path=str(tmp_path / "proj.cst"),
+        state="succeeded",
+        operation_id="op_linked_123",
+    )
+    append_interaction_event(rec, workspace=str(tmp_path))
+
+    # 4. 执行 inspect_interaction_history 双向联合查询
+    res = inspect_interaction_history("int_linked_999", project_path=str(tmp_path / "proj.cst"))
+    assert res["status"] == "success"
+    assert res["interaction"]["interaction_id"] == "int_linked_999"
+    assert res["operation"]["operation_id"] == "op_linked_123"
+    assert res["before_snapshot"]["snapshot_id"] == s_before.snapshot_id
+    assert res["after_snapshot"]["snapshot_id"] == s_after.snapshot_id
+    assert res["diff"] is not None
+    assert res["diff"]["summary"]["added_count"] == 1
+    added_changes = [c for c in res["diff"]["changes"] if c["change_type"] == "added"]
+    assert len(added_changes) == 1
+    assert added_changes[0]["name"] == "brick1"
+
