@@ -93,3 +93,16 @@ def test_history_status_tool_offline():
     status_res = tool_inspect_history_status({})
     assert status_res["status"] == "success"
     assert "has_interrupted_operations" in status_res
+
+
+def test_agent_note_schema_exposes_handler_supported_context_fields():
+    """避免处理器已支持关联字段、Agent 却无法从公开 Schema 传入。"""
+    defs = all_defs()
+    record_properties = defs["record-agent-note"]["json_schema"]["properties"]
+    list_properties = defs["list-agent-notes"]["json_schema"]["properties"]
+
+    assert "project_path" in record_properties
+    assert "snapshot_id" in record_properties
+    assert "project_path" in list_properties
+    assert record_properties["project_path"]["type"] == "string"
+    assert record_properties["snapshot_id"]["type"] == "string"

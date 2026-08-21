@@ -95,6 +95,10 @@ TOOL_DEFS = {
                     "type": "string",
                     "examples": ["run_001"],
                 },
+                "project_path": {
+                    "type": "string",
+                    "description": "关联的 CST 工程路径。",
+                },
                 "user_confirmed": {
                     "type": "boolean",
                     "examples": [True],
@@ -106,6 +110,10 @@ TOOL_DEFS = {
                 "operation_id": {
                     "type": "string",
                     "examples": ["op_12345"],
+                },
+                "snapshot_id": {
+                    "type": "string",
+                    "examples": ["snapshot_12345"],
                 },
             },
             "required": ["content"],
@@ -126,6 +134,10 @@ TOOL_DEFS = {
                 "run_id": {
                     "type": "string",
                     "examples": ["run_001"],
+                },
+                "project_path": {
+                    "type": "string",
+                    "description": "按关联 CST 工程路径过滤。",
                 },
                 "category": {
                     "type": "string",
