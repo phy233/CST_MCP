@@ -7,19 +7,30 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_agent_skills_explain_exposure_and_verification_are_different() -> None:
-    documents = [
+def test_agent_skills_split_transport_and_domain_responsibilities() -> None:
+    """验证 Skill 路由和引用文件，而不是绑定某一段说明文案。"""
+    transport_skills = [
         REPO_ROOT / "skills" / "cst-mcp" / "SKILL.md",
         REPO_ROOT / "skills" / "cst-runtime-cli" / "SKILL.md",
     ]
+    domain_skill = REPO_ROOT / "skills" / "cst-metasurface-design" / "SKILL.md"
 
-    for document in documents:
-        text = document.read_text(encoding="utf-8")
-        assert "超表面基本闭环" in text
-        assert "已向 Agent 暴露" in text
-        assert "真机验收" in text
+    assert domain_skill.is_file()
+    domain_text = domain_skill.read_text(encoding="utf-8")
+    assert "name: cst-metasurface-design" in domain_text
 
+    for document in transport_skills:
+        assert document.is_file()
+        assert "cst-metasurface-design" in document.read_text(encoding="utf-8")
 
+    reference_names = {
+        "requirements-and-physics-gates.md",
+        "geometry-and-history.md",
+        "simulation-and-result-validation.md",
+        "design-iteration.md",
+    }
+    reference_dir = domain_skill.parent / "references"
+    assert reference_names <= {path.name for path in reference_dir.glob("*.md")}
 def test_generic_boundary_tool_disclaims_advanced_configuration() -> None:
     from cst_runtime.tools.project import TOOL_DEFS
 

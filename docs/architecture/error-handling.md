@@ -147,7 +147,7 @@ python -m pytest -q -s --run-cst -m cst_integration
 `running=True`，随后强制停止。
 
 完整的环境要求、单工程生命周期、清理契约和空结果 xfail 规则见
-[CST MCP 测试指南](testing.md)。
+[CST MCP 测试指南](../development/testing.md)。
 
 ## 已知限制
 

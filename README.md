@@ -1,6 +1,6 @@
 # CST Runtime CLI
 
-CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 134 个原子命令（131 个 `agent` 暴露 + 3 个 `cli_only`）覆盖建模、仿真、结果读取、参数优化、远场导出全链路，统一的 JSON 契约接口，内建运行时守卫层拦截已知 CST 陷阱。CLI 工具不等于 MCP 暴露面；只有明确标记为 `agent` 的工具才会注册到 MCP。
+CST Studio Suite 自动化 CLI、MCP 与 AI Agent 基础设施。Runtime Registry 提供建模、仿真、结果读取、参数优化、远场导出、History 和审计能力，并通过统一 JSON 契约与运行时守卫控制 CST 调用。CLI 工具不等于 MCP 暴露面；只有明确标记为 `agent` 的工具才会注册到 MCP。
 
 项目同时以 AI 工具 skill 形式发布，但工具链本身是通用设计——可独立使用、作为 skill 集成、或作为 Python 包二次开发。
 
@@ -22,7 +22,7 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 134 �
 | **DOE**      | `design-probes`, `analyze-probes`                                                                         |
 | **运行**     | `prepare-run`, `get-run-context`                                                                          |
 
-134 个工具各含严格 JSON Schema 定义，未知字段会被拒绝，输出格式以通用 `OperationResult` 为基础。分类工具数由 Registry 动态清册生成，不在文档中手工维护；可用 `devkit/tools/generate_agent_tools_list.py` 生成 agent 暴露面快照 `tools-list.json`。
+Registry 工具各含严格 JSON Schema 定义，未知字段会被拒绝，输出格式以通用 `OperationResult` 为基础。工具数量和分类由 Registry 动态生成，不在文档中手工维护；可用 `devkit/tools/generate_agent_tools_list.py` 生成 Agent 暴露面快照 `tools-list.json`。
 
 ---
 
@@ -78,7 +78,7 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 134 �
 
 ## 扩展开发
 
-当前 134 个工具不是能力上限。只要 CST 2022 文档明确支持的 VBA 或 COM API 可执行操作，即可通过开发包扩展为 CLI 命令；未经审核的能力保持 `cli_only` 或 `experimental`。
+当前 Registry 不是能力上限。只要目标 CST 版本文档明确支持对应 VBA 或 COM API，即可通过开发包扩展为 CLI 命令；未经审核的能力保持 `cli_only` 或 `experimental`。
 
 ### 手工增强路径（现有工具修改）
 
@@ -86,7 +86,7 @@ CST Studio Suite 自动化 CLI 工具链与 AI agent 基础设施。提供 134 �
 
 ### 开发参考
 
-`devkit/references/` 包含完整的 VBA 官方 API 参考（2143 行）、CST Python API 参考（1414 行）和开发流程指南；测试体系说明见 [docs/testing.md](docs/testing.md)。
+`devkit/references/` 包含 VBA、CST Python API、lib 门面和工具开发指南；测试体系说明见 [测试指南](docs/development/testing.md)。
 
 ---
 
@@ -128,7 +128,7 @@ uv run cst-mcp
 | ------------------------------- | ---------------------------------------------------------------- |
 | OpenCode / Cursor / Claude Code | `%USERPROFILE%\.config\opencode\skills\`（或其他工具对应路径） |
 
-解压后结构需包含 `skills/cst-runtime-cli/` 和 `skills/cst-runtime-optimization/`。
+解压后按需要安装 `cst-mcp`、`cst-runtime-cli`、`cst-metasurface-design` 和 `cst-runtime-optimization` Skill；Runtime 代码随 `cst-runtime-cli` 提供。
 
 ### 方式 B：直接 CLI 使用
 
@@ -166,42 +166,42 @@ cst-runtime-cli/
 │       └── generate_agent_tools_list.py # 生成 agent 暴露面快照 tools-list.json
 │
 ├── skills/
-│   ├── cst-runtime-cli/                 # 基础设施 skill
-│   │   ├── SKILL.md                     # Agent 执行手册
+│   ├── cst-mcp/                         # MCP 调用边界 Skill
+│   ├── cst-metasurface-design/          # 超表面领域设计 Skill
+│   ├── cst-runtime-cli/                 # Runtime CLI 基础设施 Skill
+│   │   ├── SKILL.md                     # 精简入口与参考资料路由
 │   │   ├── scripts/
 │   │   │   ├── bootstrap.py             # 部署引导
 │   │   │   ├── pyproject.toml           # 包定义
 │   │   │   └── cst_runtime/             # 全部源码
 │   │   │       ├── cli/                 # 分发层（dispatch + pipeline 编排）
-│   │   │       ├── core/                # 核心模块（session/建模/仿真/结果/远场/守卫/审计/工作区等 20 模块）
-│   │   │       ├── tools/               # 工具层（13 模块，134 命令）
+│   │   │       ├── core/                # CST 交互、守卫、会话和兼容层
+│   │   │       ├── tools/               # Registry 工具定义与 Schema
 │   │   │       ├── render/              # 自包含 HTML/SVG/WebGL 报告
 │   │   │       └── analysis/            # 远场解析与平坦度分析
-│   │   ├── docs/                        # 行为分析与排雷指南（api_analysis.md 等）
-│   │   ├── references/                  # 用户文档
+│   │   ├── references/                  # CLI、故障、History 与部署说明
 │   │   └── tests/
 │   │       ├── refs/ref_0/              # 参考工程（四脊喇叭天线，8-12 GHz）
 │   │       └── ...                      # 合约测试、架构不变式、管道合约
 │   │
-│   └── cst-runtime-optimization/        # 优化 skill（仅 SKILL.md，不含代码）
-│       └── SKILL.md
+│   └── cst-runtime-optimization/        # 分步骤优化 Skill
 │
-└── docs/                                # 设计文档（archive/ 存放历史报告快照）
+└── docs/                                # 用户、架构、兼容性、测试与历史归档
 ```
 
 ## 文档索引
 
 | 文档 | 内容 |
 | --- | --- |
-| [INSTALL.md](INSTALL.md) | 双 Python 版本隔离架构与安装验证流程 |
-| [docs/testing.md](docs/testing.md) | 分层测试体系：离线单元 / 子进程 CLI / Worker 代理 / 真机集成 |
-| [docs/error_handling.md](docs/error_handling.md) | 错误模型与 OperationResult 契约 |
-| [docs/lib_usage_guide.md](docs/lib_usage_guide.md) | `cst_runtime.lib` 稳定公开 API 用法 |
-| [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | lib API 参考 |
-| [docs/MCP_EXPOSURE.md](docs/MCP_EXPOSURE.md) | MCP 暴露面策略（agent / cli_only） |
-| [docs/WORKFLOW_REFERENCE.md](docs/WORKFLOW_REFERENCE.md) | 工作流编排参考 |
-| [docs/cst_2022_compatibility.md](docs/cst_2022_compatibility.md) | CST 2022 兼容性问题记录与兼容层架构 |
-| [docs/archive/](docs/archive/README.md) | 历史报告与验收记录快照（冻结，不更新） |
+| [INSTALL.md](INSTALL.md) | 双 Python 环境安装与验证 |
+| [docs/guides/stepwise-cst-workflow.md](docs/guides/stepwise-cst-workflow.md) | 分步骤检查、修改、验证和记录流程 |
+| [skills/cst-metasurface-design/SKILL.md](skills/cst-metasurface-design/SKILL.md) | 超表面设计、仿真与结果判断 |
+| [docs/architecture/error-handling.md](docs/architecture/error-handling.md) | Runtime、Worker、MCP 与 CST 错误处理边界 |
+| [docs/architecture/mcp-exposure.md](docs/architecture/mcp-exposure.md) | Agent 与 CLI-only 工具暴露策略 |
+| [docs/compatibility/cst-2022.md](docs/compatibility/cst-2022.md) | CST 2022 兼容性与验收状态 |
+| [docs/development/testing.md](docs/development/testing.md) | 离线、Worker 与显式真机测试 |
+| [devkit/README.md](devkit/README.md) | 工具维护和扩展开发入口 |
+| [docs/archive/README.md](docs/archive/README.md) | 已完成审计、实验和旧 API 快照 |
 
 ## License
 

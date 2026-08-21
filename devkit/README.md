@@ -1,15 +1,19 @@
 # CST Runtime CLI — 开发包
 
-面向开发者或 agent。独立文件夹，包含参考文档、开发工具和流程说明。
+面向仓库维护者，包含开发参考、生成工具和维护流程。普通 CST 设计任务从根目录 `README.md` 和对应 Skill 进入，不需要先阅读本目录。
 
 ---
 
 ## 1. 仓库身份
 
-cst-runtime-cli 是 opencode skill 源码仓库。两个 skill：
+当前仓库按职责维护四个 Skill：
 
-- `cst-runtime-cli/` — 基础设施（CLI 入口、134 个工具、管道）
-- `cst-runtime-optimization/` — 优化闭环（仅 SKILL.md，不含代码）
+- `cst-mcp`：MCP 调用和工具传输边界；
+- `cst-runtime-cli`：Python 3.9 Worker、CLI 与高风险运维；
+- `cst-metasurface-design`：超表面设计、仿真与结果验证；
+- `cst-runtime-optimization`：逐轮参数优化和停止条件。
+
+工具清单由 Registry 动态生成，不在文档中维护固定数量。
 
 ### 绝对禁止
 
@@ -64,7 +68,9 @@ uv run pytest <repo>\\skills\\cst-runtime-cli\\tests -v
 | `references/vba-official-reference.md`     | VBA 官方对象参考——150+ 对象方法签名/参数类型/枚举值                     |
 | `references/cst-official-api-reference.md` | CST Python API 参考（cst.interface / cst.results / cst.units / C 扩展层） |
 | `references/tool-development-guide.md`     | 工具开发集成指南——从查文档到 CLI 上线的完整 6 步流程                    |
-| `../docs/testing.md`                       | 测试体系全貌——分层测试命令与真机集成门控                                |
+| `references/lib-usage-guide.md`            | Python `lib` 门面的事实来源、返回契约和使用边界                         |
+| `references/pipeline-metadata.md`          | Registry 中 pipeline mode 元数据词汇                                    |
+| `../docs/development/testing.md`           | 测试体系全貌——分层测试命令与真机集成门控                                |
 
 ### 开发工具
 
@@ -160,6 +166,8 @@ devkit/
 ├── references/
 │   ├── vba-official-reference.md
 │   ├── cst-official-api-reference.md
+│   ├── lib-usage-guide.md
+│   ├── pipeline-metadata.md
 │   └── tool-development-guide.md
 └── tools/
     └── generate_agent_tools_list.py

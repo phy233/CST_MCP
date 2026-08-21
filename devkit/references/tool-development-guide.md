@@ -195,7 +195,7 @@ _register_tool_defs(TOOL_DEFS)
 
 ### 测试体系
 
-分层测试命令与门控见 [docs/testing.md](../../docs/testing.md)：
+分层测试命令与门控见 [测试指南](../../docs/development/testing.md)：
 
 | 层 | 触发时机 | 命令 |
 |----|---------|------|
@@ -225,7 +225,7 @@ _register_tool_defs(TOOL_DEFS)
 
 ## 7. Step 5: 验证暴露面与治理标记
 
-- **暴露面**：CLI 不等于 MCP。`exposure` 为 `agent` 的工具才会注册到 MCP；未经审核的能力保持 `cli_only` 或 `experimental`（策略见 `docs/MCP_EXPOSURE.md`）。
+- **暴露面**：CLI 不等于 MCP。`exposure` 为 `agent` 的工具才会注册到 MCP；未经审核的能力保持 `cli_only` 或 `experimental`（策略见 [MCP 暴露策略](../../docs/architecture/mcp-exposure.md)）。
 - **治理标记**：`risk` 决定 `readOnlyHint` / `destructiveHint`（read / write / filesystem-write / session / long-running 等）。
 - **动态清册自检**：
 

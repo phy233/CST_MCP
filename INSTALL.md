@@ -104,13 +104,13 @@ uv sync --extra dev
 ## 验证
 
 ```powershell
-# 1. MCP Server 冒烟测试：应输出全部 agent 工具（数量随 Runtime Registry 动态变化，当前 131 个）
+# 1. MCP Server 冒烟测试：应输出当前 Runtime Registry 中全部 agent 工具
 uv run python -c "from mcp_server.server import create_mcp_server; import asyncio; m = create_mcp_server(); print(len(asyncio.run(m.list_tools())))"
 
 # 2. 端到端测试：真实拉起 cst39 Worker，测试 JSONL、会话保持、崩溃自重启
 uv run python -m pytest mcp_server\tests -q -m worker_proxy
 
-# 3. 完整测试套件（分层命令详见 docs/testing.md）
+# 3. 完整测试套件（分层命令详见 docs/development/testing.md）
 uv run python -m pytest -q
 ```
 
