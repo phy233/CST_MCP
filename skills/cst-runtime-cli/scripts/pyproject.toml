@@ -7,8 +7,9 @@ name = "cst-runtime"
 version = "1.0.0"
 description = "CST Studio Suite CLI toolchain - modeling, simulation, optimization, results, farfield"
 requires-python = ">=3.9,<3.10"
-license = {text = "MIT"}
-readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+readme = {text = "CST Runtime CLI 是 CST_MCP 项目的 Python 3.9 Worker 与 CST 自动化运行时。完整说明见项目仓库。", content-type = "text/markdown"}
 dependencies = [
     "tomli>=2.0; python_version < '3.11'",
 ]
@@ -32,8 +33,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bbl21/cst-runtime-cli"
-Source = "https://github.com/bbl21/cst-runtime-cli"
+Homepage = "https://github.com/phy233/CST_MCP"
+Source = "https://github.com/phy233/CST_MCP/tree/master/skills/cst-runtime-cli/scripts"
+Issues = "https://github.com/phy233/CST_MCP/issues"
+Upstream = "https://github.com/bbl21/cst-runtime-cli"
 
 [project.scripts]
 cst-runtime = "cst_runtime.cli:main"

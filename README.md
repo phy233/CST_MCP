@@ -4,6 +4,8 @@ CST Studio Suite 自动化 CLI、MCP 与 AI Agent 基础设施。Runtime Registr
 
 项目同时以 AI 工具 skill 形式发布，但工具链本身是通用设计——可独立使用、作为 skill 集成、或作为 Python 包二次开发。
 
+> **CST 许可证要求**：本工具不包含 CST Studio Suite，也不提供或绕过 CST 许可证。使用者必须自行安装受支持的 CST Studio Suite，并持有与实际功能相匹配的合法、有效许可证；能否启动求解器、HPC 或其他许可功能以本机 CST 许可状态为准。
+
 ---
 
 ## 核心能力
@@ -205,4 +207,6 @@ cst-runtime-cli/
 
 ## License
 
-MIT
+本项目代码采用 [MIT License](LICENSE)。原始代码版权归 `bbl21` 所有，后续修改版权归 `phy233` 所有；发布和再分发时必须保留 LICENSE 中的版权声明与许可文本。
+
+本项目基于 [bbl21/cst-runtime-cli](https://github.com/bbl21/cst-runtime-cli) 的 MIT 许可代码继续开发。CST Studio Suite 及其许可证不属于本项目，也不包含在本项目的 MIT 授权范围内。

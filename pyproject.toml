@@ -7,7 +7,8 @@ name = "cst-mcp"
 version = "1.0.0"
 description = "MCP Server for CST Studio Suite electromagnetic simulation automation"
 requires-python = ">=3.12"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 dependencies = [
     "mcp[cli]>=1.20",
@@ -20,8 +21,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bbl21/cst-mcp"
-Source = "https://github.com/bbl21/cst-mcp"
+Homepage = "https://github.com/phy233/CST_MCP"
+Source = "https://github.com/phy233/CST_MCP"
+Issues = "https://github.com/phy233/CST_MCP/issues"
+"Upstream Runtime" = "https://github.com/bbl21/cst-runtime-cli"
 
 [project.scripts]
 cst-mcp = "mcp_server.server:main"
