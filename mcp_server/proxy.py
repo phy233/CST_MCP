@@ -104,6 +104,28 @@ def _log_mcp_interaction(
                     "_preview": f"<External payload stored at {p_file.name}, size {len(raw_res)} bytes>",
                 }
 
+        error_data = record_dict.get("error")
+        if error_data and isinstance(error_data, dict) and not record_dict.get("error_payload_ref"):
+            raw_error = json.dumps(error_data, ensure_ascii=False).encode("utf-8")
+            if len(raw_error) > 16384:
+                import hashlib
+                error_sha = hashlib.sha256(raw_error).hexdigest()
+                payload_dir = root / "payloads"
+                payload_dir.mkdir(parents=True, exist_ok=True)
+                error_file = payload_dir / f"{error_sha}.json"
+                if not error_file.exists():
+                    error_file.write_bytes(raw_error)
+                record_dict["error_payload_ref"] = {
+                    "storage_path": str(error_file),
+                    "size_bytes": len(raw_error),
+                    "sha256": error_sha,
+                    "is_external": True,
+                }
+                record_dict["error"] = {
+                    "_payload_ref": record_dict["error_payload_ref"],
+                    "_preview": f"<External payload stored at {error_file.name}, size {len(raw_error)} bytes>",
+                }
+
         journal_path = root / "mcp_interactions.jsonl"
         line = json.dumps(record_dict, ensure_ascii=False, default=str)
         with journal_path.open("a", encoding="utf-8") as f:
@@ -421,9 +443,15 @@ class CSTWorkerProxy:
                 )
                 if op_id:
                     record["operation_id"] = str(op_id)
+                before_id = response.get("before_snapshot_id") or response.get("context", {}).get("before_snapshot_id")
+                if before_id:
+                    record["before_snapshot_id"] = str(before_id)
                 b_sha = response.get("before_snapshot_sha256") or response.get("context", {}).get("before_snapshot_sha256")
                 if b_sha:
                     record["before_snapshot_sha256"] = str(b_sha)
+                after_id = response.get("after_snapshot_id") or response.get("context", {}).get("after_snapshot_id")
+                if after_id:
+                    record["after_snapshot_id"] = str(after_id)
                 a_sha = response.get("after_snapshot_sha256") or response.get("context", {}).get("after_snapshot_sha256")
                 if a_sha:
                     record["after_snapshot_sha256"] = str(a_sha)

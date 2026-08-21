@@ -13,6 +13,14 @@ TOOL_DEFS = {
         "json_schema": {
             "type": "object",
             "properties": {
+                "workspace": {
+                    "type": "string",
+                    "description": "交互日志所属工作区；省略时使用当前配置工作区。",
+                },
+                "project_path": {
+                    "type": "string",
+                    "description": "按关联 CST 工程路径过滤。",
+                },
                 "task_id": {
                     "type": "string",
                     "examples": ["task_001"],
@@ -49,6 +57,14 @@ TOOL_DEFS = {
                 "interaction_id": {
                     "type": "string",
                     "examples": ["int_12345"],
+                },
+                "workspace": {
+                    "type": "string",
+                    "description": "交互日志所属工作区；省略时使用当前配置工作区。",
+                },
+                "project_path": {
+                    "type": "string",
+                    "description": "关联 CST 工程路径；日志未携带路径时可显式提供。",
                 },
             },
             "required": ["interaction_id"],
@@ -134,6 +150,7 @@ from ..lib import interaction as _interaction_lib
 
 def tool_list_interaction_log(args: dict) -> dict:
     records = _interaction_lib.list_interaction_log(
+        workspace=args.get("workspace"),
         task_id=args.get("task_id"),
         run_id=args.get("run_id"),
         project_path=args.get("project_path"),
@@ -151,6 +168,8 @@ def tool_list_interaction_log(args: dict) -> dict:
 def tool_inspect_interaction_history(args: dict) -> dict:
     return _interaction_lib.inspect_interaction_history(
         interaction_id=str(args["interaction_id"]),
+        project_path=args.get("project_path"),
+        workspace=args.get("workspace"),
     )
 
 

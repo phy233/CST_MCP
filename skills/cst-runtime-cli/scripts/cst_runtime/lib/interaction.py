@@ -15,6 +15,7 @@ from ..interaction.notes import (
 
 def list_interaction_log(
     *,
+    workspace: str | None = None,
     task_id: str | None = None,
     run_id: str | None = None,
     project_path: str | None = None,
@@ -24,6 +25,7 @@ def list_interaction_log(
 ) -> list[dict[str, Any]]:
     """查询 MCP 交互日志。"""
     return list_interactions(
+        workspace=workspace,
         task_id=task_id,
         run_id=run_id,
         project_path=project_path,
@@ -37,13 +39,18 @@ def inspect_interaction_history(
     interaction_id: str,
     *,
     project_path: str | None = None,
+    workspace: str | None = None,
 ) -> dict[str, Any]:
     """查询单次 interaction 关联的 History 变更详情，包括关联的 Operation、前后快照及 Diff。"""
     from ..history.journal import get_operation, list_operations, load_snapshot
     from ..history.diff import diff_snapshots
     from ..history.models import HistoryOperationRecord
 
-    items = list_interactions(interaction_id=interaction_id, limit=1)
+    items = list_interactions(
+        interaction_id=interaction_id,
+        workspace=workspace,
+        limit=1,
+    )
     if not items:
         return {
             "status": "error",
