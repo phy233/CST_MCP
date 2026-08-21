@@ -152,3 +152,42 @@ def test_operation_record_creation_and_serialization():
     restored = HistoryOperationRecord.from_dict(d)
     assert restored.operation_id == op.operation_id
     assert restored.business_vba == op.business_vba
+
+
+def test_snapshot_roundtrip_idempotency_and_hash_stability():
+    raw = {
+        "list": [
+            {
+                "name": "brick1",
+                "contents": "With Brick\n  .Name \"b1\"\nEnd With",
+                "version": "2022.5",
+                "custom_unknown_key": "val123",
+            },
+            {
+                "name": "brick2",
+                "contents": "With Brick\n  .Name \"b2\"\nEnd With",
+                "version": "2022.5",
+            },
+        ]
+    }
+    snap = HistorySnapshot.from_raw_cst(raw, project_path="C:/test/p.cst", reason="init")
+    initial_hash = snap.snapshot_sha256
+
+    # 1. 序列化为 dict
+    d1 = snap.to_dict()
+    # 2. 从 dict 反序列化为新的 HistorySnapshot
+    snap_restored1 = HistorySnapshot.from_dict(d1)
+    # 3. 验证哈希和重新计算哈希完全一致
+    assert snap_restored1.snapshot_sha256 == initial_hash
+    assert compute_snapshot_sha256(snap_restored1.blocks) == initial_hash
+
+    # 4. 再次序列化并反序列化（第二轮往返）
+    d2 = snap_restored1.to_dict()
+    snap_restored2 = HistorySnapshot.from_dict(d2)
+    assert snap_restored2.snapshot_sha256 == initial_hash
+    assert compute_snapshot_sha256(snap_restored2.blocks) == initial_hash
+
+    # 5. 验证 extra_fields 没有被嵌套污染
+    assert snap_restored2.blocks[0].extra_fields == {"custom_unknown_key": "val123"}
+    assert snap_restored2.blocks[1].extra_fields == {}
+

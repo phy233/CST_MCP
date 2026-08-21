@@ -80,6 +80,33 @@ class HistoryBlock:
             extra_fields=extra,
         )
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "HistoryBlock":
+        """从 to_dict 序列化的标准字典还原 HistoryBlock，保持 extra_fields 与元数据不被二次污染。"""
+        data_dict = dict(data)
+        index = int(data_dict.get("index", 0))
+        name = str(data_dict.get("name", ""))
+        contents = str(data_dict.get("contents", ""))
+        version = str(data_dict.get("version", ""))
+        error = bool(data_dict.get("error", False))
+        exclude = bool(data_dict.get("exclude", False))
+        hide = bool(data_dict.get("hide", False))
+        has_undo = bool(data_dict.get("has_undo", False))
+        contents_sha256 = str(data_dict.get("contents_sha256", ""))
+        extra = dict(data_dict.get("extra_fields", {}))
+        return cls(
+            index=index,
+            name=name,
+            contents=contents,
+            version=version,
+            error=error,
+            exclude=exclude,
+            hide=hide,
+            has_undo=has_undo,
+            contents_sha256=contents_sha256,
+            extra_fields=extra,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """序列化为标准 JSON 字典。"""
         res: dict[str, Any] = {
@@ -211,10 +238,8 @@ class HistorySnapshot:
     def from_dict(cls, data: Mapping[str, Any]) -> "HistorySnapshot":
         """从字典还原 HistorySnapshot。"""
         blocks = [
-            HistoryBlock.from_raw(
-                b.get("index", idx),
-                b,
-            )
+            HistoryBlock.from_dict(b) if ("contents_sha256" in b or "extra_fields" in b)
+            else HistoryBlock.from_raw(b.get("index", idx), b)
             for idx, b in enumerate(data.get("blocks", []))
         ]
         return cls(
@@ -244,14 +269,18 @@ class HistoryOperationRecord:
     intent: str = "submit"
     parent_operation_id: str | None = None
     interaction_id: str | None = None
+    task_id: str | None = None
+    run_id: str | None = None
     wrapped_vba: str | None = None      # 提交给 CST 的包装后完整 VBA
     before_snapshot_id: str | None = None
     before_snapshot_sha256: str | None = None
     after_snapshot_id: str | None = None
     after_snapshot_sha256: str | None = None
     execution_state: str = "pending"   # pending, submitted, succeeded, failed, interrupted
+    recording_status: str = "complete" # complete, incomplete
     reconciliation_state: str = "not_required"  # not_required, not_applied, applied, ambiguous, reconciled
     cst_error_envelope: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
     timestamp: str = field(default_factory=_now_iso)
     evidence_paths: list[str] = field(default_factory=list)
     reconciliation_notes: str | None = None
@@ -266,6 +295,8 @@ class HistoryOperationRecord:
             "operation_id": self.operation_id,
             "parent_operation_id": self.parent_operation_id,
             "interaction_id": self.interaction_id,
+            "task_id": self.task_id,
+            "run_id": self.run_id,
             "intent": self.intent,
             "history_label": self.history_label,
             "business_vba": self.business_vba,
@@ -277,8 +308,10 @@ class HistoryOperationRecord:
             "after_snapshot_id": self.after_snapshot_id,
             "after_snapshot_sha256": self.after_snapshot_sha256,
             "execution_state": self.execution_state,
+            "recording_status": self.recording_status,
             "reconciliation_state": self.reconciliation_state,
             "cst_error_envelope": self.cst_error_envelope,
+            "error": self.error,
             "timestamp": self.timestamp,
             "evidence_paths": self.evidence_paths,
             "reconciliation_notes": self.reconciliation_notes,
@@ -293,6 +326,8 @@ class HistoryOperationRecord:
             operation_id=str(data["operation_id"]),
             parent_operation_id=data.get("parent_operation_id"),
             interaction_id=data.get("interaction_id"),
+            task_id=data.get("task_id"),
+            run_id=data.get("run_id"),
             intent=str(data.get("intent", "submit")),
             history_label=str(data.get("history_label", "")),
             business_vba=str(data.get("business_vba", "")),
@@ -304,8 +339,10 @@ class HistoryOperationRecord:
             after_snapshot_id=data.get("after_snapshot_id"),
             after_snapshot_sha256=data.get("after_snapshot_sha256"),
             execution_state=str(data.get("execution_state", data.get("state", "pending"))),
+            recording_status=str(data.get("recording_status", "complete")),
             reconciliation_state=str(data.get("reconciliation_state", "not_required")),
             cst_error_envelope=data.get("cst_error_envelope"),
+            error=data.get("error"),
             timestamp=str(data.get("timestamp", "")),
             evidence_paths=list(data.get("evidence_paths", [])),
             reconciliation_notes=data.get("reconciliation_notes"),

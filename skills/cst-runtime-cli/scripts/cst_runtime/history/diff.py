@@ -30,6 +30,7 @@ class BlockDiff:
     def to_dict(self) -> dict[str, Any]:
         res: dict[str, Any] = {
             "change_type": self.change_type,
+            "name": self.after_name or self.before_name or "",
             "before_index": self.before_index,
             "after_index": self.after_index,
             "before_name": self.before_name,
