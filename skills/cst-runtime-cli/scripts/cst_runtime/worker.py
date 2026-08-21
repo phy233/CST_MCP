@@ -40,10 +40,25 @@ def _configure_cst_path() -> None:
 
 def handle_request(request: dict[str, Any]) -> dict[str, Any]:
     """处理一个白名单请求并回显请求 ID。"""
+    from .context import set_current_execution_context
     from .contracts import error_response, normalize_response
 
     request_id = request.get("id")
     action = request.get("action")
+    arguments = request.get("arguments") or {}
+
+    interaction_id = request.get("interaction_id") or arguments.get("_mcp_interaction_id")
+    task_id = request.get("task_id") or arguments.get("task_id")
+    run_id = request.get("run_id") or arguments.get("run_id")
+    project_path = arguments.get("project_path") or arguments.get("fullpath") or arguments.get("working_project")
+
+    set_current_execution_context(
+        interaction_id=str(interaction_id) if interaction_id else None,
+        task_id=str(task_id) if task_id else None,
+        run_id=str(run_id) if run_id else None,
+        project_path=str(project_path) if project_path else None,
+    )
+
     try:
         if action == "ping":
             payload: dict[str, Any] = {"status": "pong"}
@@ -57,7 +72,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any]:
             payload = normalize_response(
                 invoke_tool(
                     str(request.get("name", "")),
-                    request.get("arguments") or {},
+                    arguments,
                 )
             )
         else:

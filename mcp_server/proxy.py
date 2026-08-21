@@ -46,6 +46,51 @@ class CSTTransportError(RuntimeError):
         }
 
 
+def _log_mcp_interaction(
+    workspace: str | None,
+    record_dict: dict[str, Any],
+) -> None:
+    try:
+        ws = Path(workspace).expanduser().resolve() if workspace else None
+        if not ws:
+            env_ws = os.environ.get("CST_WORKSPACE")
+            ws = Path(env_ws).expanduser().resolve() if env_ws else Path.cwd().resolve()
+
+        sid = os.environ.get("CST_SERVER_SESSION_ID") or "default_session"
+        root = ws / ".cst_runtime" / "interactions" / sid
+        root.mkdir(parents=True, exist_ok=True)
+
+        tool_args = record_dict.get("tool_args")
+        if tool_args and isinstance(tool_args, dict) and not record_dict.get("request_payload_ref"):
+            raw_b = json.dumps(tool_args, ensure_ascii=False).encode("utf-8")
+            if len(raw_b) > 16384:
+                import hashlib
+                sha = hashlib.sha256(raw_b).hexdigest()
+                p_dir = root / "payloads"
+                p_dir.mkdir(parents=True, exist_ok=True)
+                p_file = p_dir / f"{sha}.json"
+                if not p_file.exists():
+                    p_file.write_bytes(raw_b)
+                record_dict["request_payload_ref"] = {
+                    "storage_path": str(p_file),
+                    "size_bytes": len(raw_b),
+                    "sha256": sha,
+                    "is_external": True,
+                }
+                record_dict["tool_args"] = {
+                    "_payload_ref": record_dict["request_payload_ref"],
+                    "_preview": f"<External payload stored at {p_file.name}, size {len(raw_b)} bytes>",
+                }
+
+        journal_path = root / "mcp_interactions.jsonl"
+        line = json.dumps(record_dict, ensure_ascii=False, default=str)
+        with journal_path.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+            f.flush()
+    except Exception:
+        pass
+
+
 class CSTWorkerProxy:
     """串行管理一个 cst_runtime worker。"""
 
@@ -267,6 +312,11 @@ class CSTWorkerProxy:
                 )
             return response
 
+    def list_tools(self) -> list[dict[str, Any]]:
+        """获取由 worker 暴露的工具列表。"""
+        resp = self.request("list_tools")
+        return list(resp.get("tools", []))
+
     def describe_tools(self) -> list[dict[str, Any]]:
         """读取 runtime 拥有的工具清单。"""
         response = self.request("describe_tools")
@@ -284,13 +334,113 @@ class CSTWorkerProxy:
         *,
         timeout: int | None = None,
     ) -> dict[str, Any]:
-        """调用一个 runtime 白名单工具。"""
-        return self.request(
-            "call_tool",
-            name=name,
-            arguments=arguments,
-            timeout=timeout,
+        """调用一个 runtime 白名单工具，并记录完整 MCP 交互生命周期。"""
+        import time
+        from datetime import datetime, timezone
+
+        interaction_id = uuid.uuid4().hex
+        started_at = datetime.now(timezone.utc).astimezone().isoformat()
+        start_time = time.monotonic()
+
+        task_id = arguments.get("task_id") or arguments.get("task")
+        run_id = arguments.get("run_id") or arguments.get("run")
+        workspace = arguments.get("workspace")
+        project_path = (
+            arguments.get("project_path")
+            or arguments.get("fullpath")
+            or arguments.get("working_project")
         )
+
+        record: dict[str, Any] = {
+            "interaction_id": interaction_id,
+            "tool_name": name,
+            "tool_args": dict(arguments),
+            "task_id": str(task_id) if task_id else None,
+            "run_id": str(run_id) if run_id else None,
+            "workspace": str(workspace) if workspace else None,
+            "project_path": str(project_path) if project_path else None,
+            "server_name": self.config.server_name,
+            "server_version": "0.1.0",
+            "state": "requested",
+            "started_at": started_at,
+            "result": None,
+            "error": None,
+            "duration_ms": None,
+            "ended_at": None,
+            "operation_id": None,
+            "before_snapshot_id": None,
+            "before_snapshot_sha256": None,
+            "after_snapshot_id": None,
+            "after_snapshot_sha256": None,
+        }
+        _log_mcp_interaction(record.get("workspace"), record)
+        record["state"] = "running"
+        _log_mcp_interaction(record.get("workspace"), record)
+
+        try:
+            response = self.request(
+                "call_tool",
+                interaction_id=interaction_id,
+                task_id=str(task_id) if task_id else None,
+                run_id=str(run_id) if run_id else None,
+                name=name,
+                arguments=arguments,
+                timeout=timeout,
+            )
+            duration_ms = round((time.monotonic() - start_time) * 1000, 2)
+            ended_at = datetime.now(timezone.utc).astimezone().isoformat()
+
+            try:
+                record["duration_ms"] = duration_ms
+                record["ended_at"] = ended_at
+                op_id = (
+                    response.get("operation_id")
+                    or response.get("context", {}).get("operation_id")
+                )
+                if op_id:
+                    record["operation_id"] = str(op_id)
+                b_sha = response.get("before_snapshot_sha256") or response.get("context", {}).get("before_snapshot_sha256")
+                if b_sha:
+                    record["before_snapshot_sha256"] = str(b_sha)
+                a_sha = response.get("after_snapshot_sha256") or response.get("context", {}).get("after_snapshot_sha256")
+                if a_sha:
+                    record["after_snapshot_sha256"] = str(a_sha)
+
+                if response.get("status") == "error" or response.get("ok") is False:
+                    record["state"] = "failed"
+                    record["error"] = response
+                else:
+                    record["state"] = "succeeded"
+                    record["result"] = response
+                _log_mcp_interaction(record.get("workspace"), record)
+            except Exception:
+                pass
+
+            return response
+        except CSTTransportError as exc:
+            duration_ms = round((time.monotonic() - start_time) * 1000, 2)
+            ended_at = datetime.now(timezone.utc).astimezone().isoformat()
+            try:
+                record["duration_ms"] = duration_ms
+                record["ended_at"] = ended_at
+                record["state"] = "timeout" if exc.code == "worker_request_timeout" else "transport_error"
+                record["error"] = exc.to_response(tool_name=name)
+                _log_mcp_interaction(record.get("workspace"), record)
+            except Exception:
+                pass
+            raise
+        except Exception as exc:
+            duration_ms = round((time.monotonic() - start_time) * 1000, 2)
+            ended_at = datetime.now(timezone.utc).astimezone().isoformat()
+            try:
+                record["duration_ms"] = duration_ms
+                record["ended_at"] = ended_at
+                record["state"] = "failed"
+                record["error"] = {"error_type": "proxy_exception", "message": str(exc)}
+                _log_mcp_interaction(record.get("workspace"), record)
+            except Exception:
+                pass
+            raise
 
     def shutdown(self) -> None:
         """优雅关闭 worker。"""
