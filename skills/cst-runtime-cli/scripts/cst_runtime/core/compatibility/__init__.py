@@ -40,6 +40,11 @@ from .results import (
 )
 from .queries import delete_project_results, get_project_solver_type
 from .modeling import CompatibleVBA
+from .history import (
+    detect_history_capabilities,
+    get_raw_history,
+    supports_get_history,
+)
 
 __all__ = [
     "get_model3d",
@@ -77,4 +82,7 @@ __all__ = [
     "delete_project_results",
     "get_project_solver_type",
     "CompatibleVBA",
+    "detect_history_capabilities",
+    "get_raw_history",
+    "supports_get_history",
 ]
