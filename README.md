@@ -135,8 +135,8 @@ uv run cst-mcp
 ### 方式 B：直接 CLI 使用
 
 ```powershell
-git clone https://github.com/anomalyco/cst-runtime-cli.git
-cd cst-runtime-cli
+git clone https://github.com/phy233/CST_MCP.git
+cd CST_MCP
 # 必须是 CST 兼容的 Python 3.9，不是 uv 创建的现代 .venv
 & $env:CST_WORKER_PYTHON skills/cst-runtime-cli/scripts/bootstrap.py --skill-path skills/cst-runtime-cli/scripts
 $env:PYTHONPATH = "$PWD\\.cst_runtime"
