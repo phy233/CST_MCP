@@ -267,6 +267,7 @@ def wrap_vba_with_status_channel(
             "End If",
             "On Error Resume Next",
             f"If {variable_prefix}Armed Then",
+            f"If {variable_prefix}Armed Then",
             f"{variable_prefix}FileNumber = FreeFile",
             f"Open {variable_prefix}StatusFile For Output As #{variable_prefix}FileNumber",
             f'Print #{variable_prefix}FileNumber, "ERROR"',
@@ -296,7 +297,12 @@ def submit_vba_history(
     poll_interval: float = 0.05,
     _status_directory: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Submit one History block and require an explicit VBA status report."""
+    """Submit one History block, record snapshot & operation journal, and require an explicit VBA status report."""
+    from ..context import get_current_execution_context
+    from .compatibility.history import get_raw_history, supports_get_history
+    from ..history.models import HistoryOperationRecord, HistorySnapshot
+    from ..history.journal import append_operation, save_snapshot
+
     resolved_operation_id = operation_id or uuid.uuid4().hex
     original_script = "\n".join(vba_lines)
     digest = hashlib.sha256(original_script.encode("utf-8")).hexdigest()
@@ -305,6 +311,47 @@ def submit_vba_history(
     ) or uuid.uuid4().hex
     status_file_name = f"cst-runtime-{safe_operation_id}.status"
     arm_file_name = f"cst-runtime-{safe_operation_id}.arm"
+
+    ctx = get_current_execution_context()
+    interaction_id = ctx.get("interaction_id")
+    task_id = ctx.get("task_id")
+    run_id = ctx.get("run_id")
+
+    before_sha: str | None = None
+    before_snap_id: str | None = None
+    if supports_get_history(project):
+        try:
+            raw_before = get_raw_history(project)
+            before_snap = HistorySnapshot.from_raw_cst(
+                raw_before,
+                project_path=project_path,
+                reason="before_submission",
+                operation_id=resolved_operation_id,
+            )
+            save_snapshot(before_snap, project_path=project_path)
+            before_sha = before_snap.snapshot_sha256
+            before_snap_id = before_snap.snapshot_id
+        except Exception:
+            pass
+
+    record = HistoryOperationRecord(
+        operation_id=resolved_operation_id,
+        history_label=history_label,
+        business_vba=original_script,
+        business_vba_sha256=digest,
+        project_path=project_path,
+        interaction_id=interaction_id,
+        task_id=task_id,
+        run_id=run_id,
+        before_snapshot_id=before_snap_id,
+        before_snapshot_sha256=before_sha,
+        execution_state="pending",
+    )
+    try:
+        append_operation(record, project_path=project_path)
+    except Exception:
+        pass
+
     context = {
         "project_path": project_path,
         "history_label": history_label,
@@ -353,9 +400,21 @@ def submit_vba_history(
                         poll_interval=poll_interval,
                     )
                 except VBARuntimeError as runtime_exc:
+                    record.execution_state = "failed"
+                    record.error = runtime_exc.to_response(**context)
+                    try:
+                        append_operation(record, project_path=project_path)
+                    except Exception:
+                        pass
                     return runtime_exc.to_response(**context)
                 except VBACompileOrHostError:
                     pass
+            record.execution_state = "failed"
+            record.error = {"error": str(exc)}
+            try:
+                append_operation(record, project_path=project_path)
+            except Exception:
+                pass
             raise CSTSubmissionError(
                 str(exc) or "CST History submission failed.",
                 feature=feature,
@@ -372,6 +431,12 @@ def submit_vba_history(
                     )
                 except VBACompileOrHostError:
                     pass
+            record.execution_state = "failed"
+            record.error = {"error": "CST rejected the History submission."}
+            try:
+                append_operation(record, project_path=project_path)
+            except Exception:
+                pass
             raise CSTSubmissionError(
                 "CST rejected the History submission.",
                 feature=feature,
@@ -383,6 +448,34 @@ def submit_vba_history(
             timeout=status_timeout,
             poll_interval=poll_interval,
         )
+
+        after_sha: str | None = None
+        after_snap_id: str | None = None
+        recording_status = "complete"
+        if supports_get_history(project):
+            try:
+                raw_after = get_raw_history(project)
+                after_snap = HistorySnapshot.from_raw_cst(
+                    raw_after,
+                    project_path=project_path,
+                    reason="after_submission",
+                    operation_id=resolved_operation_id,
+                )
+                save_snapshot(after_snap, project_path=project_path)
+                after_sha = after_snap.snapshot_sha256
+                after_snap_id = after_snap.snapshot_id
+            except Exception:
+                recording_status = "incomplete"
+
+        record.execution_state = "succeeded"
+        record.after_snapshot_id = after_snap_id
+        record.after_snapshot_sha256 = after_sha
+        record.recording_status = recording_status
+        try:
+            append_operation(record, project_path=project_path)
+        except Exception:
+            pass
+
         return success_response(
             submission="accepted",
             execution="reported_ok",
@@ -390,6 +483,9 @@ def submit_vba_history(
             history_label=history_label,
             operation_id=resolved_operation_id,
             vba_sha256=digest,
+            before_snapshot_sha256=before_sha,
+            after_snapshot_sha256=after_sha,
+            recording_status=recording_status,
             compatibility=compatibility_metadata(project),
         )
     except (VBARuntimeError, VBACompileOrHostError, CSTSubmissionError) as exc:
@@ -403,14 +499,28 @@ def submit_vba_history(
             diagnostic_context["status_directory_expression"] = (
                 status_directory_expression
             )
-        return exc.to_response(**diagnostic_context)
+        err_resp = exc.to_response(**diagnostic_context)
+        record.execution_state = "failed"
+        record.error = err_resp
+        try:
+            append_operation(record, project_path=project_path)
+        except Exception:
+            pass
+        return err_resp
     except Exception as exc:
-        return CSTSubmissionError(
+        err_resp = CSTSubmissionError(
             str(exc) or "CST History submission failed.",
             feature=feature,
             next_action="Verify the active CST project and COM connection before retrying.",
             context=context,
         ).to_response()
+        record.execution_state = "failed"
+        record.error = err_resp
+        try:
+            append_operation(record, project_path=project_path)
+        except Exception:
+            pass
+        return err_resp
     finally:
         if owns_side_channel and arm_path is not None and resolved_status_path is not None:
             for owned_path in (arm_path, resolved_status_path):
