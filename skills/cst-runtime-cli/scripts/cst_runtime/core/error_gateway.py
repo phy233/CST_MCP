@@ -267,7 +267,6 @@ def wrap_vba_with_status_channel(
             "End If",
             "On Error Resume Next",
             f"If {variable_prefix}Armed Then",
-            f"If {variable_prefix}Armed Then",
             f"{variable_prefix}FileNumber = FreeFile",
             f"Open {variable_prefix}StatusFile For Output As #{variable_prefix}FileNumber",
             f'Print #{variable_prefix}FileNumber, "ERROR"',
@@ -297,7 +296,7 @@ def submit_vba_history(
     poll_interval: float = 0.05,
     _status_directory: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Submit one History block, record snapshot & operation journal, and require an explicit VBA status report."""
+    """提交一个 History 块，并记录前后快照、操作流水和 VBA 状态。"""
     from ..context import get_current_execution_context
     from .compatibility.history import get_raw_history, supports_get_history
     from ..history.models import HistoryOperationRecord, HistorySnapshot
@@ -313,45 +312,57 @@ def submit_vba_history(
     arm_file_name = f"cst-runtime-{safe_operation_id}.arm"
 
     ctx = get_current_execution_context()
-    interaction_id = ctx.get("interaction_id")
-    task_id = ctx.get("task_id")
-    run_id = ctx.get("run_id")
+    history_supported = supports_get_history(project)
+    recording_issues: list[dict[str, str]] = []
 
-    before_sha: str | None = None
-    before_snap_id: str | None = None
-    if supports_get_history(project):
+    def _record_issue(stage: str, exc: Exception | str) -> None:
+        recording_issues.append({"stage": stage, "message": str(exc)})
+
+    def _capture_snapshot(reason: str) -> tuple[str | None, str | None]:
+        if not history_supported:
+            _record_issue(reason, "当前 CST 工程不支持 _GetHistory")
+            return None, None
         try:
-            raw_before = get_raw_history(project)
-            before_snap = HistorySnapshot.from_raw_cst(
-                raw_before,
+            snapshot = HistorySnapshot.from_raw_cst(
+                get_raw_history(project),
                 project_path=project_path,
-                reason="before_submission",
+                reason=reason,
                 operation_id=resolved_operation_id,
             )
-            save_snapshot(before_snap, project_path=project_path)
-            before_sha = before_snap.snapshot_sha256
-            before_snap_id = before_snap.snapshot_id
-        except Exception:
-            pass
+            save_snapshot(snapshot, project_path=project_path)
+            return snapshot.snapshot_sha256, snapshot.snapshot_id
+        except Exception as exc:
+            _record_issue(reason, exc)
+            return None, None
 
+    before_sha, before_snap_id = _capture_snapshot("before_submission")
     record = HistoryOperationRecord(
         operation_id=resolved_operation_id,
         history_label=history_label,
         business_vba=original_script,
         business_vba_sha256=digest,
         project_path=project_path,
-        interaction_id=interaction_id,
-        task_id=task_id,
-        run_id=run_id,
+        interaction_id=ctx.get("interaction_id"),
+        task_id=ctx.get("task_id"),
+        run_id=ctx.get("run_id"),
         before_snapshot_id=before_snap_id,
         before_snapshot_sha256=before_sha,
         execution_state="pending",
+        recording_status="incomplete" if recording_issues else "complete",
     )
-    try:
-        append_operation(record, project_path=project_path)
-    except Exception:
-        pass
 
+    def _append_record(stage: str) -> None:
+        record.recording_status = "incomplete" if recording_issues else "complete"
+        if recording_issues:
+            record.extra["recording_issues"] = list(recording_issues)
+        try:
+            append_operation(record, project_path=project_path)
+        except Exception as exc:
+            _record_issue(stage, exc)
+            record.recording_status = "incomplete"
+            record.extra["recording_issues"] = list(recording_issues)
+
+    _append_record("pending_journal")
     context = {
         "project_path": project_path,
         "history_label": history_label,
@@ -361,6 +372,27 @@ def submit_vba_history(
     resolved_status_path: Path | None = None
     arm_path: Path | None = None
     owns_side_channel = False
+    wrapped_script = original_script
+    status_directory_expression = ""
+
+    def _enrich_response(
+        response: dict[str, Any],
+        after_sha: str | None,
+        after_snap_id: str | None,
+    ) -> dict[str, Any]:
+        response.update(
+            {
+                "operation_id": resolved_operation_id,
+                "before_snapshot_id": before_snap_id,
+                "before_snapshot_sha256": before_sha,
+                "after_snapshot_id": after_snap_id,
+                "after_snapshot_sha256": after_sha,
+                "recording_status": record.recording_status,
+                "recording_issues": list(recording_issues),
+            }
+        )
+        return response
+
     try:
         if _status_directory is None:
             status_directory, status_directory_expression = resolve_cst_temp_context(
@@ -389,6 +421,10 @@ def submit_vba_history(
             resolved_operation_id,
             status_directory_expression=status_directory_expression,
         )
+        record.wrapped_vba = wrapped_script
+        record.execution_state = "submitted"
+        _append_record("submitted_journal")
+
         try:
             submission_result = project.modeler.add_to_history(history_label, wrapped_script)
         except Exception as exc:
@@ -400,27 +436,16 @@ def submit_vba_history(
                         poll_interval=poll_interval,
                     )
                 except VBARuntimeError as runtime_exc:
-                    record.execution_state = "failed"
-                    record.error = runtime_exc.to_response(**context)
-                    try:
-                        append_operation(record, project_path=project_path)
-                    except Exception:
-                        pass
-                    return runtime_exc.to_response(**context)
+                    raise runtime_exc
                 except VBACompileOrHostError:
                     pass
-            record.execution_state = "failed"
-            record.error = {"error": str(exc)}
-            try:
-                append_operation(record, project_path=project_path)
-            except Exception:
-                pass
             raise CSTSubmissionError(
                 str(exc) or "CST History submission failed.",
                 feature=feature,
                 next_action="Verify the active CST project and COM connection before retrying.",
                 context=context,
             ) from exc
+
         if submission_result is False:
             if resolved_status_path.exists():
                 try:
@@ -431,62 +456,35 @@ def submit_vba_history(
                     )
                 except VBACompileOrHostError:
                     pass
-            record.execution_state = "failed"
-            record.error = {"error": "CST rejected the History submission."}
-            try:
-                append_operation(record, project_path=project_path)
-            except Exception:
-                pass
             raise CSTSubmissionError(
                 "CST rejected the History submission.",
                 feature=feature,
                 next_action="Verify the active project and CST COM connection before retrying.",
                 context=context,
             )
+
         wait_for_vba_status(
             resolved_status_path,
             timeout=status_timeout,
             poll_interval=poll_interval,
         )
-
-        after_sha: str | None = None
-        after_snap_id: str | None = None
-        recording_status = "complete"
-        if supports_get_history(project):
-            try:
-                raw_after = get_raw_history(project)
-                after_snap = HistorySnapshot.from_raw_cst(
-                    raw_after,
-                    project_path=project_path,
-                    reason="after_submission",
-                    operation_id=resolved_operation_id,
-                )
-                save_snapshot(after_snap, project_path=project_path)
-                after_sha = after_snap.snapshot_sha256
-                after_snap_id = after_snap.snapshot_id
-            except Exception:
-                recording_status = "incomplete"
-
+        after_sha, after_snap_id = _capture_snapshot("after_submission")
         record.execution_state = "succeeded"
         record.after_snapshot_id = after_snap_id
         record.after_snapshot_sha256 = after_sha
-        record.recording_status = recording_status
-        try:
-            append_operation(record, project_path=project_path)
-        except Exception:
-            pass
-
-        return success_response(
-            submission="accepted",
-            execution="reported_ok",
-            project_path=project_path,
-            history_label=history_label,
-            operation_id=resolved_operation_id,
-            vba_sha256=digest,
-            before_snapshot_sha256=before_sha,
-            after_snapshot_sha256=after_sha,
-            recording_status=recording_status,
-            compatibility=compatibility_metadata(project),
+        _append_record("succeeded_journal")
+        return _enrich_response(
+            success_response(
+                submission="accepted",
+                execution="reported_ok",
+                project_path=project_path,
+                history_label=history_label,
+                operation_id=resolved_operation_id,
+                vba_sha256=digest,
+                compatibility=compatibility_metadata(project),
+            ),
+            after_sha,
+            after_snap_id,
         )
     except (VBARuntimeError, VBACompileOrHostError, CSTSubmissionError) as exc:
         diagnostic_context = dict(context)
@@ -496,18 +494,18 @@ def submit_vba_history(
         ):
             diagnostic_context["vba_script"] = original_script
             diagnostic_context["gateway_vba_script"] = wrapped_script
-            diagnostic_context["status_directory_expression"] = (
-                status_directory_expression
-            )
+            diagnostic_context["status_directory_expression"] = status_directory_expression
+        after_sha, after_snap_id = _capture_snapshot("after_failure")
         err_resp = exc.to_response(**diagnostic_context)
         record.execution_state = "failed"
+        record.after_snapshot_id = after_snap_id
+        record.after_snapshot_sha256 = after_sha
         record.error = err_resp
-        try:
-            append_operation(record, project_path=project_path)
-        except Exception:
-            pass
-        return err_resp
+        record.cst_error_envelope = err_resp
+        _append_record("failed_journal")
+        return _enrich_response(err_resp, after_sha, after_snap_id)
     except Exception as exc:
+        after_sha, after_snap_id = _capture_snapshot("after_failure")
         err_resp = CSTSubmissionError(
             str(exc) or "CST History submission failed.",
             feature=feature,
@@ -515,12 +513,12 @@ def submit_vba_history(
             context=context,
         ).to_response()
         record.execution_state = "failed"
+        record.after_snapshot_id = after_snap_id
+        record.after_snapshot_sha256 = after_sha
         record.error = err_resp
-        try:
-            append_operation(record, project_path=project_path)
-        except Exception:
-            pass
-        return err_resp
+        record.cst_error_envelope = err_resp
+        _append_record("failed_journal")
+        return _enrich_response(err_resp, after_sha, after_snap_id)
     finally:
         if owns_side_channel and arm_path is not None and resolved_status_path is not None:
             for owned_path in (arm_path, resolved_status_path):

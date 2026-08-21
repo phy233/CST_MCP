@@ -157,6 +157,16 @@ def test_wrapper_contains_runtime_error_channel(tmp_path: Path) -> None:
     assert "Err.Raise" not in wrapped
     assert "Err.Source" not in wrapped
     assert "Erl" not in wrapped
+    block_if_count = sum(
+        1
+        for line in wrapped.splitlines()
+        if line.strip().lower().startswith("if ")
+        and line.strip().lower().endswith(" then")
+    )
+    end_if_count = sum(
+        1 for line in wrapped.splitlines() if line.strip().lower() == "end if"
+    )
+    assert block_if_count == end_if_count
 
 
 def test_wrapper_routes_explicit_report_error_before_ok() -> None:

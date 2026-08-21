@@ -90,14 +90,14 @@ def set_current_execution_context(
     run_id: str | None = None,
     project_path: str | None = None,
 ) -> list[contextvars.Token[Any]]:
-    """批量设置当前执行上下文，并返回 tokens 列表供后续重置。"""
-    tokens: list[contextvars.Token[Any]] = []
-    if interaction_id is not None:
-        tokens.append(_INTERACTION_ID.set(interaction_id))
-    if task_id is not None:
-        tokens.append(_TASK_ID.set(task_id))
-    if run_id is not None:
-        tokens.append(_RUN_ID.set(run_id))
-    if project_path is not None:
-        tokens.append(_PROJECT_PATH.set(project_path))
-    return tokens
+    """完整替换当前执行上下文，并返回 tokens 列表供后续重置。
+
+    每个 Worker 请求都必须覆盖全部字段；缺失值也要显式写入 ``None``，
+    避免上一条请求的工程路径或 task/run 标识泄漏到下一条请求。
+    """
+    return [
+        _INTERACTION_ID.set(interaction_id),
+        _TASK_ID.set(task_id),
+        _RUN_ID.set(run_id),
+        _PROJECT_PATH.set(project_path),
+    ]
