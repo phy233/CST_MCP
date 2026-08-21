@@ -142,15 +142,60 @@ def generate_restore_plan(
 
     # 情况二: B 是 T 的严格前缀 -> 计算缺失后缀
     if is_strict_prefix:
+        from .models import compute_snapshot_sha256
+
+        # 预计算目标快照各前缀切片的规范哈希
+        prefix_hashes: list[str] = [
+            compute_snapshot_sha256(t_blocks[:k])
+            for k in range(len_t + 1)
+        ]
+
+        op_list: list[HistoryOperationRecord] = []
+        if operations:
+            raw_ops = list(operations.values()) if isinstance(operations, Mapping) else list(operations)
+            op_list = [o if isinstance(o, HistoryOperationRecord) else HistoryOperationRecord.from_dict(o) for o in raw_ops]
+
+        used_op_ids: set[str] = set()
         suffix_blocks = t_blocks[len_b:]
         steps: list[dict[str, Any]] = []
         all_have_business_vba = True
 
         for s_idx, t_blk in enumerate(suffix_blocks):
-            matched_op = ops_by_label.get(t_blk.name)
+            global_idx = len_b + s_idx
+            exp_before_sha = prefix_hashes[global_idx]
+            exp_after_sha = prefix_hashes[global_idx + 1]
             step_num = s_idx + 1
 
+            # 精准匹配 candidate operation：
+            # 1. 优先按 (label, before_hash) 匹配
+            matched_op: HistoryOperationRecord | None = None
+            for op in op_list:
+                if op.operation_id in used_op_ids:
+                    continue
+                if op.history_label == t_blk.name and op.before_snapshot_sha256 == exp_before_sha:
+                    matched_op = op
+                    break
+
+            # 2. 次优先按 (label, after_hash) 匹配
+            if matched_op is None:
+                for op in op_list:
+                    if op.operation_id in used_op_ids:
+                        continue
+                    if op.history_label == t_blk.name and op.after_snapshot_sha256 == exp_after_sha:
+                        matched_op = op
+                        break
+
+            # 3. 兜底：按顺序匹配未使用的同名 label
+            if matched_op is None:
+                for op in op_list:
+                    if op.operation_id in used_op_ids:
+                        continue
+                    if op.history_label == t_blk.name and op.business_vba:
+                        matched_op = op
+                        break
+
             if matched_op and matched_op.business_vba:
+                used_op_ids.add(matched_op.operation_id)
                 steps.append({
                     "step": step_num,
                     "target_block_index": t_blk.index,
@@ -159,8 +204,8 @@ def generate_restore_plan(
                     "business_vba": matched_op.business_vba,
                     "business_vba_sha256": matched_op.business_vba_sha256,
                     "operation_id": matched_op.operation_id,
-                    "expected_before_snapshot_sha256": matched_op.before_snapshot_sha256,
-                    "expected_after_snapshot_sha256": matched_op.after_snapshot_sha256,
+                    "expected_before_snapshot_sha256": exp_before_sha,
+                    "expected_after_snapshot_sha256": exp_after_sha,
                     "status": "ready",
                 })
             else:
@@ -171,6 +216,8 @@ def generate_restore_plan(
                     "label": t_blk.name,
                     "action": "manual_or_physical",
                     "raw_contents": t_blk.contents,
+                    "expected_before_snapshot_sha256": exp_before_sha,
+                    "expected_after_snapshot_sha256": exp_after_sha,
                     "status": "requires_manual_vba_or_physical_checkpoint",
                     "warning": (
                         f"历史块 [{t_blk.name}] 缺失 clean business_vba 记录（可能为 GUI/外部创建）；"
