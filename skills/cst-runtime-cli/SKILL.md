@@ -1,9 +1,11 @@
 ---
 name: cst-runtime-cli
-description: 直接使用 Python 3.9 Worker 运行 CST Runtime CLI，覆盖环境诊断、工程会话、建模、仿真、结果读取、History 检查点和高风险运维。当用户明确要求 CLI/runtime、低上下文命令链或 MCP 未暴露的 CLI-only 操作时使用；已连接 MCP 的普通设计任务优先使用 cst-mcp。
+description: 直接使用 Python 3.9 Worker 运行 CST Runtime CLI，覆盖环境诊断、工程会话、建模、仿真、结果读取、History 检查点和高风险运维。当用户明确要求直接调用 CLI、诊断或部署 Runtime、MCP 未连接，或所需操作标记为 CLI-only 时使用；已连接 MCP 的普通设计任务优先使用 cst-mcp。
 ---
 
 # CST Runtime CLI Skill
+
+本 Skill 是人工授权下的执行与运维通道，不自行选择目标工程、转移会话所有权或替用户作出电磁设计决定。能够调用 CLI 只代表具有执行接口，不代表能够完成端到端或全自动设计。
 
 ## 运行边界
 
@@ -19,11 +21,13 @@ Runtime 必须由 CST 兼容的 Python 3.9 Worker 执行：
 
 ## 默认调用方式
 
-1. 先运行 `health-check --auto-fix false`；
-2. 使用 `list-tools` 和 `describe-tool` 获取实时工具名、参数 Schema、风险和暴露状态；
+1. 仅在首次部署、Worker/MCP 连接异常或环境故障时运行 `health-check --auto-fix false`；普通业务调用前不重复运行；
+2. 仅在工具名、参数 Schema 或暴露状态未知或可能已变化时使用一次 `list-tools` / `describe-tool`；已有当前契约时直接调用；
 3. 数组、对象和复杂路径参数先用 `args-template` 生成 JSON，再通过 `--args-file` 调用；
-4. 每次只执行一个可验证步骤，解析 stdout 的 JSON `status` 后再继续；
-5. 修改后检查参数、实体、配置、结果或文件，不把提交成功当作工程结果正确。
+4. 默认每次执行一个边界清楚的步骤，解析 stdout 的 JSON `status` 后再继续；
+5. 接口没有返回错误并给出成功状态时，充分相信 CST 已成功执行对应 VBA，不在普通写操作前后重复读取参数、实体、配置或 History。
+
+必要检查只用于结果导出等文件产物、异步求解完成与结果取得，以及接口已经返回错误、超时或 ambiguous 后的副作用判断。删除、覆盖、关闭或进程终止前的目标与授权确认仍然保留，但不把它解释为对 CST 成功返回的不信任。
 
 详细命令约定见 [cli-invocation.md](references/cli-invocation.md)。原子工具与可选管道的选择见 [atomic-and-pipeline-usage.md](references/atomic-and-pipeline-usage.md)。
 

@@ -21,7 +21,7 @@
 
 每次读取 stdout JSON：
 
-- `status=success`：该工具承诺的边界成功，仍按工具类型检查实体、结果或文件；
+- `status=success`：充分相信 CST 已成功执行该工具对应的 VBA，不再查询实体、参数或配置证明执行成功；结果导出等文件产物和异步求解结果仍按工具承诺取得；
 - `status=error`：读取 `error_type`、`message`、`error` 和 `context`；
 - transport/worker timeout：操作可能已经提交，先检查实际状态，不直接重复；
 - 输出不是合法 JSON：按 Worker/CLI 故障处理，不从控制台杂项推断业务结果。
