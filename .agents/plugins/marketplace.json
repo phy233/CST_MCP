@@ -1,0 +1,21 @@
+{
+  "name": "cst-mcp",
+  "interface": {
+    "displayName": "CST MCP"
+  },
+  "plugins": [
+    {
+      "name": "cst-mcp",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/phy233/CST_MCP.git",
+        "ref": "master"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

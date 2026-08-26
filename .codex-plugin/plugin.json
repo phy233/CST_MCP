@@ -1,0 +1,38 @@
+{
+  "name": "cst-mcp",
+  "version": "1.0.0",
+  "description": "CST Studio Suite 超表面设计辅助、重复建模、扫参与受控优化 Skills。",
+  "author": {
+    "name": "phy233",
+    "url": "https://github.com/phy233"
+  },
+  "homepage": "https://github.com/phy233/CST_MCP",
+  "repository": "https://github.com/phy233/CST_MCP",
+  "license": "MIT",
+  "keywords": [
+    "cst",
+    "metasurface",
+    "electromagnetics",
+    "mcp",
+    "optimization"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CST MCP",
+    "shortDescription": "CST 超表面设计与自动化辅助 Skills",
+    "longDescription": "为 Agent 提供 CST MCP 调用边界、超表面单元设计建议、重复建模、扫参与受控优化工作流；总体方案与最终判断仍由人类用户负责。",
+    "developerName": "phy233",
+    "category": "Productivity",
+    "capabilities": [
+      "CST automation guidance",
+      "Metasurface design assistance",
+      "Parameter sweep and optimization"
+    ],
+    "websiteURL": "https://github.com/phy233/CST_MCP",
+    "defaultPrompt": [
+      "使用 CST MCP 检查当前工程，并建议下一步单元设计操作。",
+      "基于现有参数制定受控扫参方案，保留人工决策点。",
+      "使用 CST MCP 完成一组已经确认的重复建模步骤。"
+    ]
+  }
+}
