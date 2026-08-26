@@ -134,6 +134,25 @@ Proxy 启动、IPC、退出、响应 ID 和超时故障统一为 `transport_erro
 | `background_incompatible_with_farfield` | `runtime` | 存在远场监视器且运行时跟踪背景不是 Normal/ε=1/μ=1 时求解前预检失败 |
 | `background_state_unknown` | `runtime` | get-background 无运行时跟踪状态；CST 2022 手册未提供背景读取接口 |
 
+## Agent 处置矩阵
+
+公开 MCP / CLI 调用没有返回错误，并给出 `status=success` / `execution=reported_ok` 时，表示错误网关已经收到 CST 的 `OK`，Agent 应充分相信对应 VBA 已成功执行。不要因为操作涉及参数、实体、材料、布尔、边界、端口、监视器或求解器配置，就重复增加执行前查询、执行后 getter、实体树检查或 History diff。
+
+只有工具承诺结果导出等外部产物、异步求解仍需等待完成，或接口已经返回错误、超时、transport error、Worker 退出和 ambiguous 状态时，才执行相应产物检查或副作用判断。删除、覆盖、关闭和进程终止前的目标与授权确认属于权限边界。以上例外不改变“无错误返回即相信 VBA 已成功执行”的默认规则。
+
+| 返回或现象 | Agent 处置 |
+| --- | --- |
+| `validation_error` / `invalid_arguments` | 修正明确有误的参数；不要原样重试，也不要扩大用户给定范围 |
+| `unsupported_feature` | 报告当前版本或会话不支持；不猜测未文档化 VBA，也不自动改走高风险替代路径 |
+| `transport_error` / `worker_error` 且 `retry_safe=true` | 确认目标和请求未改变后，可进行一次有界重试 |
+| `transport_error`、超时或 Worker 退出且副作用不明 | 先检查 interaction、History、工程状态和操作标识；未确认前不得重放写操作 |
+| `cst_submission_error` / `vba_runtime_error` | 保留结构化错误和原始上下文，停止当前步骤；修正原因后由用户决定是否重试 |
+| `vba_compile_or_host_error` | 按 ambiguous 处理，不能把状态文件缺失推断为未执行 |
+| `solver_run_failed` / `solver_stopped_with_error` / `solver_reported_error` | 停止优化或后续结果解释，返回新增 CST 错误日志和对应 Run 上下文 |
+| 旧 Run ID、空结果或承诺的导出文件缺失 | 标为 `unvalidated` 或失败，不把缺失值填成有效观测 |
+
+对于重复建模或优化循环，用户批准的范围、预算和停止条件构成自动化边界。单个 trial 失败可以按任务卡规则记录并继续或早停；改变目标、参数硬边界、预算、工程路径或主要拓扑必须重新交给用户决定。
+
 ## 测试入口
 
 普通 `python -m pytest -q` 只运行离线测试，不启动 CST。真实 CST 2022 测试必须显式运行：

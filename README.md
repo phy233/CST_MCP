@@ -1,10 +1,33 @@
-# CST Runtime CLI
+# CST MCP / Runtime CLI
 
-CST Studio Suite 自动化 CLI、MCP 与 AI Agent 基础设施。Runtime Registry 提供建模、仿真、结果读取、参数优化、远场导出、History 和审计能力，并通过统一 JSON 契约与运行时守卫控制 CST 调用。CLI 工具不等于 MCP 暴露面；只有明确标记为 `agent` 的工具才会注册到 MCP。
+CST Studio Suite 自动化 CLI、MCP 与 AI Agent 辅助基础设施。Runtime Registry 提供建模、仿真、结果读取、参数优化、远场导出、History 和审计能力，并通过统一 JSON 契约与运行时守卫控制 CST 调用。CLI 工具不等于 MCP 暴露面；只有明确标记为 `agent` 的工具才会注册到 MCP。
 
-项目同时以 AI 工具 skill 形式发布，但工具链本身是通用设计——可独立使用、作为 skill 集成、或作为 Python 包二次开发。
+仓库同时提供 AI Agent Skills，使 Agent 能理解 CST 调用边界、超表面任务语境和受控优化流程。工具链仍可独立使用、作为 Skill 集成，或作为 Python 包二次开发。
 
 > **CST 许可证要求**：本工具不包含 CST Studio Suite，也不提供或绕过 CST 许可证。使用者必须自行安装受支持的 CST Studio Suite，并持有与实际功能相匹配的合法、有效许可证；能否启动求解器、HPC 或其他许可功能以本机 CST 许可状态为准。
+
+---
+
+## 项目定位与人机分工
+
+本项目把 MCP 和 Agent 定位为超表面设计工作的**辅助者**，目标是让 AI 能接入 CST，并在用户已经给出任务方向和约束后承担耗时、重复且适合结构化执行的工作。
+
+Agent 适合协助：
+
+- 只读检查现有 CST 工程并整理参数、实体、边界、激励和结果状态；
+- 基于当前工程和可见证据提出单元结构或参数调整建议，并明确区分事实、推断和待验证假设；
+- 按用户确认的模板完成重复建模、参数替换和结果整理；
+- 在用户给定目标、变量范围、约束、预算和停止条件后，协助扫参、灵敏度探测和优化迭代；
+- 保存工具交互、History 关联和阶段结论，便于用户复核。
+
+人类用户仍负责：
+
+- 确定应用目标、总体结构路线、主要物理机制、材料与制造条件；
+- 决定参数范围、评价指标、计算成本和可接受的设计权衡；
+- 审查 Agent 建议，并对高成本仿真、不可逆操作和最终工程结论作出决定；
+- 对设计的物理正确性、工程可实现性和最终交付结果负责。
+
+本项目不定位为“通用超表面端到端设计”或“全自动超表面设计”系统。Agent 不应在需求缺失时替用户补全总体方案，也不应把未经人工审查的候选、仿真提交状态或局部指标写成最终设计结论。
 
 ---
 
@@ -23,6 +46,7 @@ CST Studio Suite 自动化 CLI、MCP 与 AI Agent 基础设施。Runtime Registr
 | **审计**     | `record-stage`, `update-status`, `stage-evidence`                                                       |
 | **DOE**      | `design-probes`, `analyze-probes`                                                                         |
 | **运行**     | `prepare-run`, `get-run-context`                                                                          |
+| **Agent 辅助** | 工程检查、单元修改建议、重复建模、受控扫参与优化编排、结果汇总和审计                                      |
 
 Registry 工具各含严格 JSON Schema 定义，未知字段会被拒绝，输出格式以通用 `OperationResult` 为基础。工具数量和分类由 Registry 动态生成，不在文档中手工维护；可用 `devkit/tools/generate_agent_tools_list.py` 生成 Agent 暴露面快照 `tools-list.json`。
 
@@ -63,7 +87,15 @@ Registry 工具各含严格 JSON Schema 定义，未知字段会被拒绝，输�
 
 每个 trap 触发时附带 `cst_raw` 上下文和 `next_action` 指导，帮助 agent 自动恢复。
 
-> ⚠️ 守卫层基于已知模式设计，不能穷举所有 CST 异常。复杂工作流仍需在关键节点人工复核。
+> ⚠️ 守卫层基于已知模式设计，不能穷举所有设计风险。复杂工作流仍需人工审查物理假设、结果和权限边界，但这不要求对无错误的普通 VBA 调用重复读回。
+
+### 接口成功信任原则
+
+当前公开 MCP / CLI 接口已经通过结构化错误网关报告 VBA 执行结果。只要接口没有返回错误并给出成功状态，Agent 应充分相信 CST 已成功执行对应 VBA，不要仅为再次证明执行成功而重复进行执行前查询或执行后读回。参数、材料、普通几何、布尔操作、边界、端口、监视器和求解器配置均默认遵循这一原则。
+
+必要检查只保留在操作本身承诺可观察产物或流程仍未完成的边界，例如确认结果导出文件存在且非空、等待异步求解结束并取得结果，或在超时、传输错误和返回状态不明确后判断副作用再决定是否重试。删除、覆盖、关闭等操作的目标和授权确认属于权限边界，不是对 CST 成功返回的重复验证。
+
+“VBA 已成功执行”只说明 CST 接受并完成了所请求的操作，不自动证明单元设计、物理假设或最终指标正确；这些科学判断仍由结果和用户审查决定。
 
 ### 双 Session 模型
 
@@ -114,25 +146,44 @@ uv run cst-mcp
 
 ---
 
-## 参考工程
-
-`skills/cst-runtime-cli/tests/refs/ref_0/ref_0.cst` — 四脊喇叭天线，8-12 GHz，含完整建模历史（VBA 737 行）。用于在真实 CST 上验证工具和管道。不含仿真结果缓存，可仿真生成或从工作区获取缓存。
-
----
-
 ## 安装与集成
 
-### 方式 A：AI 工具 skill
+### 方式 A（默认）：Codex / ChatGPT 插件
 
-解压到对应工具的 skills 目录：
+仓库根目录已经是一个可分发插件：`.codex-plugin/plugin.json` 直接声明 `./skills/`，安装 `cst-mcp` 插件即可让 Codex / ChatGPT 从同一份源码发现四个 Skill，不需要再复制一套插件专用 Skill。
 
-| AI 工具                         | 路径                                                             |
-| ------------------------------- | ---------------------------------------------------------------- |
-| OpenCode / Cursor / Claude Code | `%USERPROFILE%\.config\opencode\skills\`（或其他工具对应路径） |
+```powershell
+# 添加本仓库提供的 marketplace，然后安装插件
+codex plugin marketplace add phy233/CST_MCP
+codex plugin add cst-mcp@cst-mcp
+```
 
-解压后按需要安装 `cst-mcp`、`cst-runtime-cli`、`cst-metasurface-design` 和 `cst-runtime-optimization` Skill；Runtime 代码随 `cst-runtime-cli` 提供。
+安装或更新后新建任务，再在 `/skills` 或 `$` 选择器中确认 `cst-mcp`、`cst-metasurface-design`、`cst-runtime-optimization` 和 `cst-runtime-cli` 可见。插件当前只负责分发 Skills；CST 2022 路径、Python 3.9 Worker 和本机 MCP 启动方式仍按 [INSTALL.md](INSTALL.md) 显式配置，避免把开发机绝对路径打包给其他用户。
 
-### 方式 B：直接 CLI 使用
+### 方式 B：独立 Skill 源码（跨平台回退）
+
+顶层 `skills/` 同时保留为规范源文件。OpenCode 等不支持 OpenAI 插件清单的平台，或不希望使用插件的用户，可以把所需的完整 Skill 文件夹复制或链接到该客户端规定的发现位置。对于 Codex，手动回退位置为：
+
+| 作用域 | Codex 发现位置 | 适用场景 |
+| --- | --- | --- |
+| 当前仓库 | `<仓库根目录>/.agents/skills/<skill-name>` | 仅在本仓库内使用并随团队共享 |
+| 当前用户 | `%USERPROFILE%\.agents\skills\<skill-name>` | 在本机多个仓库中使用 |
+| 其他 Agent | 以相应客户端的 Skill 文档为准 | OpenCode、Cursor、Claude Code 等跨平台回退 |
+
+应复制或链接整个 Skill 文件夹，不能只复制 `SKILL.md`，因为部分流程还依赖 `references/` 或 `scripts/`。不要同时通过插件和手动路径安装同名副本。详细安装和冷启动获取检查见 [INSTALL.md](INSTALL.md#插件优先的-skill-安装与获取验证)，官方结构规则见 [OpenAI Build skills](https://developers.openai.com/plugins/build/skills) 与 [Package your plugin](https://developers.openai.com/plugins/build/plugins)。
+
+推荐组合如下：
+
+| Skill | 作用 | 何时安装 |
+| --- | --- | --- |
+| `cst-mcp` | 已连接 MCP 时的工具调用和安全边界 | 使用 MCP 的基础 Skill |
+| `cst-metasurface-design` | 超表面单元建议、建模语境和设计迭代边界 | 超表面/FSS/周期单元任务；通常与 `cst-mcp` 配合 |
+| `cst-runtime-optimization` | 受控扫参、灵敏度探测、优化记录和早停 | 需要减轻多轮仿真负担时；与 `cst-mcp` 或 `cst-runtime-cli` 配合 |
+| `cst-runtime-cli` | Runtime 部署、环境诊断和 CLI-only 运维 | 明确直接使用 CLI 或 MCP 未暴露所需操作时 |
+
+四个 Skill 采用一套规范正文，不提供会产生重复触发的独立英文副本；需要英文匹配时，在同一 `description` 中维护必要的英文领域关键词。插件分发与跨平台回退均引用顶层 `skills/`，它是唯一规范来源。
+
+### 方式 C：直接 CLI 使用
 
 ```powershell
 git clone https://github.com/phy233/CST_MCP.git
@@ -143,7 +194,7 @@ $env:PYTHONPATH = "$PWD\\.cst_runtime"
 & $env:CST_WORKER_PYTHON -m cst_runtime list-tools
 ```
 
-### 方式 C：Python 包
+### 方式 D：Python 包
 
 ```python
 from cst_runtime.lib.session import open_project, close_project
@@ -161,7 +212,11 @@ data = get_1d_result(
 ## 项目结构
 
 ```
-cst-runtime-cli/
+CST_MCP/
+├── .codex-plugin/
+│   └── plugin.json                      # 默认插件入口，直接分发顶层 Skills
+├── .agents/plugins/
+│   └── marketplace.json                 # 仓库 marketplace 与远端根插件入口
 ├── devkit/                              # 扩展开发工具包
 │   ├── references/                      # VBA/CST API 官方参考、开发流程指南
 │   └── tools/

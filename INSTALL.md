@@ -135,6 +135,59 @@ Claude Desktop（`claude_desktop_config.json`）或其他 MCP 客户端：
 
 > 客户端进程需要能找到 `uv`，并有权限执行配置的 Python 3.9 Worker。若客户端在配置修改前已启动，需重启客户端。
 
+## 插件优先的 Skill 安装与获取验证
+
+### MCP 工具和 Skill 是两条独立链路
+
+- MCP 客户端配置决定 Agent 能否取得 `cst-runtime` 工具；
+- 插件或独立 Skill 安装位置决定 Agent 能否发现 `cst-mcp`、`cst-metasurface-design`、`cst-runtime-optimization` 和 `cst-runtime-cli`；
+- MCP 工具可见不代表 Skill 已安装，Skill 可见也不代表 MCP 服务已经连接。
+
+### 默认方式：安装仓库插件
+
+仓库根目录的 `.codex-plugin/plugin.json` 直接把 `./skills/` 作为插件组件，`.agents/plugins/marketplace.json` 则把 `cst-mcp` 指向 Git 仓库根目录。Codex / ChatGPT 用户默认通过插件取得全部四个 Skill：
+
+```powershell
+codex plugin marketplace add phy233/CST_MCP
+codex plugin add cst-mcp@cst-mcp
+```
+
+插件安装后新建任务再检查 Skill；旧任务不作为冷启动发现验收。当前插件没有声明 `.mcp.json`，因为本项目的 CST 安装路径、Python 3.9 Worker 和 `.cst_config.json` 都是机器相关配置。插件解决 Skill 发现，MCP 服务仍按上一节配置。
+
+### 回退方式：直接安装 Skill 源文件
+
+仓库内的顶层 `skills/` 仍是唯一规范源码，同时也是插件实际打包的目录。OpenCode 等不支持 OpenAI 插件清单的平台，按各自客户端文档，把所需的完整 Skill 文件夹复制或链接到其原生发现位置。Codex 也可以使用以下手动回退位置：
+
+| 作用域 | 发现位置 |
+| --- | --- |
+| 当前仓库 | `<仓库根目录>/.agents/skills/<skill-name>` |
+| 当前用户 | `%USERPROFILE%\.agents\skills\<skill-name>` |
+
+必须保留 Skill 文件夹内的 `references/` 和 `scripts/`。不要只复制 `SKILL.md`，也不要同时通过插件、仓库级目录和用户级目录安装同名副本。手动安装后若选择器未更新，重启客户端并新建任务再检查。
+
+建议按任务安装：
+
+- 普通 MCP 操作：`cst-mcp`；
+- 超表面单元建议和重复建模：`cst-mcp` + `cst-metasurface-design`；
+- 扫参或优化：在上述组合上增加 `cst-runtime-optimization`；
+- 直接 CLI、部署、恢复或 CLI-only 操作：增加 `cst-runtime-cli`。
+
+### 冷启动验收
+
+安装或更新后，新建一个 Codex 任务并分别检查：
+
+1. **Skill 获取**：在 `/skills` 或 `$` 选择器中能够看到已安装的 Skill；显式输入 `$cst-mcp` 时能加载对应说明。
+2. **MCP 工具获取**：客户端工具目录中能够看到来自 `cst-runtime` 的工具。工具数量由当前 Runtime Registry 动态决定，不以 README 中的固定数字验收。
+3. **路由边界**：超表面任务可组合加载 `cst-metasurface-design`；优化意图可组合加载 `cst-runtime-optimization`；纯理论讨论不应因为出现普通 RF 术语而自动调用 CST。
+
+| 现象 | 结论与下一步 |
+| --- | --- |
+| MCP 工具可见，四个 Skill 不可见 | MCP 已连接；检查插件是否安装并启用，或检查独立 Skill 回退路径 |
+| Skill 可见，MCP 工具不可见 | Skill 已安装，但 MCP 客户端配置、进程或连接仍需检查 |
+| 两者都可见 | Agent 已同时取得工作流说明和工具接口；这仍不等于真实 CST 仿真已经通过 |
+| 插件安装后 Skill 仍不可见 | 确认插件未被禁用、marketplace 指向 `cst-mcp`，然后在新任务中复查 |
+| 同名 Skill 出现多次 | 插件和手动发现位置存在重复安装；保留一种分发方式后重启客户端 |
+
 ## 常见问题
 
 ### Worker 启动超时（`Timeout waiting for cst_worker.py to initialize`）

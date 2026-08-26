@@ -1,33 +1,72 @@
-# MCP Exposure
+# MCP Agent 暴露策略
 
-| Module | Function | Status | MCP | Reason |
-| ------ | -------- | ------ | --- | ------ |
-| array | build_array | Stable | Yes | 复杂阵列构建 |
-| boundary | set_all | Stable | Yes | 基础设置 |
-| boundary | set_per_face | Stable | Yes | 基础设置 |
-| boundary | set_unit_cell | Stable | Yes | 基础设置 |
-| cross_process | CrossProcessSweep | Experimental | No | 特定业务逻辑，建议作为example |
-| cross_process | quick_cross_sweep | Experimental | No | 特定业务逻辑 |
-| farfield | export_grid | Stable | Yes | 数据导出 |
-| farfield | export_cut | Stable | Yes | 数据导出 |
-| farfield | list_monitors | Stable | Yes | 状态查询 |
-| geometry | brick, cylinder, cone, rectangle | Stable | Yes | 基础几何构建 |
-| geometry | boolean_* | Stable | Yes | 布尔运算 |
-| geometry | delete_* | Stable | Yes | 实体/组件删除 |
-| geometry | transform (rotate, mirror, translate) | Stable | Yes | 几何变换 |
-| geometry | wcs (activate, deactivate) | Stable | Yes | 坐标系操作 |
-| geometry | arc, polygon | Stable | Yes | 复杂几何 |
-| materials | define, define_from_mtd | Stable | Yes | 材质创建 |
-| materials | list_materials, exists, set_material | Stable | Yes | 材质管理 |
-| mesh | settings, acceleration, set_* | Stable | Yes | 网格与加速设置 |
-| monitors | set_*, delete_* | Stable | Yes | 监视器与探针管理 |
-| optimization | create_study, ask, tell, best | Stable | Yes | 优化器接口 |
-| parameters | list_params, get_param, set_param... | Stable | Yes | 参数管理 |
-| port | define_waveguide, define_floquet | Stable | Yes | 端口定义 |
-| results | get_sparam, list_*, export_all... | Stable | Yes | 结果读取与导出 |
-| session | open, close, create_blank, save, quit | Stable | Yes | 工程生命周期管理 |
-| session | inspect, list_open, is_locked | Internal | No | 内部辅助功能，MCP 侧可通过专门 tool 整合 |
-| solver | start, wait, is_running, stop, rebuild, delete_results, set_freq_range | Stable | Yes | 仿真与求解器控制 |
-| sweep | ParameterSweep, quick_sweep, load_lut, interpolate_lut | Stable | Yes | 参数扫描 |
-| unit_cells | UnitCellBase | Stable | No | Python开发者扩展用接口 |
+## 定位
+
+MCP 为 Agent 提供受控的 CST 工具接口，使其能够辅助用户检查工程、提出有依据的单元建议、执行经授权的重复建模，以及减轻扫参、优化和结果整理负担。MCP 不替用户决定总体设计、主要物理机制、参数硬边界或最终方案，也不以“工具可调用”承诺端到端或全自动超表面设计。
+
+## 动态事实来源
+
+工具暴露面会随 Registry、目标版本和 MCP 重连而变化，因此本文不维护固定工具数量或逐项静态清单。判断某项能力是否可由 Agent 调用时，按以下顺序取证：
+
+1. Runtime `TOOL_DEFS` 和 Registry 中的名称、输入/输出 Schema、`exposure` 与 `risk`；
+2. Python 3.9 Worker 的实时 `list-tools` / `describe-tool` 结果；
+3. 当前 MCP 连接的 `tools/list` 结果；
+4. 带生成时间和版本信息的 `tools-list.json` 快照，仅用于审查和对比。
+
+修改工具元数据、暴露状态或服务配置后，必须重启或重连 MCP，才能以新的 `tools/list` 结果验收。README、历史快照和本文件都不能覆盖当前连接实际返回的接口。
+
+## 暴露级别
+
+| 级别 | 含义 | Agent 行为 |
+| --- | --- | --- |
+| `agent` | 经过评审并允许注册到 MCP | 仍须遵守输入 Schema、授权和工程所有权边界 |
+| `cli_only` | 只允许通过 Runtime CLI 显式调用 | MCP Agent 不得绕过暴露策略；需要时路由到 `cst-runtime-cli` |
+| `experimental` | 能力或真机证据尚未达到默认暴露要求 | 不把存在的实现写成 Agent 已可用能力 |
+| 未注册或内部接口 | 供实现层组合或维护使用 | 不直接向 Agent 宣传或猜测调用方式 |
+
+`risk` 是风险与编排提示，不等同于访问控制；真正的 MCP 注册仍以 `exposure` 和服务端默认拒绝策略为准。
+
+## MCP 工具与 Skill 获取
+
+MCP 工具和 Agent Skill 是两条独立链路：
+
+- MCP `tools/list` 成功，只证明当前客户端取得了工具接口；
+- `cst-mcp` 等 Skill 出现在 `/skills` 或选择器中，只证明工作流文档已安装；
+- 任一链路成功都不能替另一条链路作证，也不能证明真实 CST 已完成仿真。
+
+Codex 的插件安装、独立源码回退和冷启动验收见 [INSTALL.md](../../INSTALL.md#插件优先的-skill-安装与获取验证)。
+
+## 授权与自动化范围
+
+| 操作类型 | 默认边界 |
+| --- | --- |
+| 只读工程检查、工具描述和日志查询 | 在用户指定工程范围内可直接执行 |
+| 普通参数、材料、几何或配置修改 | 仅在明确工作副本和用户请求范围内执行 |
+| 重复建模、扫参和优化 trial | 用户批准模板或任务卡后，可在对象、硬范围、预算和停止条件内连续执行 |
+| 高成本求解 | 先确认目标、预算和停止条件；已批准的优化循环不要求逐 trial 重复确认 |
+| 保存、关闭、覆盖、删除、物理检查点、重放或进程终止 | 执行前需要明确目标、影响和用户授权，并遵守会话所有权 |
+| 环境安装、修复、下载或外部网络操作 | 单独取得授权，不因设计任务而自动扩大权限 |
+
+改变工程路径、主要拓扑、目标、硬边界、预算或覆盖策略时，现有授权不再覆盖新动作。状态 ambiguous 或副作用不明时停止，不通过重复调用碰运气。
+
+## 接口成功信任与必要检查
+
+当前公开接口已经把 CST/VBA 错误归一化为结构化返回。只要接口没有返回错误并给出成功状态，Agent 就应充分相信 CST 已成功执行对应 VBA，不为参数、材料、几何、布尔、边界、端口、监视器或求解器配置重复增加执行前查询和执行后读回。
+
+必要检查只保留在以下边界：
+
+- 初始信息不足以构造请求，或目标工程、会话身份不唯一时做一次确认；
+- 结果、截图或其他导出文件符合工具承诺，例如文件存在且非空；
+- 异步求解已经完成，并取得后续任务实际需要的 Run ID 或结果数据；
+- 接口返回错误、超时、Worker 退出、transport error 或 History ambiguous 后，在重试前判断实际副作用；
+- 删除、覆盖、关闭、重放或进程终止前确认目标和用户授权。
+
+最后一项属于权限与所有权控制，其余例外面向产物或尚未完成的异步流程；它们都不构成对无错误 VBA 成功状态的常规二次验证。VBA 执行成功也不等同于物理设计正确，后者由结果解释和用户验收决定。
+
+## 暴露面审查
+
+- CLI 使用 `list-tools` 和 `describe-tool` 查看实时信息；
+- MCP 客户端使用当前连接的工具目录确认 Agent 实际取得的名称和 Schema；
+- 需要可审查快照时，使用 `devkit/tools/generate_agent_tools_list.py` 生成 `tools-list.json`，并记录生成时间和来源版本；
+- 文档、快照与当前 MCP 结果冲突时，以 Registry 和重连后的当前接口为准，并更新过期文档。
 
