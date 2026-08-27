@@ -405,8 +405,68 @@ def pipeline_run_probe_phase(
     if not p.is_file():
         return error_response("project_not_found", f"project not found: {p}", step="probe-phase:validate")
 
-    # 1. Copy working.cst → working_probe.cst (baseline isolation)
     probe_project = p.parent / "working_probe.cst"
+    probe_companion = probe_project.with_suffix("")
+    source_companion = p.with_suffix("")
+
+    # 1a. 源工程锁拒绝：companion 目录存在 .lok 时说明工程正在被 CST 占用。
+    lock_files = (
+        list(source_companion.rglob("*.lok"))
+        if source_companion.is_dir()
+        else []
+    )
+    if lock_files:
+        return error_response(
+            "probe_source_locked",
+            "源工程存在 .lok 锁文件；请先在 CST 中关闭该工程再运行 probe",
+            step="probe-phase:validate",
+            lok_files=[item.name for item in lock_files[:5]],
+        )
+
+    # 1b. 参数快速失败：基于源工程的 Parameters.json 校验 DOE 参数名，
+    #     避免复制之后逐个 probe 失败才发现名字写错。
+    source_parameters, _derived_count = _read_parameters_from_file(str(p))
+    parameter_check = "verified"
+    if source_parameters:
+        absent = sorted(name for name in parameters if name not in source_parameters)
+        if absent:
+            return error_response(
+                "probe_parameters_missing",
+                f"DOE 参数不在工程参数表中: {', '.join(absent)}",
+                step="probe-phase:validate",
+                missing_parameters=absent,
+                known_parameters=sorted(source_parameters),
+            )
+    else:
+        parameter_check = "skipped_source_companion_missing"
+
+    # 1c. 清理上一轮固定名残留（旧主文件与旧解包目录同名配对会遮蔽新副本）；
+    #     删除范围严格限定在探针专属工件，不触碰源工程与历史 run。
+    cleaned_previous: list[str] = []
+    for stale_artifact in (probe_project, probe_companion):
+        if stale_artifact.is_dir() and not stale_artifact.suffix:
+            try:
+                shutil.rmtree(str(stale_artifact))
+                cleaned_previous.append(stale_artifact.name)
+            except OSError as exc:
+                return error_response(
+                    "probe_cleanup_failed",
+                    f"无法删除旧的探针 companion 目录 {stale_artifact}: {exc}",
+                    step="probe-phase:cleanup",
+                )
+        elif stale_artifact.is_file():
+            try:
+                stale_artifact.unlink()
+                cleaned_previous.append(stale_artifact.name)
+            except OSError as exc:
+                return error_response(
+                    "probe_cleanup_failed",
+                    f"无法删除旧的探针主文件 {stale_artifact}: {exc}",
+                    step="probe-phase:cleanup",
+                )
+
+    # 1d. Copy working.cst → working_probe.cst (main-file-only isolation;
+    #     CST 在首次打开裸 .cst 时自动创建 companion 工作目录).
     shutil.copy2(str(p), str(probe_project))
     probe_path = str(probe_project)
 
@@ -487,6 +547,9 @@ def pipeline_run_probe_phase(
     return {
         "status": "success" if len(simulated) >= len(probes) / 2 else "warning",
         "pipeline": "run-probe-phase",
+        "probe_copy_mode": "main_file_only",
+        "parameter_check": parameter_check,
+        "cleaned_previous_artifacts": cleaned_previous,
         "n_probes": len(probes),
         "n_simulated": len(simulated),
         "n_failed": len(failed),
