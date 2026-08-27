@@ -6,7 +6,11 @@ TOOL_DEFS = {
 "create-blank-project": {
     "category": "session_manager",
     "risk": "write",
-    "description": "Create a new blank CST project at the specified path.",
+    "description": (
+        "Use this when the user needs a new blank CST project at an explicit .cst path. "
+        "It creates the project and session boundary only; define units, geometry, materials, "
+        "boundaries, and solver settings with their dedicated tools."
+    ),
     "handler": "tool_create_blank_project",
     "json_schema": {
         "type": "object",
@@ -27,7 +31,11 @@ TOOL_DEFS = {
 "cst-session-close": {
     "category": "session_manager",
     "risk": "session",
-    "description": "Close the expected CST project, optionally wait for locks to clear, then inspect the environment.",
+    "description": (
+        "Use this to close the expected Runtime-managed CST project, optionally save it and "
+        "wait for its lock to clear. Do not close or kill an external Design Environment; "
+        "process cleanup remains limited by the Runtime ownership and allowlist rules."
+    ),
     "handler": "tool_cst_session_close",
     "json_schema": {
         "type": "object",
@@ -80,7 +88,11 @@ TOOL_DEFS = {
 "cst-session-inspect": {
     "category": "session_manager",
     "risk": "read",
-    "description": "Central session/process gate: inspect processes, locks, open projects, and reattach readiness.",
+    "description": (
+        "Use this when project ownership, process identity, a file lock, or reattach readiness "
+        "is unclear. It is a read-only diagnostic gate, not a routine pre-check or post-check "
+        "after every successful CST call."
+    ),
     "handler": "tool_cst_session_inspect",
     "json_schema": {
         "type": "object",
@@ -102,9 +114,11 @@ TOOL_DEFS = {
     "category": "session_manager",
     "risk": "session",
     "description": (
-        "通过中央会话管理器打开 CST 工程。默认只自动接管本次启动后唯一新增的 PID；"
-        "若需要接管已有或归属不明确的会话，首次调用会返回候选 PID，调用方必须先询问用户，"
-        "再同时提供 confirm_existing_session_takeover=true 与用户确认的 existing_session_pid。"
+        "Use this to open one explicit existing CST project through the central session manager. "
+        "It auto-attaches only to the unique PID created by this call; for an existing or "
+        "ambiguous session, first return candidate PIDs and ask the user, then pass both "
+        "confirm_existing_session_takeover=true and the confirmed existing_session_pid. "
+        "Confirmation permits attachment but does not transfer ownership of an external session."
     ),
     "handler": "tool_cst_session_open",
     "json_schema": {
@@ -119,13 +133,16 @@ TOOL_DEFS = {
             "confirm_existing_session_takeover": {
                 "type": "boolean",
                 "default": False,
-                "description": "仅在用户看到候选 PID 并明确同意接管后设为 true。"
+                "description": (
+                    "Set true only after the user has seen the candidate PIDs and explicitly "
+                    "approved attaching to one existing session."
+                )
             },
             "existing_session_pid": {
                 "type": ["integer", "null"],
                 "minimum": 1,
                 "default": None,
-                "description": "用户明确确认允许接管的 Design Environment PID。"
+                "description": "Design Environment PID that the user explicitly approved for attachment."
             }
         },
         "required": [
@@ -137,7 +154,11 @@ TOOL_DEFS = {
 "cst-session-quit": {
     "category": "session_manager",
     "risk": "process-control",
-    "description": "Quit CST through the central session manager using only the process allowlist and lock evidence.",
+    "description": (
+        "Use this from the human CLI only to quit a Runtime-owned CST Design Environment "
+        "identified by the process allowlist and project-lock evidence. Never use it to quit "
+        "an external session that was merely attached with user confirmation."
+    ),
     "handler": "tool_cst_session_quit",
     "json_schema": {
         "type": "object",
@@ -177,8 +198,9 @@ TOOL_DEFS = {
     "category": "session_manager",
     "risk": "session",
     "description": (
-        "重新附着已打开的 CST 工程。首次调用只返回候选 PID；"
-        "调用方询问用户后，必须同时传入确认标志和用户选择的 PID。"
+        "Use this only to reattach an already open CST project, not to create or launch one. "
+        "The first call returns candidate PIDs; after asking the user, pass both the confirmation "
+        "flag and selected PID. Confirmation permits attachment but does not transfer ownership."
     ),
     "handler": "tool_cst_session_reattach",
     "json_schema": {
@@ -193,13 +215,15 @@ TOOL_DEFS = {
             "confirm_existing_session_takeover": {
                 "type": "boolean",
                 "default": False,
-                "description": "仅在用户明确同意接管已有会话后设为 true。"
+                "description": (
+                    "Set true only after the user explicitly approves attaching to the existing session."
+                )
             },
             "existing_session_pid": {
                 "type": ["integer", "null"],
                 "minimum": 1,
                 "default": None,
-                "description": "用户明确确认允许接管的 Design Environment PID。"
+                "description": "Design Environment PID that the user explicitly approved for attachment."
             }
         },
         "required": [
@@ -211,7 +235,10 @@ TOOL_DEFS = {
 "save-project": {
     "category": "session_manager",
     "risk": "filesystem-write",
-    "description": "Save the verified CST working project.",
+    "description": (
+        "Use this to persist changes in the explicitly identified CST working project when "
+        "a saved artifact is required. A successful save should not be repeated merely as a check."
+    ),
     "handler": "tool_save_project",
     "json_schema": {
         "type": "object",
