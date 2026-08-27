@@ -120,3 +120,104 @@ def test_long_running_tools_use_simulation_timeout() -> None:
         request_timeout=120,
         simulation_timeout=3600,
     ) == 120
+
+
+def test_session_risk_uses_dedicated_budget() -> None:
+    from mcp_server.server import _timeout_for_risk
+
+    common = dict(request_timeout=120, simulation_timeout=1200)
+    assert _timeout_for_risk("session", session_timeout=300, **common) == 300
+    assert (
+        _timeout_for_risk("process-control", session_timeout=300, **common)
+        == 300
+    )
+    # 未提供 session_timeout 时向后兼容旧调用形态，回退普通请求预算
+    assert _timeout_for_risk("session", **common) == 120
+
+
+class TestGovernanceRejection:
+
+    GOVERNED = {"run-experiment", "wait-simulation"}
+
+    def test_within_budget_passes(self) -> None:
+        from mcp_server.server import _governance_rejection
+
+        for requested in (None, 0, 300, 1139, 1140):
+            args = {} if requested is None else {"timeout_seconds": requested}
+            assert (
+                _governance_rejection(
+                    self.GOVERNED, "run-experiment", args, effective_timeout=1200
+                )
+                is None
+            )
+
+    def test_over_budget_rejected(self) -> None:
+        from mcp_server.server import _governance_rejection
+
+        result = _governance_rejection(
+            self.GOVERNED,
+            "wait-simulation",
+            {"timeout_seconds": 1141},
+            effective_timeout=1200,
+        )
+        assert result is not None
+        assert result["status"] == "error"
+        assert result["error_type"] == "invalid_arguments"
+        assert result["context"]["requested_seconds"] == 1141
+        assert result["context"]["allowed_wait_budget_seconds"] == 1140
+        assert "runtime.simulation_timeout" in result["message"]
+
+    def test_non_governed_tool_ignored(self) -> None:
+        from mcp_server.server import _governance_rejection
+
+        assert (
+            _governance_rejection(
+                set(),
+                "run-experiment",
+                {"timeout_seconds": 99999},
+                effective_timeout=1200,
+            )
+            is None
+        )
+
+
+def test_governed_tools_derived_from_descriptions() -> None:
+    from mcp_server.server import _governed_long_running_tools
+
+    descriptions = [
+        {
+            "name": "run-experiment",
+            "risk": "long-running",
+            "input_schema": {
+                "type": "object",
+                "properties": {"timeout_seconds": {"type": "integer"}},
+            },
+        },
+        {
+            "name": "quick-sweep",
+            "risk": "long-running",
+            "input_schema": {
+                "type": "object",
+                "properties": {"target_freq_ghz": {"type": "number"}},
+            },
+        },
+        {
+            "name": "define-brick",
+            "risk": "write",
+            "input_schema": {
+                "type": "object",
+                "properties": {"timeout_seconds": {"type": "integer"}},
+            },
+        },
+    ]
+    assert _governed_long_running_tools(descriptions) == {"run-experiment"}
+
+
+def test_config_defaults_match_frozen_plan() -> None:
+    from mcp_server.config import MCPConfig
+
+    config = MCPConfig()
+    assert config.request_timeout == 120
+    assert config.session_timeout == 300
+    assert config.long_run_threshold_seconds == 600
+    assert config.simulation_timeout == 1200
