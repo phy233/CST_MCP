@@ -10,6 +10,12 @@ TOOL_DEFS = {
         "运行求解并等待完成；必须以指定 0D/1D 结果节点共同出现的新 Run ID 和非空数据验收。"
         "求解前结果节点尚不存在视为空基线（首次仿真的正常初始状态，支持由本次仿真生成节点）；"
         "不执行任何结果导出，返回通用 result_metrics；S1,1 仅保留兼容 s11_metric。"
+        "省缺 timeout_seconds 为自动让出模式：solver 实际运行达到 "
+        "runtime.long_run_threshold_seconds（默认 600s）时返回 "
+        "long_run_relinquish 终态信号（terminal=true，CST 继续运行），"
+        "完成后用 list-run-ids/export-sparameter 只读取证或以 "
+        "wait-simulation 接力；显式传值则维持传统阻塞上限语义"
+        "（pipeline_sim_timeout，MCP 下超过传输预算会被治理拒绝）。"
     ),
     "handler": "tool_run_experiment",
     "json_schema": {
@@ -36,7 +42,7 @@ TOOL_DEFS = {
             "timeout_seconds": {
                 "type": "integer",
                 "examples": [
-                    3600
+                    600
                 ]
             }
         },

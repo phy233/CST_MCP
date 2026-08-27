@@ -769,7 +769,9 @@ TOOL_DEFS = {
     "description": (
         "同步运行 CST 求解器并阻塞到结束；仅当 CST 的 run_solver 返回 True 才报告 "
         "success。失败时返回 solver_run_failed，并附本次求解写入 Result 日志的 "
-        "CST 原始报错文本。"
+        "CST 原始报错文本。注意：本工具无内部让出点，MCP 下若求解超过传输"
+        "兜底预算将被 detach 终止（worker 回收、CST 保留）；长任务请优先使用 "
+        "start-simulation-async + wait-simulation 的 relay 组合。"
     ),
     "handler": "tool_start_simulation",
     "json_schema": {
@@ -889,7 +891,14 @@ TOOL_DEFS = {
 "wait-simulation": {
     "category": "project_ops",
     "risk": "long-running",
-    "description": "轮询直到求解器不再运行或超时；running=false 只表示停止，不能证明求解成功。",
+    "description": (
+        "轮询直到求解器不再运行或超时；running=false 只表示停止，不能证明求解成功。"
+        "省缺 timeout_seconds 为自动让出模式：观察等待达到 runtime.long_run_threshold_seconds"
+        "（默认 600s）时返回 long_run_relinquish 终态信号（terminal=true，"
+        "CST 继续运行），此后用 relay 接力——再次调用本工具或改用 "
+        "list-run-ids/export-sparameter 只读取证；显式传值则维持传统"
+        "阻塞上限语义（simulation_wait_timeout）。"
+    ),
     "handler": "tool_wait_simulation",
     "json_schema": {
         "type": "object",
@@ -902,9 +911,9 @@ TOOL_DEFS = {
             },
             "timeout_seconds": {
                 "type": "number",
-                "default": 3600,
+                "default": 600,
                 "examples": [
-                    3600
+                    600
                 ]
             },
             "poll_interval_seconds": {
