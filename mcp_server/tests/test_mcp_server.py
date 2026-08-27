@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import ast
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -32,6 +34,15 @@ def test_proxy_reads_runtime_owned_manifest() -> None:
         assert "add-to-history" not in names
         assert "activate-post-process" not in names
         assert all(tool["input_schema"]["type"] == "object" for tool in tools)
+        agent_tools = [tool for tool in tools if tool["exposure"] == "agent"]
+        assert len(agent_tools) == 136
+        han_pattern = re.compile(r"[\u3400-\u9fff]")
+        assert all(tool["description"].startswith("Use this") for tool in agent_tools)
+        assert not any(han_pattern.search(tool["description"]) for tool in agent_tools)
+        assert not any(
+            han_pattern.search(json.dumps(tool["input_schema"], ensure_ascii=False))
+            for tool in agent_tools
+        )
     finally:
         proxy.shutdown()
 

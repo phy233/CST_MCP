@@ -108,7 +108,7 @@ TOOL_DEFS = {
             "page_title": {
                 "type": "string",
                 "examples": [
-                    "电磁仿真报告"
+                    "Electromagnetic Simulation Report"
                 ]
             },
             "modules": {

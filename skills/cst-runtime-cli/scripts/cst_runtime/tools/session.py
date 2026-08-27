@@ -115,10 +115,9 @@ TOOL_DEFS = {
     "risk": "session",
     "description": (
         "Use this to open one explicit existing CST project through the central session manager. "
-        "It auto-attaches only to the unique PID created by this call; for an existing or "
-        "ambiguous session, first return candidate PIDs and ask the user, then pass both "
-        "confirm_existing_session_takeover=true and the confirmed existing_session_pid. "
-        "Confirmation permits attachment but does not transfer ownership of an external session."
+        "It auto-attaches only to the unique PID created by this call. For an existing or "
+        "ambiguous session, first return candidates and ask the user, then pass the confirmation "
+        "flag and selected PID; confirmation permits attachment, not Runtime ownership."
     ),
     "handler": "tool_cst_session_open",
     "json_schema": {

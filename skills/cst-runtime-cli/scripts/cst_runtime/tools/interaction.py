@@ -92,7 +92,7 @@ TOOL_DEFS = {
             "properties": {
                 "content": {
                     "type": "string",
-                    "examples": ["决定将天线工作频率从 5.8GHz 调整为 5.2GHz。"],
+                    "examples": ["Change the antenna operating frequency from 5.8 GHz to 5.2 GHz."],
                 },
                 "category": {
                     "type": "string",
