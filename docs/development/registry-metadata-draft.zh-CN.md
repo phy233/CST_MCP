@@ -15,16 +15,19 @@
 
 以下路径均相对于 `D:\Program Files (x86)\CST Studio Suite 2022\Online Help`：
 
-| 核对范围 | Online Help 相对路径 |
-| --- | --- |
-| Solid 布尔操作 | `mergedProjects/VBA_3D/common_vbasolido/common_vbasolido_solid_object.htm` |
-| Brick、ExtrudeCurve、Loft | `mergedProjects/VBA_3D/common_vbabasicSolids/common_vbabrick_object.htm`、`mergedProjects/VBA_3D/common_vbacurves/common_vbacurves_extrudecurve_object.htm`、`mergedProjects/VBA_3D/common_vbaloft/common_vbaloftloft_object.htm` |
-| Transform | `mergedProjects/VBA_3D/special_vbatransformo/special_vbatransformo_transform_object.htm` |
+| 核对范围                       | Online Help 相对路径                                                                                                                                                                                                                                      |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Solid 布尔操作                 | `mergedProjects/VBA_3D/common_vbasolido/common_vbasolido_solid_object.htm`                                                                                                                                                                              |
+| Brick、ExtrudeCurve、Loft      | `mergedProjects/VBA_3D/common_vbabasicSolids/common_vbabrick_object.htm`、`mergedProjects/VBA_3D/common_vbacurves/common_vbacurves_extrudecurve_object.htm`、`mergedProjects/VBA_3D/common_vbaloft/common_vbaloftloft_object.htm`                   |
+| Transform                      | `mergedProjects/VBA_3D/special_vbatransformo/special_vbatransformo_transform_object.htm`                                                                                                                                                                |
 | Boundary、Background、FDSolver | `mergedProjects/VBA_3D/special_vbasolver/special_vbasolver_boundary_object.htm`、`mergedProjects/VBA_3D/special_vbasolver/special_vbasolver_background_object.htm`、`mergedProjects/VBA_3D/special_vbasolver/special_vbasolver_fdsolver_object.htm` |
-| FloquetPort、PlaneWave | `mergedProjects/VBA_3D/special_vbaports/floquetport_object.htm`、`mergedProjects/VBA_3D/special_vbaports/special_vbaports_planewave_object.htm` |
-| Monitor | `mergedProjects/VBA_3D/special_vbamonitors/special_vbamonitors_monitor_object.htm` |
-| ASCII 与 Touchstone 导出 | `mergedProjects/VBA_3D/common_vbaimpexp/asciiexport_object.htm`、`mergedProjects/VBA_3D/special_vbaimpexp/special_vbaimp_exp_touchstone.htm` |
-| ResultTree 与 Python API | `mergedProjects/VBA_3D/special_vbapostproc/special_vbapostproc_resulttreeo.htm`、`Python/source/cst.results.html`、`Python/source/cst.interface.html` |
+| FloquetPort、PlaneWave         | `mergedProjects/VBA_3D/special_vbaports/floquetport_object.htm`、`mergedProjects/VBA_3D/special_vbaports/special_vbaports_planewave_object.htm`                                                                                                       |
+| Monitor                        | `mergedProjects/VBA_3D/special_vbamonitors/special_vbamonitors_monitor_object.htm`                                                                                                                                                                      |
+| 曲线与曲线拉伸                 | `mergedProjects/VBA_3D/common_vbacurves/common_vbacurves_analyticalcurve_object.htm`、`mergedProjects/VBA_3D/common_vbacurves/common_vbacurves_polygon3d.htm`、`mergedProjects/VBA_3D/common_vbacurves/common_vbacurves_rectangle_object.htm`、`mergedProjects/VBA_3D/common_vbacurves/common_vbacurves_extrudecurve_object.htm` |
+| FarfieldPlot 自动切面          | `mergedProjects/VBA_3D/special_vbapostproc/special_vbapostproc_farfieldploto.htm`                                                                                                                                                                       |
+| 求解器类型与时域/频域配置      | `mergedProjects/VBA_3D/common_vbaapp/common_vbaappapplication_object.htm`、`mergedProjects/VBA_3D/special_vbasolver/special_vbasolver_solver_object.htm`、`mergedProjects/VBA_3D/special_vbasolver/special_vbasolver_fdsolver_object.htm`                   |
+| ASCII 与 Touchstone 导出       | `mergedProjects/VBA_3D/common_vbaimpexp/asciiexport_object.htm`、`mergedProjects/VBA_3D/special_vbaimpexp/special_vbaimp_exp_touchstone.htm`                                                                                                          |
+| ResultTree 与 Python API       | `mergedProjects/VBA_3D/special_vbapostproc/special_vbapostproc_resulttreeo.htm`、`Python/source/cst.results.html`、`Python/source/cst.interface.html`                                                                                               |
 
 ## 审核方式
 
@@ -41,25 +44,28 @@
 4. 写入类工具成功后通常不要重复调用；只读工具也不应仅为确认成功而重复调用。
 5. 结果工具优先使用实际 ResultTree 完整路径；导出产物需要确认文件存在且非空。
 6. R/T/A 通道求和与相位参考规则本轮只补文档，不修改实现。
+7. AnalyticalCurve、Polygon3D 和 Rectangle 创建的是 `Curves` 下的曲线项，不属于组件实体，也不指定材料。当前 MCP 会在曲线容器不存在时创建容器，因此不要把 `create-component` 或 `list-materials` 写成曲线建模前置。若目标是实体，应先形成闭合、共面的曲线轮廓，再交给 `define-extrude-curve`；只有生成实体后才进入布尔操作。
+8. 场监视器和内部场探针通常没有实体、组件或材料前置，应在求解前按结果需求定义，后续进入启动求解和结果读取流程。远场切面属于求解后自动处理设置：调用时不要求已有结果，但求解前必须存在远场监视器。
+9. 本稿把“显式选择求解器类型、使用与当前类型匹配的求解器配置、完成边界相关设置”作为 `start-simulation`、`start-simulation-async` 和 `run-experiment` 的必要前置。不得在当前为时域求解器时调用 FDSolver 专用设置，也不得在当前为频域求解器时调用本实现中基于 Solver Object 的时域专用设置；只读检查工具不作为固定前置检查。
 
 ## 分类概览
 
-| Registry 分类 | 中文含义 | Agent 工具数 |
-| --- | --- | ---: |
-| `audit` | 审计记录 | 3 |
-| `farfield` | 远场结果 | 4 |
-| `history` | CST History | 3 |
-| `interaction` | Agent 交互记录 | 4 |
-| `modeling` | 几何与建模 | 36 |
-| `optimization` | 扫参与优化 | 11 |
-| `project_identity` | 工程身份与锁定状态 | 4 |
-| `project_ops` | 工程配置与求解控制 | 35 |
-| `results` | 结果发现、读取与导出 | 22 |
-| `run` | 任务与运行目录 | 2 |
-| `session_manager` | CST 会话管理 | 6 |
-| `simulation` | 仿真工作流 | 1 |
-| `workflow` | 复合工作流 | 2 |
-| `workspace` | Runtime 工作区 | 3 |
+| Registry 分类        | 中文含义             | Agent 工具数 |
+| -------------------- | -------------------- | -----------: |
+| `audit`            | 审计记录             |            3 |
+| `farfield`         | 远场结果             |            4 |
+| `history`          | CST History          |            3 |
+| `interaction`      | Agent 交互记录       |            4 |
+| `modeling`         | 几何与建模           |           36 |
+| `optimization`     | 扫参与优化           |           11 |
+| `project_identity` | 工程身份与锁定状态   |            4 |
+| `project_ops`      | 工程配置与求解控制   |           35 |
+| `results`          | 结果发现、读取与导出 |           22 |
+| `run`              | 任务与运行目录       |            2 |
+| `session_manager`  | CST 会话管理         |            6 |
+| `simulation`       | 仿真工作流           |            1 |
+| `workflow`         | 复合工作流           |            2 |
+| `workspace`        | Runtime 工作区       |            3 |
 
 ## 审计记录（`audit`，3 个）
 
@@ -257,7 +263,7 @@
 - 不要用于：当复杂几何体需要挖孔等需要构建内部形状时，应采用布尔操作减法
 - 前置与副作用：两个待合并物体均存在；导航树中两物体被合并，后一个传入的物体在导航树中会消失。
 - 成功与重试：成功后不要重复执行。
-- 关联流程：list-entities 或 define-* 几何体 → 本工具 → save-project。
+- 关联流程：已有两个实体（名称不明确时才使用 list-entities，或先用实体创建/曲线拉伸工具生成）→ 本工具 → save-project；曲线项不能直接进入本流程。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`shape1`、`shape2`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Unite two solids (boolean union).
@@ -269,7 +275,7 @@
 - 不要用于：不要与 boolean-add 混用；Insert 后两个实体的保留语义应按 CST 官方 Solid Object 与用户目标确认。
 - 前置与副作用：必须提供 `project_path`、`shape1`、`shape2`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 define-* 几何体 → 本工具 → save-project。
+- 关联流程：已有两个实体（名称不明确时才使用 list-entities，或先用实体创建/曲线拉伸工具生成）→ 本工具 → save-project；曲线项不能直接进入本流程。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`shape1`、`shape2`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Insert one solid into another (boolean insert).
@@ -282,7 +288,7 @@
 - 不要用于：只保留两实体交集，不用于合并总体积或用工具体挖孔。
 - 前置与副作用：必须提供 `project_path`、`shape1`、`shape2`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 define-* 几何体 → 本工具 → save-project。
+- 关联流程：已有两个实体（名称不明确时才使用 list-entities，或先用实体创建/曲线拉伸工具生成）→ 本工具 → save-project；曲线项不能直接进入本流程。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`shape1`、`shape2`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Intersect two solids (boolean intersection).
@@ -291,10 +297,10 @@
 
 - 建议定位：在指定 CST 工程中完成“布尔操作-相减”，作为用户建模流程中的一个明确步骤。
 - 何时使用：已构造目标体和真实重叠的工具体，需要从目标体中挖孔或切除材料时。
-- 不要用于：目标体与工具体必须在坐标上真实重叠；接口成功不单独证明材料已被移除。
-- 前置与副作用：必须提供 `project_path`、`target`、`tool`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 不要用于：目标体与工具体必须在坐标上真实重叠，若两模型交集为空，执行布尔相减指令会导致减去的模型消失，被减模型不变且CST返回执行成功（不是bug，是CST自己的执行逻辑）；接口成功不单独证明材料已被移除。
+- 前置与副作用：必须提供 `project_path`、`target`、`tool`，并保证引用的工程、对象或文件真实存在；确保两模型交集非空；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 define-* 几何体 → 本工具 → save-project。
+- 关联流程：已有两个真实重叠的实体（名称不明确时才使用 list-entities，或先用实体创建/曲线拉伸工具生成）→ 本工具 → save-project；曲线项不能直接进入本流程。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`target`、`tool`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `target`、`tool` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Subtract one solid from another (boolean difference). CST may accept a subtraction between non-intersecting solids without changing the target, so confirm geometric overlap from the modeled coordinates before calling.
@@ -318,7 +324,7 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`component_name`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：无前置依赖 → 本工具 → 使用该组件名的实体创建工具 → save-project。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`component_name`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Create a new component in the CST project.
@@ -354,26 +360,26 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`group_name`、`items`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：已有待分组实体（名称不明确时才使用 list-entities）→ 本工具 → 与当前求解器匹配的网格配置 → start-simulation 或 run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`group_name`、`items`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Create a mesh group and add items.
 
 ### `define-analytical-curve` — 创建解析曲线
 
-- 建议定位：在指定 CST 工程中完成“创建解析曲线”，作为用户建模流程中的一个明确步骤。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
-- 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`name`、`curve`、`law_x`、`law_y`、`law_z`、`param_start`、`param_end`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：在 `Curves` 导航树下创建由参数方程定义的曲线项；它不是组件实体，不指定材料。
+- 何时使用：用户已明确参数范围以及 X/Y/Z（活动 WCS 下为 U/V/W）坐标函数，需要构造开放路径或闭合轮廓时。
+- 不要用于：开放或非共面的曲线不能直接作为拉伸实体的轮廓；曲线本身不能参与 Solid 布尔操作。
+- 前置与副作用：必须提供 `project_path`、`name`、`curve`、`law_x`、`law_y`、`law_z`、`param_start`、`param_end`；当前实现会在 `Curves\curve` 容器不存在时自动创建，不需要组件或材料。该操作写入曲线项和 History，不创建实体。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：无组件或材料前置 → 本工具 → transform-curve（需要时）；若目标是实体，先形成闭合共面轮廓 → define-extrude-curve → 生成实体后才可使用 boolean-*。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`curve`、`law_x`、`law_y`、`law_z`、`param_start`、`param_end`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `law_x`、`law_y`、`law_z` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Create a parametric curve in active X/Y/Z or local U/V/W coordinates; each law must be differentiable over the parameter range.
 
 ### `define-brick` — 创建砖块
 
-- 建议定位：在指定 CST 工程中完成“创建砖块”，作为用户建模流程中的一个明确步骤。
+- 建议定位：在指定 CST 工程中完成“创建砖块（长方体）”，作为用户建模流程中的一个明确步骤。
 - 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`name`、`component`、`material`、`x_min`、`x_max`、`y_min`、`y_max`、`z_min`、`z_max`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
@@ -388,7 +394,7 @@
 - 建议定位：在指定 CST 工程中完成“创建圆锥或圆台”，作为用户建模流程中的一个明确步骤。
 - 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`name`、`component`、`material`、`bottom_radius`、`top_radius`、`axis`、`axis_min`、`axis_max`、`x_center`、`y_center`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`name`、`component`、`material`、`bottom_radius`、`top_radius`（0为圆锥，非0为圆柱）、`axis`、`axis_min`、`axis_max`、`x_center`、`y_center`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
 - 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`component`、`material`、`bottom_radius`、`top_radius`、`axis`、`axis_min`、`axis_max`、`x_center`、`y_center`；可选：无；关键返回：当前仅统一状态或错误外壳。
@@ -400,7 +406,7 @@
 - 建议定位：在指定 CST 工程中完成“创建圆柱或圆筒”，作为用户建模流程中的一个明确步骤。
 - 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`name`、`component`、`material`、`outer_radius`、`inner_radius`、`axis`、`axis_min`、`axis_max`、`x_center`、`y_center`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`name`、`component`、`material`、`outer_radius`、`inner_radius`（0为实心圆柱，非0为圆筒）、`axis`、`axis_min`、`axis_max`、`x_center`、`y_center`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
 - 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`component`、`material`、`outer_radius`、`inner_radius`、`axis`、`axis_min`、`axis_max`、`x_center`、`y_center`；可选：无；关键返回：当前仅统一状态或错误外壳。
@@ -409,12 +415,12 @@
 
 ### `define-extrude-curve` — 拉伸闭合曲线
 
-- 建议定位：在指定 CST 工程中完成“拉伸闭合曲线”，作为用户建模流程中的一个明确步骤。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
-- 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`name`、`component`、`material`、`curve`、`thickness`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：把闭合、共面的曲线轮廓填充并按指定厚度拉伸为实体。拉伸方向取决于曲线法向；由有序点构成的轮廓应先按点序叉乘确定法向和厚度符号。
+- 何时使用：已经存在可由 CST ExtrudeCurve 接受的闭合共面曲线项，并已确定输出实体的组件、材料和厚度时。
+- 不要用于：开放或非共面曲线；也不要把本工具当作普通曲线变换。CST 2022 手册说明拉伸后原曲线项不再存在。
+- 前置与副作用：必须提供 `project_path`、`name`、`component`、`material`、`curve`、`thickness`；`curve` 应使用 `容器:曲线项` 完整名称，组件与材料必须已经存在。该操作生成实体并消耗原曲线项，会写入 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：define-rectangle 或闭合共面的 define-polygon-3d / define-analytical-curve → 本工具 → transform-shape / boolean-*（需要时）→ save-project。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`component`、`material`、`curve`、`thickness`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `curve`、`thickness` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Extrude a closed planar curve. Positive thickness follows its ordered normal (CST 2022 real-machine verified); negative reverses it. Compute the normal and sign first.
@@ -423,11 +429,11 @@
 ### `define-farfield-monitor` — 创建远场监视器
 
 - 建议定位：按 CST 2022 Monitor Object 为每个频率创建独立单频远场监视器，并读回名称、类型、域和频率验证；子体积完全可选，不含模型专用默认坐标。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
-- 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`name`、`frequencies`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 何时使用：需要在指定频率获得远场结果时，应在启动求解前定义。
+- 不要用于：不创建近场 E/H 体监视器，也不依赖几何实体、组件或材料列表；非真空、PEC、色散或有损背景与远场监视器的兼容性需在求解前处理。
+- 前置与副作用：必须提供 `project_path`、`name`、`frequencies`；没有实体、组件或材料前置。若需要远场结果，应使用兼容的 Normal/Vacuum 背景。该操作创建监视器并写入 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：define-background（仅需修正不兼容背景时）→ 本工具 → set-farfield-plot-cuts（需要自动切面时）→ 完成边界和匹配的求解器配置 → start-simulation / run-experiment → inspect-farfield-monitors 或远场导出工具。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`frequencies`；可选：`enable_nearfield`、`subvolume`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：按 CST 2022 Monitor Object 为每个频率创建独立单频远场监视器，并读回名称、类型、域和频率验证；子体积完全可选，不含模型专用默认坐标。
@@ -439,7 +445,7 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`name`、`component`、`material`、`tangency`、`minimize_twist`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：对两个目标表面依次使用 pick-face → 本工具 → transform-shape / boolean-*（需要时）→ save-project。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`component`、`material`、`tangency`、`minimize_twist`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Connect two pre-picked surfaces; CST 2022 defines no separate plane-normal argument.
@@ -452,31 +458,31 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`material_name`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：无前置 → 本工具 → 使用该材料的实体创建工具或 change-material → save-project；材料导入本身不进入布尔操作。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`material_name`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Define a CST material from .mtd file by material name. Material must exist in references/Materials/. Use list-materials to see available names.
 
 ### `define-polygon-3d` — 创建三维多边形曲线
 
-- 建议定位：在指定 CST 工程中完成“创建三维多边形曲线”，作为用户建模流程中的一个明确步骤。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
-- 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`name`、`curve`、`points`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：在 `Curves` 导航树下按点序创建三维多边形曲线项；它不是组件实体，不指定材料。
+- 何时使用：用户已明确活动坐标系中的有序点，需要构造三维路径或闭合轮廓时。
+- 不要用于：非闭合或非共面的点列不能直接拉伸成实体；曲线本身不能参与 Solid 布尔操作。
+- 前置与副作用：必须提供 `project_path`、`name`、`curve`、`points`；当前实现会在 `Curves\curve` 容器不存在时自动创建，不需要组件或材料。该操作创建曲线项并写入 History，不创建实体。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：无组件或材料前置 → 本工具 → transform-curve（需要时）；若目标是实体，确认点列闭合且共面 → define-extrude-curve → 生成实体后才可使用 boolean-*。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`curve`、`points`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `points` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Create ordered points in active X/Y/Z or local U/V/W coordinates. For extrusion, close the loop, verify coplanarity, and compute its ordered normal.
 
 ### `define-rectangle` — 创建矩形曲线
 
-- 建议定位：在指定 CST 工程中完成“创建矩形曲线”，作为用户建模流程中的一个明确步骤。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
-- 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`name`、`curve`、`x_min`、`x_max`、`y_min`、`y_max`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：在 `Curves` 导航树下、活动 XY 或局部 UV 平面中创建闭合矩形曲线项；它不是组件实体，不指定材料。
+- 何时使用：需要闭合平面矩形轮廓，后续用于曲线变换或拉伸成实体时。
+- 不要用于：不直接创建带材料的实体，也不能在拉伸前参与 Solid 布尔操作。
+- 前置与副作用：必须提供 `project_path`、`name`、`curve`、`x_min`、`x_max`、`y_min`、`y_max`；当前实现会在 `Curves\curve` 容器不存在时自动创建，不需要组件或材料。该操作创建曲线项并写入 History，不创建实体。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：无组件或材料前置 → 本工具 → transform-curve（需要时）→ define-extrude-curve（需要实体时）→ 生成实体后才可使用 boolean-*。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`curve`、`x_min`、`x_max`、`y_min`、`y_max`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `x_min`、`x_max`、`y_min`、`y_max` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Create a rectangle in the active XY or local UV plane; calculate bounds in that coordinate system first.
@@ -488,7 +494,7 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`length`、`frequency`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
+- 关联流程：create-blank-project → 本工具 → 参数、几何、边界与求解器配置；应在写入依赖工程单位的尺寸和频率前完成。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`length`、`frequency`；可选：`temperature`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `temperature` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Set the CST project unit system.
@@ -560,7 +566,7 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`component`、`name`、`face_id`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：根据用户任务在同类工具前后使用；不自动扩展工作流。
+- 关联流程：已有目标零厚度实体和明确 face_id → 按顺序拾取两个表面 → define-loft。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`component`、`name`、`face_id`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Select a face by ID for loft operations (zero-thickness entities only).
@@ -572,7 +578,7 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`old_name`、`new_name`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：已有明确实体名（名称不明确时才使用 list-entities）→ 本工具 → save-project。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`old_name`、`new_name`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Rename a geometry entity.
@@ -584,7 +590,7 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：无读取工具前置 → 本工具 → 完成其他边界与匹配的求解器配置 → start-simulation 或 run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`；可选：`x_min_space`、`x_max_space`、`y_min_space`、`y_max_space`、`z_min_space`、`z_max_space`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `x_min_space`、`x_max_space`、`y_min_space`、`y_max_space`、`z_min_space`、`z_max_space` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Add distances to the global X/Y/Z bounds of the calculation volume.
@@ -592,11 +598,11 @@
 ### `set-efield-monitor` — 设置电场监视器
 
 - 建议定位：设置 E-field 监视器；CST 2022 只支持单频，start_freq 必须等于 end_freq。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
+- 何时使用：需要指定单频电场结果时，应在启动求解前定义。
 - 不要用于：只设置 E-field 监视器；E/H 通用入口使用 set-field-monitor，远场使用 define-farfield-monitor。
-- 前置与副作用：必须提供 `project_path`、`start_freq`、`end_freq`、`step`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`start_freq`、`end_freq`、`step`；没有实体、组件或材料前置。该操作创建电场监视器并写入 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：无建模前置 → 本工具 → 完成边界和匹配的求解器配置 → start-simulation / run-experiment → list-field-results → export-e-field。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`start_freq`、`end_freq`、`step`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `start_freq`、`end_freq` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：设置 E-field 监视器；CST 2022 只支持单频，start_freq 必须等于 end_freq。
@@ -608,19 +614,19 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`shape_name`、`r`、`g`、`b`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：已有明确实体名（名称不明确时才使用 list-entities）→ 本工具 → save-project。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`shape_name`、`r`、`g`、`b`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Set the display color of a geometry entity.
 
 ### `set-farfield-plot-cuts` — 设置远场绘图切面
 
-- 建议定位：在指定 CST 工程中完成“设置远场绘图切面”，作为用户建模流程中的一个明确步骤。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
-- 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：按 CST 2022 FarfieldPlot.AddCut 定义自动一维远场切面；求解后 CST 会对全部远场监视器评估这些切面，并把结果放在 `Farfields\Farfield Cuts`。
+- 何时使用：需要在下一次求解后自动生成固定 theta 或 phi 的远场切面时，应在启动求解前设置。
+- 不要用于：不依赖 list-entities 或 list-materials，也不是对既有导出文件作图；没有远场监视器时不会生成远场切面结果。
+- 前置与副作用：必须提供 `project_path`。调用时不要求已有求解结果，但求解前至少应定义一个远场监视器；该操作清除已有自动切面定义并写入新的 FarfieldPlot 切面设置。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：define-farfield-monitor → 本工具 → 完成边界和匹配的求解器配置 → start-simulation / run-experiment → inspect-farfield-monitors 或远场导出工具。
 - 接口摘要：当前风险 `write`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Set farfield plot cut angles.
@@ -628,11 +634,11 @@
 ### `set-field-monitor` — 设置电场或磁场监视器
 
 - 建议定位：设置 E/H 场监视器；CST 2022 只支持单频。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
+- 何时使用：需要指定单频 E/H 场结果时，应在启动求解前定义。
 - 不要用于：只设置单频 E/H 场监视器，不创建远场监视器或内部点探针。
-- 前置与副作用：必须提供 `project_path`、`field_type`、`start_frequency`、`end_frequency`、`num_samples`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`field_type`、`start_frequency`、`end_frequency`、`num_samples`；没有实体、组件或材料前置。该操作创建 E-field 或 H-field 监视器并写入 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：无建模前置 → 本工具 → 完成边界和匹配的求解器配置 → start-simulation / run-experiment → list-field-results → 对应场导出工具。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`field_type`、`start_frequency`、`end_frequency`、`num_samples`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `start_frequency`、`end_frequency`、`num_samples` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：设置 E/H 场监视器；CST 2022 只支持单频。
@@ -642,9 +648,9 @@
 - 建议定位：在指定 CST 工程中完成“设置内部场探针”，作为用户建模流程中的一个明确步骤。
 - 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
 - 不要用于：用于全局坐标中的内部点探针，不替代体/面场监视器。
-- 前置与副作用：必须提供 `project_path`、`field_type`、`x_pos`、`y_pos`、`z_pos`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`field_type`、`x_pos`、`y_pos`、`z_pos`；没有实体、组件或材料前置，但应由用户确认全局坐标位置。该操作创建内部场探针并写入 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：无建模前置 → 本工具 → 完成边界和匹配的求解器配置 → start-simulation / run-experiment → analyze-probes 或 run-probe-phase。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`field_type`、`x_pos`、`y_pos`、`z_pos`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `x_pos`、`y_pos`、`z_pos` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Set an internal E/H-field probe at a global X/Y/Z position.
@@ -666,9 +672,9 @@
 - 建议定位：在指定 CST 工程中完成“镜像变换曲线”，作为用户建模流程中的一个明确步骤。
 - 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`curve_name`、`center_x`、`center_y`、`center_z`、`plane_normal_x`、`plane_normal_y`、`plane_normal_z`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`curve_name`、`center_x`、`center_y`、`center_z`、`plane_normal_x`、`plane_normal_y`、`plane_normal_z`，且目标曲线已存在；不需要组件或材料。该操作变换曲线并写入 History，结果仍是曲线而非实体。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：define-analytical-curve / define-polygon-3d / define-rectangle → 本工具 → define-extrude-curve（闭合共面且需要实体时）或 save-project。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`curve_name`、`center_x`、`center_y`、`center_z`、`plane_normal_x`、`plane_normal_y`、`plane_normal_z`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `center_x`、`center_y`、`center_z`、`plane_normal_x`、`plane_normal_y`、`plane_normal_z` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Mirror a curve using Center and PlaneNormal in active X/Y/Z or local U/V/W coordinates; compute both first.
@@ -680,7 +686,7 @@
 - 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
 - 前置与副作用：必须提供 `project_path`、`shape_name`、`transform_type`、`center_x`、`center_y`、`center_z`、`plane_normal_x`、`plane_normal_y`、`plane_normal_z`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：list-entities 或 list-materials（需要时）→ 本工具 → save-project。
+- 关联流程：已有明确实体名（名称不明确时才使用 list-entities）→ 本工具 → boolean-*（需要时）→ save-project；曲线变换应使用 transform-curve。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`shape_name`、`transform_type`、`center_x`、`center_y`、`center_z`、`plane_normal_x`、`plane_normal_y`、`plane_normal_z`；可选：`angle_x`、`angle_y`、`angle_z`、`multiple_objects`、`group_objects`、`repetitions`、`destination`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `transform_type`、`center_x`、`center_y`、`center_z`、`plane_normal_x`、`plane_normal_y`、`plane_normal_z`、`angle_x`、`angle_y`、`angle_z`、`multiple_objects`、`group_objects`、`repetitions`、`destination` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Mirror uses PlaneNormal; rotate uses Angle. Center and components use active X/Y/Z or local U/V/W coordinates. Required plane_normal fields do not define a rotate axis.
@@ -877,6 +883,8 @@
 ## 工程配置与求解控制（`project_ops`，35 个）
 
 > 本类配置工程或控制求解器；重点审核边界、激励、端口、网格和同步/异步语义。
+> 启动前门槛：必须显式选择当前求解器，完成与该类型匹配的求解器配置，并完成背景/计算域边界设置；端口、激励、监视器和网格再按本次任务需要配置。`inspect-*` 和 `list-*` 只在用户需要核对或排错时调用，不是固定前置。
+> `configure-frequency-domain-solver` 自身会切换到 `HF Frequency Domain`；`define-fdsolver-stimulation` 和 `set-fdsolver-extrude-open-bc` 不会切换，只能用于当前频域求解器。`define-solver` 和当前实现的 `set-solver-acceleration` 写入 Solver Object，应先切换到 `HF Time Domain`。
 
 ### `capture-3d-view` — 导出 CST 三维视图
 
@@ -885,31 +893,31 @@
 - 不要用于：用于保存截图；需要把 PNG 返回给 Agent 观察时使用 inspect-model-view。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：模型处于需要记录或观察的状态 → 本工具 → inspect-model-view（需要把图像交给 Agent 观察时）或直接使用导出的 PNG。
 - 接口摘要：当前风险 `filesystem-write`；必填：`project_path`；可选：`output_dir`、`filename_prefix`、`view_type`、`preset_name`、`horizontal_rotation_deg`、`vertical_rotation_deg`、`return_image_data`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；输出路径应由调用方明确指定；代码回填时保留现有 Schema 对 `project_path`、`output_dir`、`filename_prefix`、`view_type`、`preset_name`、`horizontal_rotation_deg`、`vertical_rotation_deg`、`return_image_data` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Export the current 3D sheet to PNG. Use a CST reserved view or relative horizontal/vertical rotations from Front.
 
 ### `change-parameter` — 修改单个 CST 参数
 
-- 建议定位：在指定 CST 工程中完成“修改单个 CST 参数”，用于配置或控制本次仿真。
+- 建议定位：在指定 CST 工程中完成“修改单个 CST 参数”，用于配置或控制本次仿真。参数支持数字以及表达式/字符串，但表达式/字符串必须最终可以转换为数字。
 - 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
 - 不要用于：只修改单个参数，不负责运行求解；批量写入使用 define-parameters 或 prepare-experiment。
 - 前置与副作用：必须提供 `project_path`、`name`、`value`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：参数名不明确时才使用 list-parameters → 本工具 → save-project，或在全部启动前配置完成后进入 start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`value`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Change one CST parameter in the verified working project.
 
 ### `change-solver-type` — 切换求解器类型
 
-- 建议定位：在指定 CST 工程中完成“切换求解器类型”，用于配置或控制本次仿真。
-- 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
-- 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
-- 前置与副作用：必须提供 `project_path`、`solver_type`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：显式切换 CST 当前求解器类型，为后续调用对应的 Solver、FDSolver 或其他求解器专用配置建立上下文。
+- 何时使用：用户已经选定求解方法，且后续需要调用该类型的专用配置工具时；应在启动仿真前完成。
+- 不要用于：切换类型本身不完成求解器参数、边界、端口、激励或监视器配置。
+- 前置与副作用：必须提供 `project_path`、`solver_type`；没有 inspect-project 或 list-parameters 前置。该操作改变当前求解器上下文并写入 History，后续只能使用与之匹配的配置工具。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：用户确定求解器类型 → 本工具 → 对应求解器配置 → define-background / define-boundary（或 define-unit-cell-boundary）→ 端口、激励和监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`solver_type`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Change the CST solver type.
@@ -917,11 +925,11 @@
 ### `configure-frequency-domain-solver` — 配置频域求解器基础设置
 
 - 建议定位：仅切换 HF Frequency Domain、设置 mesh_method 和激励；不会生成 FDSolver.Reset，也不改精度、扫频或自适应设置。
-- 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
-- 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
-- 前置与副作用：必须提供 `project_path`、`mesh_method`、`excitation`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 何时使用：已经决定使用高频频域求解器，并已明确网格方法及端口、Floquet 或平面波激励策略时。
+- 不要用于：不配置时域求解器；也不替代边界、频率范围、端口/Floquet/平面波源和监视器定义。
+- 前置与副作用：必须提供 `project_path`、`mesh_method`、`excitation`；所引用的端口、Floquet 模式或平面波源应已定义。该工具会自行切换到 `HF Frequency Domain`，再写入 FDSolver 网格方法和激励，不需要先调用 change-solver-type。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：先按任务定义普通端口、Unit Cell + Floquet 或 PlaneWave → 本工具 → define-fdsolver-stimulation / set-fdsolver-extrude-open-bc（需要时）→ 完成背景、边界和监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `filesystem-write`；必填：`project_path`、`mesh_method`、`excitation`；可选：无；关键返回：`project_path`、`solver_type`、`mesh_method`、`excitation`、`untouched_settings`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `project_path`、`excitation` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：仅切换 HF Frequency Domain、设置 mesh_method 和激励；不会生成 FDSolver.Reset，也不改精度、扫频或自适应设置。
@@ -931,21 +939,21 @@
 - 建议定位：设置背景类型与材料参数（Normal 时显式写出 ε/μ，默认 1.0/1.0 等价 Vacuum）。CST 2022 手册的 Background 对象无读取接口，因此返回 requested 值与 farfield_compatible 判定（基于请求值），并把状态登记为运行时跟踪，供 get-background 返回；无法读回 GUI 中的修改。
 - 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
 - 不要用于：设置背景材料，不设置计算域外扩距离；外扩距离使用 set-background-with-space。
-- 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`；没有 inspect-project、list-parameters、实体或材料列表前置。该操作设置计算域背景并写入 History；若需要远场监视器，应使用兼容的 Normal/Vacuum 背景。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：无读取工具前置 → 本工具 → set-background-with-space / define-boundary（或 define-unit-cell-boundary）→ 完成匹配的求解器配置 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`；可选：`background_type`、`epsilon`、`mu`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `background_type`、`epsilon`、`mu` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：设置背景类型与材料参数（Normal 时显式写出 ε/μ，默认 1.0/1.0 等价 Vacuum）。CST 2022 手册的 Background 对象无读取接口，因此返回 requested 值与 farfield_compatible 判定（基于请求值），并把状态登记为运行时跟踪，供 get-background 返回；无法读回 GUI 中的修改。
 
 ### `define-boundary` — 设置通用边界
 
-- 建议定位：设置全部面的通用边界和对称性；该工具不等价于完整的 Unit Cell 或 Floquet 配置。高级周期边界需求应由用户在 CST 图形界面中手动完成。
+- 建议定位：设置全部面的通用边界和对称性；该工具不等价于完整的 Unit Cell 或 Floquet 配置，周期单元应使用 define-unit-cell-boundary 并配合 define-floquet-port。
 - 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
 - 不要用于：只配置通用六面边界和对称性，不等价于完整 Unit Cell 与 Floquet 配置。
-- 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`；没有 inspect-project、list-parameters 或几何列表前置。该操作设置六个计算域边界面和对称性并写入 History，是启动求解前必须完成的边界设置之一。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：无读取工具前置 → 本工具 → 选择求解器并完成匹配配置 → 端口、激励和监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`；可选：`face_type`、`symmetry_type`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `face_type`、`symmetry_type` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：设置全部面的通用边界和对称性；该工具不等价于完整的 Unit Cell 或 Floquet 配置。高级周期边界需求应由用户在 CST 图形界面中手动完成。
@@ -953,11 +961,11 @@
 ### `define-fdsolver-stimulation` — 设置频域求解器激励
 
 - 建议定位：依据本机 CST 2022 FDSolver.Stimulation 手册设置激励，不会隐式执行 FDSolver.Reset。该工具可由 MCP Agent 调用，但暴露状态不代表已完成 CST 2022 实机验收。
-- 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
-- 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
-- 前置与副作用：必须提供 `project_path`、`port`、`mode`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 何时使用：当前已经是 `HF Frequency Domain`，且需要单独修改 FDSolver 使用的端口和模式激励时。
+- 不要用于：当前为 `HF Time Domain` 或其他求解器时不得调用；本工具也不创建端口或 Floquet 模式。
+- 前置与副作用：必须提供 `project_path`、`port`、`mode`；当前求解器必须为 `HF Frequency Domain`，被引用的普通端口或 Floquet 模式必须已存在。该操作只写入 FDSolver.Stimulation，不切换求解器且不执行 FDSolver.Reset。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：configure-frequency-domain-solver → 本工具（需要覆盖激励时）→ 完成边界和监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`port`、`mode`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `port`、`mode` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：依据本机 CST 2022 FDSolver.Stimulation 手册设置激励，不会隐式执行 FDSolver.Reset。该工具可由 MCP Agent 调用，但暴露状态不代表已完成 CST 2022 实机验收。
@@ -967,9 +975,9 @@
 - 建议定位：配置 Zmin/Zmax Floquet 端口、显式或自动模式、参考面、极化基础和排序。仅公开 getter 可读字段会被验收。
 - 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
 - 不要用于：只用于周期结构 Zmin/Zmax 的 Floquet 端口，不替代普通波导端口。
-- 前置与副作用：必须提供 `project_path`、`ports`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`ports`；周期单元的 X/Y 边界应已通过 define-unit-cell-boundary 配置。该操作配置 Zmin/Zmax Floquet 端口并写入 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：define-unit-cell-boundary → 本工具 → configure-frequency-domain-solver（选择含 Floquet 的激励）→ 监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `filesystem-write`；必填：`project_path`、`ports`；可选：`polarization_basis`、`sort_code`、`sort_frequency`、`sort_theta`、`sort_phi`、`max_order_x`、`max_order_yprime`；关键返回：`project_path`、`requested`、`actual`、`unverified_fields`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `project_path` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：配置 Zmin/Zmax Floquet 端口、显式或自动模式、参考面、极化基础和排序。仅公开 getter 可读字段会被验收。
@@ -982,7 +990,7 @@
 - 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
 - 前置与副作用：必须提供 `project_path`、`start_freq`、`end_freq`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：选择求解器类型 → 本工具 → 匹配的求解器、边界、激励和监视器配置 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`start_freq`、`end_freq`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Set the simulation frequency range.
@@ -994,7 +1002,7 @@
 - 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
 - 前置与副作用：必须提供 `project_path`、`steps_per_wave_near`、`steps_per_wave_far`、`steps_per_box_near`、`steps_per_box_far`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：选择支持六面体网格的求解器和网格方法 → 本工具 → set-mesh-fpbavoid-nonreg-unite / set-mesh-minimum-step-number（需要时）→ start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`steps_per_wave_near`、`steps_per_wave_far`、`steps_per_box_near`、`steps_per_box_far`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Configure the hexahedral mesh parameters.
@@ -1006,7 +1014,7 @@
 - 不要用于：用于成批创建或覆盖参数；只改一个既有参数时使用 change-parameter。
 - 前置与副作用：必须提供 `project_path`、`names`、`values`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：用户给出参数名和值 → 本工具 → 使用这些参数完成几何和求解配置；扫参时再进入 prepare-experiment / quick-sweep。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`names`、`values`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；`names` 与 `values` 必须一一对应。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Batch-define multiple CST parameters using StoreParameters.
@@ -1016,9 +1024,9 @@
 - 建议定位：创建真实 PlaneWave 源。普通平面波不产生 S 参数；无限周期单元应使用 Unit Cell 与 Floquet。
 - 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
 - 不要用于：普通平面波不会自动产生端口 S 参数；无限周期单元通常使用 Unit Cell 与 Floquet 端口。
-- 前置与副作用：必须提供 `project_path`、`normal`、`e_vector`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`normal`、`e_vector`；不依赖实体或材料列表，但应在求解前完成与平面波传播相容的开放边界和求解器激励配置。该操作创建 PlaneWave 源并写入 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：define-boundary（开放边界）→ 本工具 → configure-frequency-domain-solver（Plane Wave 激励）或其他兼容求解器配置 → 监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `filesystem-write`；必填：`project_path`、`normal`、`e_vector`；可选：`polarization`、`reference_frequency`、`handedness`、`phase_difference`、`axial_ratio`；关键返回：`project_path`、`requested`、`actual`、`unverified_fields`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `project_path` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：创建真实 PlaneWave 源。普通平面波不产生 S 参数；无限周期单元应使用 Unit Cell 与 Floquet。
@@ -1030,7 +1038,7 @@
 - 不要用于：用于内部轴对齐波导端口，不用于 Floquet 端口或普通平面波。
 - 前置与副作用：必须提供 `project_path`、`port_number`、`x_min`、`x_max`、`y_min`、`y_max`、`z_min`、`z_max`、`orientation`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：几何和端口截面已明确 → 本工具 → 与当前求解器匹配的端口激励配置 → 完成边界和监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`port_number`、`x_min`、`x_max`、`y_min`、`y_max`、`z_min`、`z_max`、`orientation`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `x_min`、`x_max`、`y_min`、`y_max`、`z_min`、`z_max`、`orientation` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Define an internal axis-aligned waveguide port from global X/Y/Z ranges. Collapse the normal-axis range to the port plane; *min radiates +axis and *max radiates -axis.
@@ -1038,12 +1046,12 @@
 
 ### `define-solver` — 配置时域求解器
 
-- 建议定位：在指定 CST 工程中完成“配置时域求解器”，用于配置或控制本次仿真。
-- 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
-- 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
-- 前置与副作用：必须提供 `project_path`、`stimulation_port`、`steady_state_limit`、`norming_impedance`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：通过 CST Solver Object 配置高频时域求解器的激励端口、稳态阈值、网格自适应和阻抗归一化等设置；本工具本身不切换求解器类型。
+- 何时使用：已经明确选择 `HF Time Domain`，并需要配置时域求解器参数时。
+- 不要用于：当前为 `HF Frequency Domain` 时不得调用；频域配置使用 configure-frequency-domain-solver、define-fdsolver-stimulation 等 FDSolver 工具。
+- 前置与副作用：必须提供 `project_path`、`stimulation_port`、`steady_state_limit`、`norming_impedance`；应先用 change-solver-type 切换到 `HF Time Domain`，相关端口应已存在。该操作写入 Solver Object 设置和 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：change-solver-type（`HF Time Domain`）→ 本工具 → define-background / define-boundary → 端口、监视器与网格配置 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`stimulation_port`、`steady_state_limit`、`norming_impedance`；可选：`stimulation_mode`、`mesh_adaption`、`auto_norm_impedance`、`calculate_modes_only`、`s_para_symmetry`、`store_td_results`、`run_discretizer_only`、`full_deembedding`、`superimpose_plw`、`use_sensitivity`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Configure the time-domain solver settings.
@@ -1053,9 +1061,9 @@
 - 建议定位：按 CST 2022 手册配置六面边界和 Unit Cell 扫描角；先校验 X/Y 配对，执行后再通过 getter 读回。
 - 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
 - 不要用于：用于周期单元边界；普通开放、电或磁边界使用 define-boundary。
-- 前置与副作用：必须提供 `project_path`、`xmin`、`xmax`、`ymin`、`ymax`、`zmin`、`zmax`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`、`xmin`、`xmax`、`ymin`、`ymax`、`zmin`、`zmax`；没有 inspect-project 或 list-parameters 前置，但 X/Y 周期边界必须成对且由用户明确扫描角。该操作写入 Unit Cell 边界和 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：无读取工具前置 → 本工具 → define-floquet-port → 选择并配置兼容求解器 → 监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `filesystem-write`；必填：`project_path`、`xmin`、`xmax`、`ymin`、`ymax`、`zmin`、`zmax`；可选：`theta`、`phi`、`direction`；关键返回：`project_path`、`requested`、`actual`、`unverified_fields`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `project_path` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：按 CST 2022 手册配置六面边界和 Unit Cell 扫描角；先校验 X/Y 配对，执行后再通过 getter 读回。
@@ -1068,7 +1076,7 @@
 - 不要用于：只能返回本 Runtime 会话跟踪的设置，不能读到用户在 CST GUI 中直接改动后的背景值。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；通常无 CST 模型副作用。
 - 成功与重试：只读失败可在修正路径或筛选条件后重试；成功后无需为了确认而重复调用。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：仅在用户要求核对本会话由 define-background 写入的状态或排错时调用；无跟踪状态时直接显式设置背景，不把本工具作为启动前固定步骤。
 - 接口摘要：当前风险 `read`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：返回本会话运行时跟踪的背景状态（source=runtime_tracked）与 farfield_compatible 判定（远场监视器要求 Normal 且 ε=1、μ=1）。CST 2022 手册的 Background 对象未提供任何读取接口，本工具不调用未文档化的属性读取；没有跟踪状态时返回 background_state_unknown，需先调用 define-background 显式设置背景。
@@ -1080,7 +1088,7 @@
 - 不要用于：只读信息不能证明后续写入或求解已经完成，也不应作为每次成功调用后的固定复查。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；通常无 CST 模型副作用。
 - 成功与重试：只读失败可在修正路径或筛选条件后重试；成功后无需为了确认而重复调用。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：仅在用户要求核对、存在边界歧义或排错时，于 define-boundary / define-unit-cell-boundary 后调用；不要把它作为每次启动求解前的固定步骤。
 - 接口摘要：当前风险 `read`；必填：`project_path`；可选：无；关键返回：`project_path`、`faces`、`unit_cell_scan`、`ports`、`plane_wave`、`monitors`、`count`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `project_path` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：使用 Boundary 六面 getter 和 GetUnitCellScanAngle 读取实际边界状态。
@@ -1092,7 +1100,7 @@
 - 不要用于：只读信息不能证明后续写入或求解已经完成，也不应作为每次成功调用后的固定复查。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；通常无 CST 模型副作用。
 - 成功与重试：只读失败可在修正路径或筛选条件后重试；成功后无需为了确认而重复调用。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：仅在用户要求核对或排错时，于 define-unit-cell-boundary / define-floquet-port 后调用；不要作为每次求解的固定前置。
 - 接口摘要：当前风险 `read`；必填：`project_path`；可选：无；关键返回：`project_path`、`faces`、`unit_cell_scan`、`ports`、`plane_wave`、`monitors`、`count`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `project_path` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：读取 Floquet 端口位置、模式序号/名称、模式列表及考虑模式数；不伪造无 getter 字段。
@@ -1104,7 +1112,7 @@
 - 不要用于：会生成截图并返回图像数据；只需保存 PNG 时使用 capture-3d-view。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：capture-3d-view（返回图像或已知输出路径）→ 本工具 → 根据用户目标继续建模、记录证据或人工判断；不自动启动求解。
 - 接口摘要：当前风险 `filesystem-write`；必填：`project_path`；可选：`output_dir`、`filename_prefix`、`view_type`、`preset_name`、`horizontal_rotation_deg`、`vertical_rotation_deg`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；输出路径应由调用方明确指定；代码回填时保留现有 Schema 对 `project_path`、`output_dir`、`view_type`、`preset_name`、`horizontal_rotation_deg`、`vertical_rotation_deg` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Export a documented preset or Front-relative 3D view and return the PNG as base64.
@@ -1116,7 +1124,7 @@
 - 不要用于：只读信息不能证明后续写入或求解已经完成，也不应作为每次成功调用后的固定复查。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；通常无 CST 模型副作用。
 - 成功与重试：只读失败可在修正路径或筛选条件后重试；成功后无需为了确认而重复调用。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：仅在用户要求核对或排错时，于 define-plane-wave 后调用；不要作为每次求解的固定前置。
 - 接口摘要：当前风险 `read`；必填：`project_path`；可选：无；关键返回：`project_path`、`faces`、`unit_cell_scan`、`ports`、`plane_wave`、`monitors`、`count`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `project_path` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：使用 PlaneWave 公开 getter 读取传播向量、电场向量和极化参数。
@@ -1128,7 +1136,7 @@
 - 不要用于：只读信息不能证明后续写入或求解已经完成，也不应作为每次成功调用后的固定复查。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；通常无 CST 模型副作用。
 - 成功与重试：只读失败可在修正路径或筛选条件后重试；成功后无需为了确认而重复调用。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：仅在用户需要工程概况、存在对象名歧义或排错时调用 → 根据返回内容选择具体建模或配置工具；不自动启动求解。
 - 接口摘要：当前风险 `read`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Open a CST project, list all parameters and entities, then close. Returns parameter names/values and entity names.
@@ -1140,7 +1148,7 @@
 - 不要用于：只读信息不能证明后续写入或求解已经完成，也不应作为每次成功调用后的固定复查。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；通常无 CST 模型副作用。
 - 成功与重试：只读失败可在修正路径或筛选条件后重试；成功后无需为了确认而重复调用。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：start-simulation-async → 本工具（仅需即时状态时）→ wait-simulation，或在用户明确要求时 pause-simulation / stop-simulation。
 - 接口摘要：当前风险 `read`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Check whether the CST solver is currently running for the verified working project.
@@ -1152,7 +1160,7 @@
 - 不要用于：读取 Monitor 对象，不保证相应仿真结果已经生成。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；通常无 CST 模型副作用。
 - 成功与重试：只读失败可在修正路径或筛选条件后重试；成功后无需为了确认而重复调用。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：仅在用户需要核对已有监视器、名称不明确或排错时，于 define-farfield-monitor / set-field-monitor 等工具后调用；不是启动前固定步骤。
 - 接口摘要：当前风险 `read`；必填：`project_path`；可选：无；关键返回：`project_path`、`faces`、`unit_cell_scan`、`ports`、`plane_wave`、`monitors`、`count`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；代码回填时保留现有 Schema 对 `project_path` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：使用 Monitor 公开 getter 返回名称、类型、域和频率；与结果树扫描工具并存。
@@ -1164,7 +1172,7 @@
 - 不要用于：只读信息不能证明后续写入或求解已经完成，也不应作为每次成功调用后的固定复查。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；通常无 CST 模型副作用。
 - 成功与重试：只读失败可在修正路径或筛选条件后重试；成功后无需为了确认而重复调用。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：参数名或当前值不明确时调用 → change-parameter / define-parameters / prepare-experiment；已知参数时无需先调用。
 - 接口摘要：当前风险 `read`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：List parameters from the verified CST working project.
@@ -1176,7 +1184,7 @@
 - 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：已有正在运行的求解 → 本工具 → resume-simulation 或 stop-simulation；不得把暂停后再次 start-simulation 作为常规流程。
 - 接口摘要：当前风险 `session`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Pause the currently running CST solver.
@@ -1200,19 +1208,19 @@
 - 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：pause-simulation → 本工具 → wait-simulation 或结果检查；不得对未暂停的求解调用。
 - 接口摘要：当前风险 `write`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Resume a paused CST solver.
 
 ### `set-fdsolver-extrude-open-bc` — 设置频域求解器开放边界外推
 
-- 建议定位：在指定 CST 工程中完成“设置频域求解器开放边界外推”，用于配置或控制本次仿真。
-- 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
-- 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
-- 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：通过 FDSolver.ExtrudeOpenBC 开启或关闭频域求解器对开放边界的外推设置；本工具不切换求解器类型。
+- 何时使用：当前已经是 `HF Frequency Domain`，工程采用开放边界且用户明确需要该频域选项时。
+- 不要用于：当前为时域或其他求解器、或工程不使用开放边界时不得把它当作通用边界工具。
+- 前置与副作用：必须提供 `project_path`；当前求解器必须为 `HF Frequency Domain`，开放边界应已通过 define-boundary 配置。该操作只写入 FDSolver.ExtrudeOpenBC 和 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：configure-frequency-domain-solver → define-boundary（开放边界）→ 本工具 → 其他激励和监视器配置 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Enable or disable FD solver extruded open boundary.
@@ -1224,7 +1232,7 @@
 - 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：选择使用 FPBA 的兼容求解器和网格方法 → define-mesh → 本工具（确有需要时）→ start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Enable or disable mesh FPBA non-regular unite avoidance.
@@ -1236,19 +1244,19 @@
 - 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
 - 前置与副作用：必须提供 `project_path`、`num_steps`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：选择与本设置兼容的求解器和网格方法 → define-mesh → 本工具（确有需要时）→ start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`num_steps`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Set the minimum mesh step number.
 
 ### `set-solver-acceleration` — 设置求解器并行与硬件加速
 
-- 建议定位：在指定 CST 工程中完成“设置求解器并行与硬件加速”，用于配置或控制本次仿真。
-- 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
-- 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
-- 前置与副作用：必须提供 `project_path`、`use_parallelization`、`max_threads`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 建议定位：当前实现通过 Solver Object 配置线程数、分布式计算、MPI 和硬件加速，应作为时域求解器配置，而不是跨求解器通用设置。
+- 何时使用：当前已经是 `HF Time Domain`，且用户明确需要调整该求解器的计算资源时。
+- 不要用于：当前为 `HF Frequency Domain` 时不得调用；频域求解器资源设置不能从本工具名称推断为已覆盖。
+- 前置与副作用：必须提供 `project_path`、`use_parallelization`、`max_threads`；应先用 change-solver-type 切换到 `HF Time Domain`。该操作写入 Solver Object 和 History。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：change-solver-type（`HF Time Domain`）→ define-solver → 本工具（需要时）→ 完成边界、激励和监视器 → start-simulation / run-experiment。
 - 接口摘要：当前风险 `write`；必填：`project_path`、`use_parallelization`、`max_threads`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Configure solver parallelization and hardware acceleration.
@@ -1256,11 +1264,11 @@
 ### `start-simulation` — 同步启动并等待求解
 
 - 建议定位：同步运行 CST 求解器并阻塞到结束；仅当 CST 的 run_solver 返回 True 才报告 success。失败时返回 solver_run_failed，并附本次求解写入 Result 日志的 CST 原始报错文本。
-- 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
+- 何时使用：模型完成，当前求解器已显式选择且对应配置、背景/边界、频率范围、必要端口/激励和所需监视器均已完成时。
 - 不要用于：同步阻塞到求解调用返回；需要立即返回时使用 start-simulation-async。
-- 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`；启动前必须完成求解器选择、与当前类型匹配的求解器配置和边界相关设置。端口、激励、监视器和网格按本次任务需要完成；这些要求是工作流门槛，不要求额外调用 inspect-* 作固定复查。该操作同步占用 CST 会话直到返回。
 - 成功与重试：成功后不要立即重复启动；超时或状态不明时先检查运行状态、日志或结果节点。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：求解器选择 → 匹配的求解器配置 → 背景/边界 → 端口、激励、监视器与网格 → 本工具 → 结果发现和导出。
 - 接口摘要：当前风险 `long-running`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：同步运行 CST 求解器并阻塞到结束；仅当 CST 的 run_solver 返回 True 才报告 success。失败时返回 solver_run_failed，并附本次求解写入 Result 日志的 CST 原始报错文本。
@@ -1268,11 +1276,11 @@
 ### `start-simulation-async` — 异步启动求解
 
 - 建议定位：异步启动 CST 求解器；返回成功只表示启动调用完成，不代表求解成功。
-- 何时使用：模型基本完成，用户已经确定相应求解、激励、边界、网格或运行控制需求时。
+- 何时使用：与 start-simulation 相同的启动前配置均已完成，但调用方需要立即返回并在后续等待求解时。
 - 不要用于：成功只表示启动调用完成，不代表求解成功；必须结合 wait-simulation、日志或结果验收。
-- 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
+- 前置与副作用：必须提供 `project_path`；启动前必须完成求解器选择、与当前类型匹配的求解器配置和边界相关设置。端口、激励、监视器和网格按本次任务需要完成；不要求额外调用 inspect-* 作固定复查。该操作异步占用 CST 会话。
 - 成功与重试：成功后不要立即重复启动；超时或状态不明时先检查运行状态、日志或结果节点。
-- 关联流程：start-simulation-async → is-simulation-running 或 wait-simulation → 结果检查。
+- 关联流程：求解器选择 → 匹配的求解器配置 → 背景/边界 → 端口、激励、监视器与网格 → 本工具 → wait-simulation → 结果检查。
 - 接口摘要：当前风险 `long-running`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：异步启动 CST 求解器；返回成功只表示启动调用完成，不代表求解成功。
@@ -1285,7 +1293,7 @@
 - 不要用于：不要把该工具扩展到说明之外的 CST 对象或工作流。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：已有正在运行或暂停的求解 → 本工具 → wait-simulation 确认已停止；修正设置后是否重新启动由用户决定。
 - 接口摘要：当前风险 `session`；必填：`project_path`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Stop the currently running CST solver.
@@ -1297,7 +1305,7 @@
 - 不要用于：running=false 只表示求解器停止，不证明求解成功；完整验收使用 run-experiment。
 - 前置与副作用：必须提供 `project_path`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
 - 成功与重试：成功后不要立即重复启动；超时或状态不明时先检查运行状态、日志或结果节点。
-- 关联流程：inspect-project 或 list-parameters（需要时）→ 本工具 → start-simulation 或 run-experiment。
+- 关联流程：start-simulation-async → 本工具 → 检查求解日志和结果节点；返回“已停止”本身不等于求解成功。
 - 接口摘要：当前风险 `long-running`；必填：`project_path`；可选：`timeout_seconds`、`poll_interval_seconds`；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：轮询直到求解器不再运行或超时；running=false 只表示停止，不能证明求解成功。
@@ -1686,9 +1694,9 @@
 - 建议定位：运行求解并等待完成；必须以指定 0D/1D 结果节点共同出现的新 Run ID 和非空数据验收。求解前结果节点尚不存在视为空基线（首次仿真的正常初始状态，支持由本次仿真生成节点）；不执行任何结果导出，返回通用 result_metrics；S1,1 仅保留兼容 s11_metric。
 - 何时使用：用户已经给出工程、目标节点以及本次操作所需参数后。
 - 不要用于：负责求解完成与结果节点验收，不执行导出，也不判断设计指标是否达标。
-- 前置与副作用：必须提供 `project_path`、`completion_result_paths`、`timeout_seconds`，并保证引用的工程、对象或文件真实存在；会启动求解或批处理并占用 CST 会话。
+- 前置与副作用：必须提供 `project_path`、`completion_result_paths`、`timeout_seconds`；启动前必须完成求解器选择、与当前类型匹配的求解器配置和边界相关设置，并按目标结果定义端口、激励和监视器。只读 inspect-* 不作为固定前置。该操作启动求解并占用 CST 会话。
 - 成功与重试：成功后不要立即重复启动；超时或状态不明时先检查运行状态、日志或结果节点。
-- 关联流程：prepare-experiment（可选）→ run-experiment → list-* results → export-*。
+- 关联流程：求解器选择 → 匹配的求解器配置 → 背景/边界 → 端口、激励、监视器与网格 → prepare-experiment（仅扫参时）→ 本工具 → list-* results → export-*。
 - 接口摘要：当前风险 `long-running`；必填：`project_path`、`completion_result_paths`、`timeout_seconds`；可选：无；关键返回：`project_path`、`run_id`、`completion_result_paths`、`result_metrics`、`s11_metric`、`solver_completed`。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件。写入失败时保留原错误和上下文，修正明确输入后重试。
 - 当前 Registry：运行求解并等待完成；必须以指定 0D/1D 结果节点共同出现的新 Run ID 和非空数据验收。求解前结果节点尚不存在视为空基线（首次仿真的正常初始状态，支持由本次仿真生成节点）；不执行任何结果导出，返回通用 result_metrics；S1,1 仅保留兼容 s11_metric。
