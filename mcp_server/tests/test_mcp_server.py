@@ -86,7 +86,7 @@ def test_transport_error_is_returned_as_mcp_error_envelope() -> None:
     from mcp_server.server import _call_tool_with_transport_envelope
 
     class FailingProxy:
-        def call_tool(self, name, arguments, *, timeout):
+        def call_tool(self, name, arguments, *, timeout, timeout_class="abnormal"):
             raise CSTTransportError(
                 "worker timed out",
                 code="worker_request_timeout",

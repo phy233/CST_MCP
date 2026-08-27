@@ -14,10 +14,13 @@ def _call_tool_with_transport_envelope(
     arguments: dict[str, Any],
     *,
     timeout: int,
+    timeout_class: str = "abnormal",
 ) -> dict[str, Any]:
     """Keep transport failures inside the public structured-result contract."""
     try:
-        return proxy.call_tool(name, arguments, timeout=timeout)
+        return proxy.call_tool(
+            name, arguments, timeout=timeout, timeout_class=timeout_class
+        )
     except CSTTransportError as exc:
         return exc.to_response(tool_name=name)
 
@@ -193,6 +196,11 @@ def create_mcp_server():
             name,
             arguments,
             timeout=timeout,
+            timeout_class=(
+                "expected_simulation"
+                if agent_tool_risks.get(name, "read") == "long-running"
+                else "abnormal"
+            ),
         )
 
     return server

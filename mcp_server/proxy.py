@@ -7,11 +7,49 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
 from .config import MCPConfig, get_config
+
+
+# ── 阶段信标读端（与 cst_runtime.core.phase_beacon 的双端契约） ──
+# 两端必须保持同一路径公式：abs+resolve+casefold 归一化的 project_path
+# 的 sha1 前 12 位；任一端修改必须同步另一端。此模块禁止 import
+# cst_runtime（架构守卫见 test_mcp_layer_does_not_import_runtime）。
+_BEACON_FRESHNESS_SECONDS = 30.0
+_GRACE_PHASES = frozenset({"postflight", "closing"})
+# L2 兜底触发的优雅收尾窗口（秒）
+_DEFAULT_GRACE_SECONDS = 180.0
+
+
+def _beacon_path_for(project_path: str | None) -> Path | None:
+    if not project_path:
+        return None
+    try:
+        normalized = Path(project_path).expanduser().resolve()
+    except OSError:
+        return None
+    key = hashlib.sha1(str(normalized).casefold().encode("utf-8")).hexdigest()[:12]
+    tmp_dir = Path.cwd() / ".cst_runtime" / "tmp"
+    return tmp_dir / f"phase-{key}.json"
+
+
+def _phase_allows_grace(project_path: str | None) -> bool:
+    """信标存在、新鲜且处于收尾阶段时允许一次优雅宽限。"""
+    target = _beacon_path_for(project_path)
+    if target is None:
+        return False
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+        age = time.time() - float(data.get("updated_at"))
+    except (OSError, ValueError, TypeError):
+        return False
+    if age < 0 or age > _BEACON_FRESHNESS_SECONDS:
+        return False
+    return str(data.get("phase")) in _GRACE_PHASES
 
 
 class CSTTransportError(RuntimeError):
@@ -305,9 +343,18 @@ class CSTWorkerProxy:
         action: str,
         *,
         timeout: int | None = None,
+        grace_seconds: float | None = None,
+        grace_class: str = "abnormal",
+        grace_project_path: str | None = None,
         **payload: Any,
     ) -> dict[str, Any]:
-        """串行发送一个请求并校验响应 ID。"""
+        """串行发送一个请求并校验响应 ID。
+
+        ``grace_seconds`` 非 None 时启用 L2 优雅收尾窗口：请求超时后，
+        若阶段信标显示 worker 正在 postflight/closing，则在该窗口内
+        继续等待迟到响应，命中则视为正常完成；逾期才终止 worker。
+        其余情形保持原语义（超时即终止，防止迟到响应污染后续请求）。
+        """
         request_id = uuid.uuid4().hex
         request = {"id": request_id, "action": action, **payload}
         serialized_request = json.dumps(request, ensure_ascii=False)
@@ -334,12 +381,26 @@ class CSTWorkerProxy:
                     timeout=timeout or self.config.request_timeout
                 )
             except queue.Empty as exc:
+                if grace_seconds and grace_seconds > 0:
+                    collected = self._collect_grace_response(
+                        request_id,
+                        grace_seconds=grace_seconds,
+                        grace_project_path=grace_project_path,
+                    )
+                    if collected is not None:
+                        return collected
                 # 超时请求的迟到响应会污染后续请求，因此必须重启 worker。
                 self._terminate_worker()
                 raise CSTTransportError(
                     f"worker 调用超时: {action}",
                     code="worker_request_timeout",
-                    context={"action": action},
+                    context={
+                        "action": action,
+                        "timeout_class": grace_class,
+                        "project_path": grace_project_path,
+                        "grace_used": bool(grace_seconds),
+                        "grace_seconds": grace_seconds,
+                    },
                 ) from exc
             if response.get("_transport_error"):
                 self._terminate_worker()
@@ -354,6 +415,37 @@ class CSTWorkerProxy:
                     code="worker_response_id_mismatch",
                     context={"action": action},
                 )
+            return response
+
+    def _collect_grace_response(
+        self,
+        request_id: str,
+        *,
+        grace_seconds: float,
+        grace_project_path: str | None,
+    ) -> dict[str, Any] | None:
+        """宽限窗口内收集迟到的响应；命中返回原响应，否则 None。
+
+        仅当阶段信标显示 worker 正在收尾（postflight/closing）时才等待；
+        串行协议保证窗口内队列中的第一条真实响应必然属于当前请求。
+        """
+        if not _phase_allows_grace(grace_project_path):
+            return None
+        deadline = time.monotonic() + float(grace_seconds)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            try:
+                response = self._responses.get(timeout=min(remaining, 0.5))
+            except queue.Empty:
+                continue
+            if response.get("_transport_error"):
+                # worker 在宽限期内退出：宽限失效，按超时路径终止清理
+                return None
+            if response.get("id") != request_id:
+                # 串行协议下不应发生；防御性处理：丢弃未知迟到响应
+                continue
             return response
 
     def list_tools(self) -> list[dict[str, Any]]:
@@ -377,8 +469,15 @@ class CSTWorkerProxy:
         arguments: dict[str, Any],
         *,
         timeout: int | None = None,
+        timeout_class: str = "abnormal",
     ) -> dict[str, Any]:
-        """调用一个 runtime 白名单工具，并记录完整 MCP 交互生命周期。"""
+        """调用一个 runtime 白名单工具，并记录完整 MCP 交互生命周期。
+
+        ``timeout_class``（"expected_simulation" | "abnormal"）决定
+        L2 兜底行为：长任务超时先尝试信标宽限；两类终止都会写入
+        journal 终态。runtime 返回 ``long_run_relinquish``（L1 让出）
+        时记录 ``relinquished`` 终态并终止 worker 释放算力。
+        """
         import time
         from datetime import datetime, timezone
 
@@ -394,6 +493,11 @@ class CSTWorkerProxy:
             or arguments.get("fullpath")
             or arguments.get("working_project")
         )
+        grace_seconds = (
+            _DEFAULT_GRACE_SECONDS
+            if timeout_class == "expected_simulation"
+            else None
+        )
 
         record: dict[str, Any] = {
             "interaction_id": interaction_id,
@@ -406,6 +510,7 @@ class CSTWorkerProxy:
             "server_name": self.config.server_name,
             "server_version": "0.1.0",
             "state": "requested",
+            "timeout_class": timeout_class,
             "started_at": started_at,
             "result": None,
             "error": None,
@@ -430,6 +535,9 @@ class CSTWorkerProxy:
                 name=name,
                 arguments=arguments,
                 timeout=timeout,
+                grace_seconds=grace_seconds,
+                grace_class=timeout_class,
+                grace_project_path=str(project_path) if project_path else None,
             )
             duration_ms = round((time.monotonic() - start_time) * 1000, 2)
             ended_at = datetime.now(timezone.utc).astimezone().isoformat()
@@ -456,13 +564,21 @@ class CSTWorkerProxy:
                 if a_sha:
                     record["after_snapshot_sha256"] = str(a_sha)
 
-                if response.get("status") == "error" or response.get("ok") is False:
+                if response.get("error_type") == "long_run_relinquish":
+                    # L1 让出：业务信号已完整送达 agent，worker 无继续
+                    # 存在的价值——立即回收进程释放算力（前台让出场景）。
+                    record["state"] = "relinquished"
+                    record["result"] = response
+                    _log_mcp_interaction(record.get("workspace"), record)
+                    self._terminate_worker()
+                elif response.get("status") == "error" or response.get("ok") is False:
                     record["state"] = "failed"
                     record["error"] = response
+                    _log_mcp_interaction(record.get("workspace"), record)
                 else:
                     record["state"] = "succeeded"
                     record["result"] = response
-                _log_mcp_interaction(record.get("workspace"), record)
+                    _log_mcp_interaction(record.get("workspace"), record)
             except Exception:
                 pass
 
@@ -473,7 +589,19 @@ class CSTWorkerProxy:
             try:
                 record["duration_ms"] = duration_ms
                 record["ended_at"] = ended_at
-                record["state"] = "timeout" if exc.code == "worker_request_timeout" else "transport_error"
+                if exc.code == "worker_request_timeout":
+                    # L2 兜底终止（宽限后或无宽限）：journal 必须留下
+                    # 明确的 terminated 终态与超时分类，供恢复时判读。
+                    record["state"] = "terminated"
+                    record["timeout_class"] = (
+                        exc.context.get("timeout_class", timeout_class)
+                        if isinstance(exc.context, dict)
+                        else timeout_class
+                    )
+                else:
+                    record["state"] = (
+                        "timeout" if exc.code == "worker_request_timeout" else "transport_error"
+                    )
                 record["error"] = exc.to_response(tool_name=name)
                 _log_mcp_interaction(record.get("workspace"), record)
             except Exception:
