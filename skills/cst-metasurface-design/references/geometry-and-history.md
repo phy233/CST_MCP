@@ -41,7 +41,7 @@
 
 普通成功调用不要求 before/after History snapshot。只有恢复需要、状态 ambiguous、用户明确要求检查点，或准备执行已授权的高风险恢复操作时，才创建或比较 snapshot。
 
-设计假设、用户确认和阶段结论在 MCP 中使用 `record_agent_note`；直接 Runtime CLI 使用 `record-agent-note`。工具请求和返回由 MCP interaction journal 自动记录。不要另建无法与现有 ID 关联的平行日志。
+设计假设、用户确认和阶段结论在 MCP 中使用 `record-agent-note`；直接 Runtime CLI 使用同名子命令 `record-agent-note`。工具请求和返回由 MCP interaction journal 自动记录。不要另建无法与现有 ID 关联的平行日志。
 
 记录中区分 `user_decision`、`agent_suggestion` 和 `executed_fact`。建模成功只能说明经授权的模型操作已经完成，不能写成超表面设计已经完成或最终方案已经通过。
 

@@ -42,8 +42,8 @@ description: 通过已连接的 CST MCP 服务，在用户主导下检查具体�
 ## 记录与恢复
 
 - MCP 自动记录工具请求、参数、返回值、耗时和可关联的 History 快照。
-- 设计假设、用户确认和人工处置通过 MCP 工具 `record_agent_note` 显式记录。
-- 查询一次调用的 History 变化使用 MCP 工具 `inspect_interaction_history`。
+- 设计假设、用户确认和人工处置通过 MCP 工具 `record-agent-note` 显式记录。
+- 查询一次调用的 History 变化使用 MCP 工具 `inspect-interaction-history`。
 - 创建物理检查点、重放副本和人工 reconciliation 属于高风险 CLI 运维操作，MCP Agent 不自行绕过暴露策略。
 
 需要详细的 History、检查点和交互审计步骤时，路由到 `cst-runtime-cli`，由该 Skill 按需读取自身的 `history-and-recovery.md`。如果 `cst-runtime-cli` 未安装，停止高风险恢复操作并说明依赖缺失，不使用脆弱的兄弟目录相对路径。需要超表面设计判断时，使用 `cst-metasurface-design`。

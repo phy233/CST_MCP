@@ -12,7 +12,12 @@
   "objective": {
     "description": "10 GHz 同极化反射相位接近 90 度",
     "direction": "minimize",
-    "formula": "abs(wrapped_phase_deg - 90)"
+    "spec": {
+      "type": "phase_at_freq",
+      "result_path": "SZmin(1),Zmax(1)",
+      "freq": 10,
+      "target_deg": 90
+    }
   },
   "parameters": [
     {"name": "patch_w", "min": 2.0, "max": 4.0, "unit": "mm"}
@@ -23,13 +28,13 @@
     "user_owned_decisions": ["objective", "parameters", "hard_bounds", "budget", "final_selection"],
     "agent_suggestions": ["candidate_order", "sampler", "early_stop"]
   },
-  "approved_actions": ["change_parameter", "run_solver", "read_result", "tell_study"],
+  "approved_actions": ["change-parameter", "run-experiment", "export-sparameter", "tell-study"],
   "automation_scope": "只在已确认的变量、硬范围、预算和停止条件内连续执行",
   "approval_status": "approved"
 }
 ```
 
-字段应反映实际工具能力，不要求创建新的固定 Schema 文件。`approval_status` 未达到 `approved` 时，只能完善任务卡和提出建议，不能启动探针、仿真或优化。
+字段应反映实际工具能力，不要求创建新的固定 Schema 文件。`objective.spec` 直接对应 `run-probe-phase`/`run-optimization-step` 的 `objective` 参数；需要复合指标时使用 expression 类型，沙箱内可用 `phase_deg(path,f)`、`amp_db(path,f)`、`wrap(x)` 与 `s11_db/s11_freq/min/max/len/abs`。自由文本的 `formula` 字段仅供人阅读，不能被执行；凡是进入 trial 循环的目标必须给出可执行的 spec。`approval_status` 未达到 `approved` 时，只能完善任务卡和提出建议，不能启动探针、仿真或优化。
 
 ## 每个 trial 必须记录
 

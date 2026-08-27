@@ -250,7 +250,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "stop_rules": [
             "Check s11_metric.min_db against target after each step.",
             "Check study_best.value for overall progress.",
-            "If ask_study returns study_complete, stop the loop.",
+            "If ask-study returns study_complete, stop the loop.",
         ],
     },
 }

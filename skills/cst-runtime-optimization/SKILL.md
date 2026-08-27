@@ -30,7 +30,7 @@ description: 使用 CST Runtime 或 MCP，在人类确认设计边界后辅助�
 
 默认把候选生成、改参、求解、结果读取、目标计算和 `tell` 分开，使用户能够在每轮调整参数范围、目标或停止条件。改参接口成功后不插入额外参数读回；结果取得、导出文件和异步求解完成仍按任务需要检查。
 
-MCP 工具 `run_probe_phase`、`run_optimization_step`、`prepare_experiment` 和 `run_experiment` 仅是可选管道；直接 Runtime CLI 的等价子命令使用连字符形式。只有用户明确接受、步骤已经展开且无需中间决策时才使用。
+MCP 工具 `run-probe-phase`、`run-optimization-step`、`prepare-experiment` 和 `run-experiment` 仅是可选管道；直接 Runtime CLI 的等价子命令使用相同的连字符名称。只有用户明确接受、步骤已经展开且无需中间决策时才使用。
 
 ## 结果边界
 
