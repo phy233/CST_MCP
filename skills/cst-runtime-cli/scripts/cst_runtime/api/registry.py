@@ -99,30 +99,6 @@ def _sweep_run(args: dict[str, Any]) -> dict[str, Any]:
         close_project(project_path, save=False)
 
 
-def _cross_process_run(args: dict[str, Any]) -> dict[str, Any]:
-    """cross-process-sweep：本工具自行管理会话（open → sweep → close）。"""
-    from ..lib.session import close_project, open_project
-    from ..workflows.cross_process import quick_cross_sweep
-
-    project_path = args["project_path"]
-    opened = open_project(project_path)
-    if opened.get("status") == "error":
-        return dict(opened)
-    try:
-        result = quick_cross_sweep(
-            project_path=project_path,
-            lx_range=args["lx_range"],
-            ly1_range=args["ly1_range"],
-            target_freq_ghz=float(args["target_freq_ghz"]),
-            output_dir=args.get("output_dir"),
-            continue_on_error=bool(args.get("continue_on_error", True)),
-            restore_parameters=bool(args.get("restore_parameters", True)),
-        )
-        return result.to_dict()
-    finally:
-        close_project(project_path, save=False)
-
-
 def _workflow_operations() -> dict[str, OperationSpec]:
     number_array = {"type": "array", "items": {"type": "number"}, "minItems": 1}
     array_output = _object_schema(
@@ -242,27 +218,6 @@ def _workflow_operations() -> dict[str, OperationSpec]:
             ),
             output_schema=sweep_output,
             handler=_sweep_run,
-        ),
-        "cross_process.run": OperationSpec(
-            name="cross_process.run",
-            tool_name="cross-process-sweep",
-            description="运行十字形单元的双极化参数扫描。",
-            risk="long-running",
-            exposure=exposure_for("cross-process-sweep"),
-            input_schema=_object_schema(
-                {
-                    "project_path": {"type": "string", "minLength": 1},
-                    "lx_range": number_array,
-                    "ly1_range": number_array,
-                    "target_freq_ghz": {"type": "number"},
-                    "output_dir": {"type": ["string", "null"], "default": None},
-                    "continue_on_error": {"type": "boolean", "default": True},
-                    "restore_parameters": {"type": "boolean", "default": True},
-                },
-                ["project_path", "lx_range", "ly1_range", "target_freq_ghz"],
-            ),
-            output_schema=sweep_output,
-            handler=_cross_process_run,
         ),
     }
 

@@ -36,7 +36,6 @@ AGENT_TOOLS = frozenset(
         "create-loft-sweep",
         "create-mesh-group",
         "create-study",
-        "cross-process-sweep",
         "cst-session-close",
         "cst-session-inspect",
         "cst-session-open",

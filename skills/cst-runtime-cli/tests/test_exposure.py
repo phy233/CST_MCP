@@ -48,7 +48,6 @@ def test_agent_allowlist_covers_complete_project_workflow() -> None:
         "cst-session-close",
     } <= exposed
     assert public["quick-sweep"].risk == "long-running"
-    assert public["cross-process-sweep"].risk == "long-running"
 
 
 def test_solver_error_propagation_tools_are_agent_exposed() -> None:

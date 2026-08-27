@@ -5,7 +5,7 @@
 
 ## 使用说明
 
-- 当前清单包含 `138` 个 `exposure=agent` 工具。
+- 当前清单包含 `137` 个 `exposure=agent` 工具。
 - 已有工具说明按 Registry 原文保留；英文原文无需在本阶段自行翻译。
 - 所有待补充内容请使用简体中文，尽量写事实、边界和可观察结果，不写宣传性表述。
 - 普通 CST/VBA 写入在接口返回成功后应充分信任，不要求重复执行前检查或执行后读回；导出文件、异步求解和错误状态不明确等必要操作除外。
@@ -45,7 +45,7 @@
 | `run` | 任务与运行目录 | 2 |
 | `session_manager` | CST 会话管理 | 6 |
 | `simulation` | 仿真工作流 | 1 |
-| `workflow` | 复合工作流 | 3 |
+| `workflow` | 复合工作流 | 2 |
 | `workspace` | Runtime 工作区 | 3 |
 
 ## 审计记录（`audit`，3 个）
@@ -3912,7 +3912,7 @@
 - 其他备注：[待填写]
 
 
-## 复合工作流（`workflow`，3 个）
+## 复合工作流（`workflow`，2 个）
 
 ### `build-array`
 
@@ -3926,35 +3926,6 @@
 - 已有参数说明：无
 - 尚缺参数说明：`project_path`、`units`、`elements`、`summary`
 - 当前声明的业务输出字段：`project_path`、`groups_built`、`instances_created`、`reference_objects`
-
-**待补充信息（请使用中文）**
-
-- 中文标题：[待填写]
-- 用户目标：[待填写]
-- 何时使用：[待填写]
-- 不要用于／与相似工具的区别：[待填写]
-- 前置条件：[待填写]
-- 副作用：[待填写]
-- 成功后的重试规则：[待填写]
-- 关联工具（前一步／替代／后一步）：[待填写]
-- 成功返回摘要：[待填写]
-- 失败处理：[待填写]
-- 参数补充（仅写需要增加或修正的参数说明）：[待填写]
-- 检索关键词：[待填写]
-- 其他备注：[待填写]
-
-### `cross-process-sweep`
-
-**已有信息**
-
-- 当前分类：`workflow`（复合工作流）
-- 当前风险：`long-running`（长时间运行）
-- 当前说明（Registry 原文）：运行十字形单元的双极化参数扫描。
-- 必填参数：`project_path`、`lx_range`、`ly1_range`、`target_freq_ghz`
-- 可选参数：`output_dir`、`continue_on_error`、`restore_parameters`
-- 已有参数说明：无
-- 尚缺参数说明：`project_path`、`lx_range`、`ly1_range`、`target_freq_ghz`、`output_dir`、`continue_on_error`、`restore_parameters`
-- 当前声明的业务输出字段：`output_dir`、`sweep_time`、`total_steps`、`successful_steps`、`failed_steps`、`records`、`exported_files`、`errors`
 
 **待补充信息（请使用中文）**
 

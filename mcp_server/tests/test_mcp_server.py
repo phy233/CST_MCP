@@ -28,7 +28,7 @@ def test_proxy_reads_runtime_owned_manifest() -> None:
         tools = proxy.describe_tools()
         names = {tool["name"] for tool in tools}
         assert len(tools) >= 100
-        assert {"build-array", "quick-sweep", "cross-process-sweep"} <= names
+        assert {"build-array", "quick-sweep"} <= names
         assert "add-to-history" not in names
         assert "activate-post-process" not in names
         assert all(tool["input_schema"]["type"] == "object" for tool in tools)

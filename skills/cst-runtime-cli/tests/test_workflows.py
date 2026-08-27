@@ -222,41 +222,6 @@ def test_sweep_result_failure_is_not_counted_as_success(monkeypatch, tmp_path) -
     assert pd.isna(result.lut.iloc[0]["S1,1_mag"])
 
 
-def test_cross_process_reuses_sweep(monkeypatch, tmp_path) -> None:
-    from cst_runtime.workflows import cross_process
-    from cst_runtime.workflows.sweep import SweepResult
-
-    class FakeSweep:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-        def run(self, output_dir=None):
-            csv_path = Path(output_dir) / "lut.csv"
-            npz_path = Path(output_dir) / "lut.npz"
-            return SweepResult(
-                lut=pd.DataFrame(
-                    [{"SZmax(1),Zmax(1)_mag_db": -1.0, "lx": 3.0, "ly1": 4.0}]
-                ),
-                output_dir=Path(output_dir),
-                sweep_time=0.1,
-                total_steps=1,
-                successful_steps=1,
-                failed_steps=0,
-                exported_files=[csv_path, npz_path],
-            )
-
-    monkeypatch.setattr(cross_process, "ParameterSweep", FakeSweep)
-    result = cross_process.quick_cross_sweep(
-        "model.cst",
-        lx_range=[3.0],
-        ly1_range=[4.0],
-        target_freq_ghz=8.0,
-        output_dir=tmp_path,
-    )
-    assert "Y_pol_mag_db" in result.lut.columns
-    assert "Y_pol_mag_db" in pd.read_csv(tmp_path / "lut.csv").columns
-
-
 def test_array_api_matches_python_result(monkeypatch) -> None:
     from cst_runtime.api import invoke
     from cst_runtime.workflows import array
@@ -288,6 +253,6 @@ def test_api_manifest_contains_workflows() -> None:
     from cst_runtime.api import describe_operations, describe_tools
 
     names = {operation["name"] for operation in describe_operations()}
-    assert {"array.build", "sweep.run", "cross_process.run"} <= names
+    assert {"array.build", "sweep.run"} <= names
     tool_names = {tool["name"] for tool in describe_tools()}
-    assert {"build-array", "quick-sweep", "cross-process-sweep"} <= tool_names
+    assert {"build-array", "quick-sweep"} <= tool_names
