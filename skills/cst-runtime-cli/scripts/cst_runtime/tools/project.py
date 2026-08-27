@@ -7,7 +7,11 @@ TOOL_DEFS = {
 "change-parameter": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Change one CST parameter in the verified working project.",
+    "description": (
+        "Use this to change one known CST parameter to a numeric value or an expression that "
+        "evaluates to a number. Use define-parameters for a batch definition and "
+        "prepare-experiment when the parameter change must be saved and the project closed."
+    ),
     "handler": "tool_change_parameter",
     "json_schema": {
         "type": "object",
@@ -42,7 +46,11 @@ TOOL_DEFS = {
 "change-solver-type": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Change the CST solver type.",
+    "description": (
+        "Use this to explicitly select the current CST solver before calling solver-specific "
+        "configuration tools. It does not configure solver settings, boundaries, ports, sources, "
+        "or monitors; do not mix time-domain and frequency-domain configuration afterward."
+    ),
     "handler": "tool_change_solver_type",
     "json_schema": {
         "type": "object",
@@ -72,10 +80,9 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "设置背景类型与材料参数（Normal 时显式写出 ε/μ，默认 1.0/1.0 等价 Vacuum）。"
-        "CST 2022 手册的 Background 对象无读取接口，因此返回 requested 值与 "
-        "farfield_compatible 判定（基于请求值），并把状态登记为运行时跟踪，供 "
-        "get-background 返回；无法读回 GUI 中的修改。"
+        "Use this to set the calculation-domain background as Normal or PEC, with explicit "
+        "relative epsilon and mu for Normal; 1.0/1.0 is Vacuum and farfield-compatible. CST 2022 "
+        "has no Background getter, so returned and later get-background values are Runtime-tracked."
     ),
     "handler": "tool_define_background",
     "json_schema": {
@@ -89,19 +96,19 @@ TOOL_DEFS = {
                 "type": "string",
                 "enum": ["Normal", "PEC"],
                 "default": "Normal",
-                "description": "背景类型：Normal（非导电背景）或 PEC（理想电导体）。",
+                "description": "Background type: Normal dielectric/magnetic medium or perfect electric conductor (PEC).",
                 "examples": ["Normal", "PEC"]
             },
             "epsilon": {
                 "type": "number",
                 "default": 1.0,
-                "description": "背景相对介电常数；远场监视器要求 1.0（Vacuum）。",
+                "description": "Relative permittivity of a Normal background; farfield monitors require 1.0 (Vacuum).",
                 "examples": [1.0]
             },
             "mu": {
                 "type": "number",
                 "default": 1.0,
-                "description": "背景相对磁导率；远场监视器要求 1.0（Vacuum）。",
+                "description": "Relative permeability of a Normal background; farfield monitors require 1.0 (Vacuum).",
                 "examples": [1.0]
             }
         },
@@ -113,10 +120,9 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "read",
     "description": (
-        "返回本会话运行时跟踪的背景状态（source=runtime_tracked）与 farfield_compatible "
-        "判定（远场监视器要求 Normal 且 ε=1、μ=1）。CST 2022 手册的 Background 对象"
-        "未提供任何读取接口，本工具不调用未文档化的属性读取；没有跟踪状态时返回 "
-        "background_state_unknown，需先调用 define-background 显式设置背景。"
+        "Use this only when the Runtime-tracked background request is needed for planning or "
+        "diagnosis. It cannot read GUI changes because CST 2022 exposes no Background getter; "
+        "background_state_unknown means define-background has not tracked a value in this session."
     ),
     "handler": "tool_get_background",
     "json_schema": {
@@ -135,8 +141,9 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "设置全部面的通用边界和对称性；该工具不等价于完整的 Unit Cell 或 "
-        "Floquet 配置。高级周期边界需求应由用户在 CST 图形界面中手动完成。"
+        "Use this to set ordinary six-face calculation-domain boundary types and symmetry before "
+        "simulation. It is not a complete periodic Unit Cell or Floquet setup; use "
+        "define-unit-cell-boundary with define-floquet-port for an infinite periodic unit cell."
     ),
     "handler": "tool_define_boundary",
     "json_schema": {
@@ -166,7 +173,11 @@ TOOL_DEFS = {
 "define-frequency-range": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Set the simulation frequency range.",
+    "description": (
+        "Use this to set the simulation start and end frequencies after the project frequency "
+        "unit and solver choice are known. It does not configure the solver's sweep or adaptive "
+        "settings."
+    ),
     "handler": "tool_define_frequency_range",
     "json_schema": {
         "type": "object",
@@ -201,7 +212,10 @@ TOOL_DEFS = {
 "define-mesh": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Configure the hexahedral mesh parameters.",
+    "description": (
+        "Use this to set the hexahedral mesh steps per wavelength and per box for a compatible "
+        "solver and mesh method. It does not select the solver or frequency-domain mesh method."
+    ),
     "handler": "tool_define_mesh",
     "json_schema": {
         "type": "object",
@@ -250,7 +264,11 @@ TOOL_DEFS = {
 "define-parameters": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Batch-define multiple CST parameters using StoreParameters.",
+    "description": (
+        "Use this to create or overwrite multiple CST parameters in one StoreParameters call "
+        "when names and values are already user-defined and aligned. Use change-parameter for "
+        "one existing parameter."
+    ),
     "handler": "tool_define_parameters",
     "json_schema": {
         "type": "object",
@@ -300,8 +318,9 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "Define an internal axis-aligned waveguide port from global X/Y/Z ranges. "
-        "Collapse the normal-axis range to the port plane; *min radiates +axis and *max radiates -axis."
+        "Use this to define an internal axis-aligned waveguide port from explicit global X/Y/Z "
+        "ranges. Collapse the normal-axis range to the port plane; *min orientations radiate "
+        "toward +axis and *max orientations radiate toward -axis."
     ),
     "handler": "tool_define_port",
     "json_schema": {
@@ -386,7 +405,10 @@ TOOL_DEFS = {
 "define-solver": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Configure the time-domain solver settings.",
+    "description": (
+        "Use this to configure Solver Object settings only when the current solver is HF Time "
+        "Domain. It does not switch solver type or configure the frequency-domain FDSolver."
+    ),
     "handler": "tool_define_solver",
     "json_schema": {
         "type": "object",
@@ -416,7 +438,11 @@ TOOL_DEFS = {
 "infer-run-dir": {
     "category": "project_identity",
     "risk": "read",
-    "description": "Infer run_dir from a projects/working.cst project path.",
+    "description": (
+        "Use this to derive the Runtime run directory from a project path that follows the "
+        "runs/<run_id>/projects/working.cst layout. It does not open CST or validate simulation "
+        "results."
+    ),
     "handler": "tool_infer_run_dir",
     "json_schema": {
         "type": "object",
@@ -437,7 +463,11 @@ TOOL_DEFS = {
 "inspect-project": {
     "category": "project_ops",
     "risk": "read",
-    "description": "Open a CST project, list all parameters and entities, then close. Returns parameter names/values and entity names.",
+    "description": (
+        "Use this on demand to open one CST project, list its parameters and geometry entities, "
+        "and close it. It is a broad inspection tool, not a mandatory pre-check before ordinary "
+        "modeling or configuration calls."
+    ),
     "handler": "tool_inspect_project",
     "json_schema": {
         "type": "object",
@@ -458,7 +488,11 @@ TOOL_DEFS = {
 "is-simulation-running": {
     "category": "project_ops",
     "risk": "read",
-    "description": "Check whether the CST solver is currently running for the verified working project.",
+    "description": (
+        "Use this to read whether the solver is currently running for the verified working "
+        "project, typically after an asynchronous start. running=false means only that the "
+        "solver is stopped, not that it completed successfully."
+    ),
     "handler": "tool_is_simulation_running",
     "json_schema": {
         "type": "object",
@@ -479,7 +513,11 @@ TOOL_DEFS = {
 "list-open-projects": {
     "category": "project_identity",
     "risk": "read",
-    "description": "List CST projects visible through DesignEnvironment.connect_to_any().",
+    "description": (
+        "Use this to list CST projects visible to DesignEnvironment when project identity or "
+        "session ownership is unclear. Use cst-session-inspect for the broader process, lock, "
+        "and reattach-readiness view."
+    ),
     "handler": "tool_list_open_projects",
     "json_schema": {
         "type": "object",
@@ -491,7 +529,11 @@ TOOL_DEFS = {
 "list-parameters": {
     "category": "project_ops",
     "risk": "read",
-    "description": "List parameters from the verified CST working project.",
+    "description": (
+        "Use this to obtain exact CST parameter names and current values when they are unknown "
+        "before change-parameter, define-parameters, or an experiment. It is not a routine "
+        "verification call after a successful parameter write."
+    ),
     "handler": "tool_list_parameters",
     "json_schema": {
         "type": "object",
@@ -512,7 +554,11 @@ TOOL_DEFS = {
 "pause-simulation": {
     "category": "project_ops",
     "risk": "session",
-    "description": "Pause the currently running CST solver.",
+    "description": (
+        "Use this only to pause a solver that is currently running. Continue it with "
+        "resume-simulation or terminate it with stop-simulation; do not call start-simulation "
+        "again as a substitute for resume."
+    ),
     "handler": "tool_pause_simulation",
     "json_schema": {
         "type": "object",
@@ -533,7 +579,11 @@ TOOL_DEFS = {
 "prepare-experiment": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Open a CST project, change one or more parameters, confirm, then save and close. Supports batch via names+values arrays. Use before run-experiment.",
+    "description": (
+        "Use this to apply one or more already selected parameter values, then save and close the "
+        "project before run-experiment. It does not run the solver; names and values must remain "
+        "aligned for a batch update."
+    ),
     "handler": "tool_prepare_experiment",
     "json_schema": {
         "type": "object",
@@ -594,7 +644,10 @@ TOOL_DEFS = {
 "resume-simulation": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Resume a paused CST solver.",
+    "description": (
+        "Use this only to resume a solver that was paused with pause-simulation. It is not a "
+        "general simulation start tool and must not be used when no paused solve exists."
+    ),
     "handler": "tool_resume_simulation",
     "json_schema": {
         "type": "object",
@@ -615,7 +668,11 @@ TOOL_DEFS = {
 "set-fdsolver-extrude-open-bc": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Enable or disable FD solver extruded open boundary.",
+    "description": (
+        "Use this to enable or disable FDSolver.ExtrudeOpenBC only when the current solver is HF "
+        "Frequency Domain and open boundaries are configured. It does not switch solver type or "
+        "replace define-boundary."
+    ),
     "handler": "tool_set_fdsolver_extrude_open_bc",
     "json_schema": {
         "type": "object",
@@ -637,8 +694,9 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "依据本机 CST 2022 FDSolver.Stimulation 手册设置激励，不会隐式执行 "
-        "FDSolver.Reset。该工具可由 MCP Agent 调用，但暴露状态不代表已完成 CST 2022 实机验收。"
+        "Use this to set FDSolver.Stimulation for an existing port or Floquet mode only when the "
+        "current solver is HF Frequency Domain. It neither switches solver type nor calls "
+        "FDSolver.Reset, and it does not create the referenced excitation."
     ),
     "handler": "tool_define_fdsolver_stimulation",
     "json_schema": {
@@ -651,7 +709,7 @@ TOOL_DEFS = {
                 ]
             },
             "port": {
-                "description": "正整数端口号或 CST 2022 手册允许的激励枚举。",
+                "description": "Positive port number or an excitation selector documented by CST 2022.",
                 "type": ["integer", "string"],
                 "anyOf": [
                     {"type": "integer", "minimum": 1},
@@ -663,7 +721,7 @@ TOOL_DEFS = {
                 "examples": [1]
             },
             "mode": {
-                "description": "正整数模式号或 CST 2022 手册允许的激励枚举。",
+                "description": "Positive mode number or an excitation selector documented by CST 2022.",
                 "type": ["integer", "string"],
                 "anyOf": [
                     {"type": "integer", "minimum": 1},
@@ -682,7 +740,11 @@ TOOL_DEFS = {
 "set-mesh-fpbavoid-nonreg-unite": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Enable or disable mesh FPBA non-regular unite avoidance.",
+    "description": (
+        "Use this to enable or disable FPBA non-regular-unite avoidance only for a compatible "
+        "solver and mesh method when the user explicitly needs that option. It is not a general "
+        "mesh configuration tool."
+    ),
     "handler": "tool_set_mesh_fpbavoid_nonreg_unite",
     "json_schema": {
         "type": "object",
@@ -703,7 +765,11 @@ TOOL_DEFS = {
 "set-mesh-minimum-step-number": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Set the minimum mesh step number.",
+    "description": (
+        "Use this to set the minimum mesh-step count for a compatible solver and mesh method "
+        "after the main mesh settings are known. It does not define the global hexahedral mesh "
+        "parameters."
+    ),
     "handler": "tool_set_mesh_minimum_step_number",
     "json_schema": {
         "type": "object",
@@ -731,7 +797,11 @@ TOOL_DEFS = {
 "set-solver-acceleration": {
     "category": "project_ops",
     "risk": "write",
-    "description": "Configure solver parallelization and hardware acceleration.",
+    "description": (
+        "Use this to configure Solver Object parallelization, thread count, MPI, or hardware "
+        "acceleration only when the current solver is HF Time Domain. It is not a cross-solver "
+        "resource configuration tool."
+    ),
     "handler": "tool_set_solver_acceleration",
     "json_schema": {
         "type": "object",
@@ -767,9 +837,9 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "long-running",
     "description": (
-        "同步运行 CST 求解器并阻塞到结束；仅当 CST 的 run_solver 返回 True 才报告 "
-        "success。失败时返回 solver_run_failed，并附本次求解写入 Result 日志的 "
-        "CST 原始报错文本。"
+        "Use this to run the explicitly selected and fully configured CST solver synchronously "
+        "until run_solver returns. It reports success only for run_solver=True; unlike "
+        "run-experiment, it does not require or validate new result-node data."
     ),
     "handler": "tool_start_simulation",
     "json_schema": {
@@ -791,7 +861,11 @@ TOOL_DEFS = {
 "start-simulation-async": {
     "category": "project_ops",
     "risk": "long-running",
-    "description": "异步启动 CST 求解器；返回成功只表示启动调用完成，不代表求解成功。",
+    "description": (
+        "Use this to start an explicitly selected and fully configured CST solver asynchronously "
+        "when the caller must return immediately. A successful response means only that the start "
+        "call completed; use wait-simulation and result or log evidence for completion."
+    ),
     "handler": "tool_start_simulation_async",
     "json_schema": {
         "type": "object",
@@ -812,7 +886,11 @@ TOOL_DEFS = {
 "stop-simulation": {
     "category": "project_ops",
     "risk": "session",
-    "description": "Stop the currently running CST solver.",
+    "description": (
+        "Use this only to stop a solver that is currently running or paused. Follow with "
+        "wait-simulation when the caller must know that execution has stopped; stopping does not "
+        "mean the solve succeeded."
+    ),
     "handler": "tool_stop_simulation",
     "json_schema": {
         "type": "object",
@@ -833,7 +911,11 @@ TOOL_DEFS = {
 "verify-project-identity": {
     "category": "project_identity",
     "risk": "read",
-    "description": "Verify the expected project is the sole open CST project before writes.",
+    "description": (
+        "Use this safety check when CST project identity or session ownership is ambiguous before "
+        "a write. It verifies that the expected project is the sole open project; it is not a "
+        "routine pre- or post-check for every successful CST operation."
+    ),
     "handler": "tool_verify_project_identity",
     "json_schema": {
         "type": "object",
@@ -854,7 +936,11 @@ TOOL_DEFS = {
 "wait-project-unlocked": {
     "category": "project_identity",
     "risk": "read",
-    "description": "Wait for a project companion directory to have no .lok files.",
+    "description": (
+        "Use this when a file-level operation requires the CST project companion directory to be "
+        "unlocked, such as after closing before copying. It waits for .lok files to disappear and "
+        "does not verify modeling or solver success."
+    ),
     "handler": "tool_wait_project_unlocked",
     "json_schema": {
         "type": "object",
@@ -889,7 +975,11 @@ TOOL_DEFS = {
 "wait-simulation": {
     "category": "project_ops",
     "risk": "long-running",
-    "description": "轮询直到求解器不再运行或超时；running=false 只表示停止，不能证明求解成功。",
+    "description": (
+        "Use this after start-simulation-async to poll until the solver stops or the timeout "
+        "expires. running=false proves only that execution stopped; use logs or required result "
+        "nodes to determine whether the solve succeeded."
+    ),
     "handler": "tool_wait_simulation",
     "json_schema": {
         "type": "object",
@@ -924,7 +1014,11 @@ TOOL_DEFS = {
 "capture-3d-view": {
     "category": "project_ops",
     "risk": "filesystem-write",
-    "description": "Export the current 3D sheet to PNG. Use a CST reserved view or relative horizontal/vertical rotations from Front.",
+    "description": (
+        "Use this to save the current 3D model sheet as PNG from a documented CST preset or a "
+        "Front-relative custom rotation. Use inspect-model-view when the Agent needs the PNG "
+        "returned as base64 for visual inspection."
+    ),
     "handler": "tool_capture_3d_view",
     "json_schema": {
         "type": "object",
@@ -982,7 +1076,11 @@ TOOL_DEFS = {
 "inspect-model-view": {
     "category": "project_ops",
     "risk": "filesystem-write",
-    "description": "Export a documented preset or Front-relative 3D view and return the PNG as base64.",
+    "description": (
+        "Use this when the Agent must visually inspect a documented preset or Front-relative 3D "
+        "model view; it writes a PNG and returns its base64 data. Use capture-3d-view when only a "
+        "saved screenshot is needed."
+    ),
     "handler": "tool_inspect_model_view",
     "json_schema": {
         "type": "object",

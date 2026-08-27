@@ -8,7 +8,7 @@ from ..lib import em_setup as _em
 
 _PROJECT = {
     "type": "string",
-    "description": "CST 工程绝对路径。",
+    "description": "Absolute path to one specific CST project file.",
     "examples": [r"C:\path\to\working.cst"],
 }
 _MODE = {
@@ -45,7 +45,7 @@ _EXCITATION_ITEM = {
 _EXCITATION = {
     "type": "object",
     "additionalProperties": False,
-    "description": "激励策略。single 使用整数 port/mode；list 使用 items。",
+    "description": "Excitation strategy: single uses integer port and mode; list uses items.",
     "properties": {
         "strategy": {
             "type": "string",
@@ -63,7 +63,11 @@ TOOL_DEFS = {
     "define-unit-cell-boundary": {
         "category": "project_ops",
         "risk": "filesystem-write",
-        "description": "按 CST 2022 手册配置六面边界和 Unit Cell 扫描角；先校验 X/Y 配对，执行后再通过 getter 读回。",
+        "description": (
+            "Use this for an infinite periodic unit cell to configure paired X/Y Unit Cell "
+            "boundaries, open Z faces, and scan angles. Use define-boundary for ordinary "
+            "non-periodic boundaries and pair this tool with define-floquet-port."
+        ),
         "handler": "tool_define_unit_cell_boundary",
         "json_schema": {
             "type": "object",
@@ -85,14 +89,22 @@ TOOL_DEFS = {
     "inspect-boundary": {
         "category": "project_ops",
         "risk": "read",
-        "description": "使用 Boundary 六面 getter 和 GetUnitCellScanAngle 读取实际边界状态。",
+        "description": (
+            "Use this on demand to read the actual six boundary faces and Unit Cell scan angles "
+            "through documented getters. It is not a mandatory check before or after each "
+            "boundary write."
+        ),
         "handler": "tool_inspect_boundary",
         "json_schema": {"type": "object", "properties": {"project_path": _PROJECT}, "required": ["project_path"]},
     },
     "define-floquet-port": {
         "category": "project_ops",
         "risk": "filesystem-write",
-        "description": "配置 Zmin/Zmax Floquet 端口、显式或自动模式、参考面、极化基础和排序。仅公开 getter 可读字段会被验收。",
+        "description": (
+            "Use this for an infinite periodic unit cell to configure Zmin/Zmax Floquet ports, "
+            "explicit or automatic modes, polarization basis, sorting, and reference planes. "
+            "Reference-plane distances affect S-parameter phase and must be user-selected."
+        ),
         "handler": "tool_define_floquet_port",
         "json_schema": {
             "type": "object",
@@ -113,14 +125,22 @@ TOOL_DEFS = {
     "inspect-floquet-ports": {
         "category": "project_ops",
         "risk": "read",
-        "description": "读取 Floquet 端口位置、模式序号/名称、模式列表及考虑模式数；不伪造无 getter 字段。",
+        "description": (
+            "Use this on demand to read documented Floquet-port fields, including position, "
+            "mode numbers or names, mode lists, and considered-mode counts. Fields without CST "
+            "getters are not fabricated."
+        ),
         "handler": "tool_inspect_floquet_ports",
         "json_schema": {"type": "object", "properties": {"project_path": _PROJECT}, "required": ["project_path"]},
     },
     "define-plane-wave": {
         "category": "project_ops",
         "risk": "filesystem-write",
-        "description": "创建真实 PlaneWave 源。普通平面波不产生 S 参数；无限周期单元应使用 Unit Cell 与 Floquet。",
+        "description": (
+            "Use this to create a PlaneWave source for an open-boundary finite or scattering "
+            "problem. A plain plane wave does not produce port S-parameters; use Unit Cell "
+            "boundaries plus Floquet ports for an infinite periodic unit cell."
+        ),
         "handler": "tool_define_plane_wave",
         "json_schema": {
             "type": "object",
@@ -140,14 +160,22 @@ TOOL_DEFS = {
     "inspect-plane-wave": {
         "category": "project_ops",
         "risk": "read",
-        "description": "使用 PlaneWave 公开 getter 读取传播向量、电场向量和极化参数。",
+        "description": (
+            "Use this on demand to read the PlaneWave propagation vector, electric-field vector, "
+            "and documented polarization settings. It is not a routine verification step after "
+            "define-plane-wave succeeds."
+        ),
         "handler": "tool_inspect_plane_wave",
         "json_schema": {"type": "object", "properties": {"project_path": _PROJECT}, "required": ["project_path"]},
     },
     "configure-frequency-domain-solver": {
         "category": "project_ops",
         "risk": "filesystem-write",
-        "description": "仅切换 HF Frequency Domain、设置 mesh_method 和激励；不会生成 FDSolver.Reset，也不改精度、扫频或自适应设置。",
+        "description": (
+            "Use this to switch to HF Frequency Domain and set only the frequency-domain mesh "
+            "method and excitation. It does not call FDSolver.Reset or change accuracy, sweep, "
+            "or adaptive settings; referenced ports or sources must already exist."
+        ),
         "handler": "tool_configure_frequency_domain_solver",
         "json_schema": {
             "type": "object",
@@ -162,7 +190,11 @@ TOOL_DEFS = {
     "list-monitors": {
         "category": "project_ops",
         "risk": "read",
-        "description": "使用 Monitor 公开 getter 返回名称、类型、域和频率；与结果树扫描工具并存。",
+        "description": (
+            "Use this on demand to list configured Monitor objects with documented name, type, "
+            "domain, and frequency fields. Unlike inspect-farfield-monitors, it does not scan "
+            "saved result-tree nodes or prove that results exist."
+        ),
         "handler": "tool_list_monitors",
         "json_schema": {"type": "object", "properties": {"project_path": _PROJECT}, "required": ["project_path"]},
     },
