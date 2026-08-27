@@ -78,8 +78,60 @@ def _normalize_result_path(path: str) -> str:
     return str(path).strip().replace("/", "\\").casefold()
 
 
+# result_metrics 内联复数序列的最大采样点数；超过后均匀降采样并保留原点数。
+_MAX_METRIC_SERIES_POINTS = 5000
+
+
+def _parse_complex_sample(value: Any) -> tuple[float, float] | None:
+    """把 inspect_1d_result 序列化后的单点解析为 (real, imag)。"""
+    if isinstance(value, dict) and "real" in value and "imag" in value:
+        return float(value["real"]), float(value["imag"])
+    if isinstance(value, dict) and "abs" in value and "deg" in value:
+        magnitude = float(value["abs"])
+        angle_rad = math.radians(float(value["deg"]))
+        return (
+            magnitude * math.cos(angle_rad),
+            magnitude * math.sin(angle_rad),
+        )
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value), 0.0
+    return None
+
+
+def _serialize_metric_series(
+    xdata: list[Any],
+    ydata: list[Any],
+) -> tuple[list[float], list[dict[str, float]], bool] | None:
+    """整理为 (频率数组, 复数点数组, 是否降采样)；无法解析时返回 None。
+
+    频率与复数点一一对应；超过 _MAX_METRIC_SERIES_POINTS 时按等步长降采样，
+    min_db/best_freq 等摘要仍基于完整原始数据计算。
+    """
+    freqs: list[float] = []
+    points: list[dict[str, float]] = []
+    for freq_value, value in zip(xdata, ydata):
+        parsed = _parse_complex_sample(value)
+        if parsed is None:
+            return None
+        try:
+            freqs.append(float(freq_value))
+        except (TypeError, ValueError):
+            return None
+        points.append({"real": parsed[0], "imag": parsed[1]})
+    if not freqs:
+        return None
+    step = max(1, math.ceil(len(freqs) / _MAX_METRIC_SERIES_POINTS))
+    downsampled = step > 1
+    indices = range(0, len(freqs), step)
+    return (
+        [freqs[i] for i in indices],
+        [points[i] for i in indices],
+        downsampled,
+    )
+
+
 def _metric_from_result(result: dict[str, Any]) -> dict[str, Any]:
-    """从已验证的 0D/1D 数据生成不绑定物理模型的摘要。"""
+    """从已验证的 0D/1D 数据生成摘要，并保留供目标函数使用的复数序列。"""
     metric: dict[str, Any] = {
         "result_path": result.get("result_path"),
         "run_id": result.get("run_id"),
@@ -91,18 +143,24 @@ def _metric_from_result(result: dict[str, Any]) -> dict[str, Any]:
         return metric
     db_values: list[float] = []
     for value in ydata:
-        if isinstance(value, dict) and "real" in value and "imag" in value:
-            magnitude = math.hypot(float(value["real"]), float(value["imag"]))
-        elif isinstance(value, (int, float)):
-            magnitude = abs(float(value))
-        else:
+        parsed = _parse_complex_sample(value)
+        if parsed is None:
             return metric
+        magnitude = math.hypot(parsed[0], parsed[1])
         db_values.append(safe_log_db(magnitude))
     minimum_index = db_values.index(min(db_values))
     metric["min_db"] = db_values[minimum_index]
     metric["best_freq"] = (
         xdata[minimum_index] if minimum_index < len(xdata) else None
     )
+    series = _serialize_metric_series(xdata, ydata)
+    if series is not None:
+        series_freqs, series_points, downsampled = series
+        metric["xdata"] = series_freqs
+        metric["ydata"] = series_points
+        if downsampled:
+            metric["downsampled"] = True
+            metric["source_point_count"] = len(db_values)
     return metric
 
 
