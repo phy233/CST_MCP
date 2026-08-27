@@ -19,96 +19,84 @@ _register_tool_defs({
         "description": "Create or load an Optuna optimization study. Supports single-objective, multi-objective (directions), and constraint-enabled studies.",
         "handler": "tool_create_study",
         "json_schema": {
-        "type": "object",
-        "properties": {
-            "storage_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\studies\\optimization.db"
-                ]
-            },
-            "study_name": {
-                "type": "string",
-                "examples": [
-                    "horn_matching"
-                ]
-            },
-            "parameters": {
-                "type": ["string", "object"],
-                "examples": [
-                    "{\"R\": {\"type\": \"float\", \"min\": 0.1, \"max\": 0.5}}"
-                ]
-            },
-            "direction": {
-                "type": "string",
-                "examples": [
-                    "minimize"
-                ]
-            },
-            "directions": {
-                "type": "array",
-                "items": {
-                    "type": "string"
-                },
-                "examples": [
-                    [
-                        "minimize",
-                        "maximize"
+            "type": "object",
+            "properties": {
+                "storage_path": {
+                    "type": "string",
+                    "examples": [
+                        "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\studies\\optimization.db"
                     ]
-                ]
-            },
-            "value_names": {
-                "type": "array",
-                "items": {
-                    "type": "string"
                 },
-                "examples": [
-                    [
-                        "S11_dB",
-                        "Gain_dBi"
+                "study_name": {
+                    "type": "string",
+                    "examples": [
+                        "horn_matching"
                     ]
-                ]
-            },
-            "constraints": {
-                "type": "array",
-                "items": {
-                    "type": "object"
                 },
-                "examples": [
-                    [
+                "parameters": {
+                    "type": ["object", "string"],
+                    "description": (
+                        "参数定义，JSON 对象或 JSON 字符串；例如 "
+                        "{\"R\": {\"type\": \"float\", \"min\": 0.1, \"max\": 0.5}}。"
+                        "type 支持 float/int/categorical。"
+                    ),
+                    "examples": [
                         {
-                            "name": "VSWR",
-                            "operator": "<=",
-                            "threshold": 2.0
+                            "R": {"type": "float", "min": 0.1, "max": 0.5},
+                            "g": {"type": "float", "min": 20, "max": 30}
                         }
                     ]
-                ]
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": ["minimize", "maximize"],
+                    "default": "minimize",
+                    "description": "单目标优化方向；与 directions 二选一。"
+                },
+                "directions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["minimize", "maximize"]
+                    },
+                    "minItems": 1,
+                    "default": [],
+                    "description": "多目标方向数组（长度即目标数）；与 direction 二选一。"
+                },
+                "value_names": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "default": [],
+                    "description": "目标名称列表，便于报告阅读；多目标时建议提供。"
+                },
+                "constraints": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "default": [],
+                    "description": "约束定义对象数组，每个含 name/operator/threshold。",
+                    "examples": [
+                        [
+                            {
+                                "name": "VSWR",
+                                "operator": "<=",
+                                "threshold": 2.0
+                            }
+                        ]
+                    ]
+                },
+                "sampler": {
+                    "type": "string",
+                    "enum": ["tpe", "cma-es", "random"],
+                    "default": "tpe"
+                },
+                "n_startup_trials": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 10
+                }
             },
-            "sampler": {
-                "type": "string",
-                "examples": [
-                    "tpe"
-                ]
-            },
-            "n_startup_trials": {
-                "type": "integer",
-                "examples": [
-                    10
-                ]
-            }
+            "required": ["storage_path", "study_name", "parameters"]
         },
-        "required": [
-            "storage_path",
-            "study_name",
-            "parameters",
-            "direction",
-            "directions",
-            "value_names",
-            "constraints",
-            "sampler",
-            "n_startup_trials"
-        ]
-    },
     },
     "ask-study": {
         "category": "optimization",
@@ -140,76 +128,77 @@ _register_tool_defs({
     "tell-study": {
         "category": "optimization",
         "risk": "filesystem-write",
-        "description": "Report trial result. Supports single value, multi-objective values array, and optional constraints.",
+        "description": "Report trial result. Provide exactly one of value (single-objective) or values (multi-objective); state is complete or pruned.",
         "handler": "tool_tell_study",
         "json_schema": {
-        "type": "object",
-        "properties": {
-            "storage_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\studies\\optimization.db"
-                ]
-            },
-            "study_name": {
-                "type": "string",
-                "examples": [
-                    "horn_matching"
-                ]
-            },
-            "trial_number": {
-                "type": "integer",
-                "examples": [
-                    3
-                ]
-            },
-            "value": {
-                "type": "number",
-                "examples": [
-                    -35.5
-                ]
-            },
-            "values": {
-                "type": "array",
-                "items": {
-                    "type": "number"
-                },
-                "examples": [
-                    [
-                        -35.5,
-                        12.3
+            "type": "object",
+            "properties": {
+                "storage_path": {
+                    "type": "string",
+                    "examples": [
+                        "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\studies\\optimization.db"
                     ]
-                ]
-            },
-            "constraints": {
-                "type": "array",
-                "items": {
-                    "type": "number"
                 },
-                "examples": [
-                    [
-                        -1.0,
-                        0.5
+                "study_name": {
+                    "type": "string",
+                    "examples": [
+                        "horn_matching"
                     ]
-                ]
+                },
+                "trial_number": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "ask-study 返回的 trial 编号。",
+                    "examples": [
+                        3
+                    ]
+                },
+                "value": {
+                    "type": ["number", "null"],
+                    "default": None,
+                    "description": "单目标目标值；与 values 二选一。"
+                },
+                "values": {
+                    "type": ["array", "null"],
+                    "items": {"type": "number"},
+                    "default": None,
+                    "description": "多目标目标值数组，长度须等于 study 目标数；与 value 二选一。"
+                },
+                "constraints": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "default": [],
+                    "description": "可选约束值数组；为空表示无约束。",
+                    "examples": [
+                        [
+                            -1.0,
+                            0.5
+                        ]
+                    ]
+                },
+                "state": {
+                    "type": "string",
+                    "enum": ["complete", "pruned"],
+                    "default": "complete",
+                    "description": "trial 终态：complete 计入优化，pruned 不计入 best。"
+                }
             },
-            "state": {
-                "type": "string",
-                "examples": [
-                    "complete"
-                ]
-            }
+            "required": [
+                "storage_path",
+                "study_name",
+                "trial_number"
+            ],
+            "anyOf": [
+                {
+                    "required": ["value"],
+                    "not": {"required": ["values"]}
+                },
+                {
+                    "required": ["values"],
+                    "not": {"required": ["value"]}
+                }
+            ]
         },
-        "required": [
-            "storage_path",
-            "study_name",
-            "trial_number",
-            "value",
-            "values",
-            "constraints",
-            "state"
-        ]
-    },
     },
     "best-study": {
         "category": "optimization",
@@ -349,7 +338,19 @@ _register_tool_defs({
     "run-probe-phase": {
         "category": "optimization",
         "risk": "long-running",
-        "description": "Run the complete probe phase: design Plackett-Burman probes, simulate each, analyze main effects and interactions, then inject results into an Optuna study. The working.cst is copied to working_probe.cst for isolation; exports go to exports/probe/. Returns top_params, edge_hit, and suggested_algorithm. Supports objective parameter to customize the objective function (default: s11_min_db).",
+        "description": (
+            "Run the complete probe phase: design Plackett-Burman probes, simulate each "
+            "(on a main-file-only working_probe.cst copy; companion dir is recreated by CST on first open), "
+            "analyze main effects and interactions, then inject results into an Optuna study. "
+            "Returns top_params, edge_hit, and suggested_algorithm. "
+            "Objective spec supports metasurface metrics: {\"type\": \"s11_min_db\"} | "
+            "{\"type\": \"s11_at_freq\", \"freq\": 10} | {\"type\": \"gain_max\"} | "
+            "{\"type\": \"bandwidth\", \"below_db\": -10} | "
+            "{\"type\": \"amp_at_freq\", \"result_path\": \"zmax(1)\", \"freq\": 10, \"direction\": \"maximize\"} | "
+            "{\"type\": \"phase_at_freq\", \"result_path\": \"zmax(1)\", \"freq\": 10, \"target_deg\": 90} | "
+            "{\"type\": \"expression\", \"expr\": \"abs(wrap(phase_deg('zmax(1)', 10) - 90))\"}; "
+            "expression sandbox exposes s11_db/s11_freq, amp_db(path,f), phase_deg(path,f), wrap(x), min/max/len/abs."
+        ),
         "handler": "tool_run_probe_phase",
         "json_schema": {
             "$schema": "https://json-schema.org/draft-07/schema#",
@@ -366,12 +367,11 @@ _register_tool_defs({
                     "minItems": 1,
                     "uniqueItems": True,
                     "items": {"type": "string", "minLength": 1},
-                    "description": "用于确认本次求解产生新 Run ID 且数据非空的真实 ResultTree 完整路径"
+                    "description": "用于确认本次求解产生新 Run ID 且数据非空的真实 ResultTree 完整路径；Floquet 单元常用 SZmin(1),Zmax(1)"
                 },
                 "parameters": {
                     "type": "object",
-                    "description": "Parameter ranges for DOE screening, keyed by parameter name. Each value: {min, max, type?}",
-                    "default": {"R": {"min": 0.1, "max": 0.5}, "g": {"min": 20, "max": 30}},
+                    "description": "Parameter ranges for DOE screening, keyed by parameter name. Each value: {min, max, type?}. Names must exist in the project parameter table.",
                     "additionalProperties": {
                         "type": "object",
                         "required": ["min", "max"],
@@ -405,7 +405,11 @@ _register_tool_defs({
                 "objective": {
                     "type": "object",
                     "default": {"type": "s11_min_db"},
-                    "description": "Objective function spec. Default: {\"type\": \"s11_min_db\"}. Supports: s11_min_db, s11_at_freq, gain_max, bandwidth, expression"
+                    "description": (
+                        "Objective function spec. Types: s11_min_db | s11_at_freq{freq} | gain_max | bandwidth | "
+                        "amp_at_freq{result_path?,freq,direction?} | phase_at_freq{result_path?,freq,target_deg} | "
+                        "expression{expr}. result_path 支持归一化子串匹配（如 'zmax(1)'）。"
+                    )
                 }
             }
         }
@@ -413,7 +417,17 @@ _register_tool_defs({
     "run-optimization-step": {
         "category": "optimization",
         "risk": "long-running",
-        "description": "Run one optimization iteration: ask Optuna for next parameters, apply them, simulate, compute objective, and report back. Agent inspects the objective_value output to decide whether to stop or continue the loop.",
+        "description": (
+            "Run one optimization iteration: ask Optuna for next parameters, apply them, simulate, "
+            "compute objective, and report back. Agent inspects the objective_value output to decide "
+            "whether to stop or continue the loop. Objective spec supports metasurface metrics: "
+            "{\"type\": \"s11_min_db\"} | {\"type\": \"s11_at_freq\", \"freq\": 10} | {\"type\": \"gain_max\"} | "
+            "{\"type\": \"bandwidth\", \"below_db\": -10} | "
+            "{\"type\": \"amp_at_freq\", \"result_path\": \"zmax(1)\", \"freq\": 10, \"direction\": \"maximize\"} | "
+            "{\"type\": \"phase_at_freq\", \"result_path\": \"zmax(1)\", \"freq\": 10, \"target_deg\": 90} | "
+            "{\"type\": \"expression\", \"expr\": \"abs(wrap(phase_deg('zmax(1)', 10) - 90))\"}; "
+            "expression sandbox exposes s11_db/s11_freq, amp_db(path,f), phase_deg(path,f), wrap(x), min/max/len/abs."
+        ),
         "handler": "tool_run_optimization_step",
         "json_schema": {
             "$schema": "https://json-schema.org/draft-07/schema#",
@@ -430,7 +444,7 @@ _register_tool_defs({
                     "minItems": 1,
                     "uniqueItems": True,
                     "items": {"type": "string", "minLength": 1},
-                    "description": "用于确认本次求解产生新 Run ID 且数据非空的真实 ResultTree 完整路径"
+                    "description": "用于确认本次求解产生新 Run ID 且数据非空的真实 ResultTree 完整路径；Floquet 单元常用 SZmin(1),Zmax(1)"
                 },
                 "study_storage": {
                     "type": "string",
@@ -445,7 +459,11 @@ _register_tool_defs({
                 "objective": {
                     "type": "object",
                     "default": {"type": "s11_min_db"},
-                    "description": "Objective function spec. Default: {\"type\": \"s11_min_db\"}. Supports: s11_min_db, s11_at_freq, gain_max, bandwidth, expression"
+                    "description": (
+                        "Objective function spec. Types: s11_min_db | s11_at_freq{freq} | gain_max | bandwidth | "
+                        "amp_at_freq{result_path?,freq,direction?} | phase_at_freq{result_path?,freq,target_deg} | "
+                        "expression{expr}. result_path 支持归一化子串匹配（如 'zmax(1)'）。"
+                    )
                 },
                 "sampler": {
                     "type": "string",
@@ -459,14 +477,27 @@ _register_tool_defs({
 
 
 def tool_create_study(args: dict) -> dict:
+    from ..lib.contracts import error_result
+
+    direction = args.get("direction")
+    directions = args.get("directions") or None
+    if direction is not None and directions is not None:
+        normalized = [str(item) for item in directions]
+        if str(direction) not in normalized or len(normalized) != 1:
+            return error_result(
+                "invalid_arguments",
+                "direction 与 directions 同时提供且不一致；单目标请只提供其一",
+            )
+    if direction is None and directions is None:
+        direction = "minimize"
     return _opt.create_study(
         storage_path=str(args.get("storage_path", "")),
         study_name=str(args.get("study_name", "")),
         parameters=args.get("parameters", "{}"),
-        direction=str(args.get("direction", "minimize")),
-        directions=args.get("directions"),
-        value_names=args.get("value_names"),
-        constraints=args.get("constraints"),
+        direction=str(direction or "minimize"),
+        directions=list(directions) if directions else None,
+        value_names=(args.get("value_names") or None),
+        constraints=(args.get("constraints") or None),
         sampler=str(args.get("sampler", "tpe")),
         n_startup_trials=int(args.get("n_startup_trials", 10)),
     )
@@ -480,14 +511,32 @@ def tool_ask_study(args: dict) -> dict:
 
 
 def tool_tell_study(args: dict) -> dict:
+    from ..lib.contracts import error_result
+
+    value = args.get("value")
+    values = args.get("values")
+    if (value is None) == (values is None):
+        return error_result(
+            "invalid_arguments",
+            "value 与 values 必须二选一：单目标传 value，多目标传 values",
+        )
+    constraints = args.get("constraints")
+    if isinstance(constraints, list) and not constraints:
+        constraints = None
+    state = str(args.get("state") or "complete")
+    if state not in {"complete", "pruned"}:
+        return error_result(
+            "invalid_arguments",
+            f"state 仅支持 complete/pruned，收到: {state}",
+        )
     return _opt.tell_study(
         storage_path=str(args.get("storage_path", "")),
         study_name=str(args.get("study_name", "")),
         trial_number=int(args.get("trial_number", 0)),
-        value=args.get("value"),
-        values=args.get("values"),
-        constraints=args.get("constraints"),
-        state=str(args.get("state", "complete")),
+        value=value,
+        values=list(values) if values is not None else None,
+        constraints=constraints,
+        state=state,
     )
 
 
