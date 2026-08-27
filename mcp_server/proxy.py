@@ -1,6 +1,7 @@
 """MCP 与 Python 3.9 cst_runtime worker 之间的 JSON 行传输。"""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import queue
@@ -622,7 +623,10 @@ class CSTWorkerProxy:
                 record["ended_at"] = ended_at
                 if exc.code == "worker_request_timeout":
                     # L2 兜底终止（宽限后或无宽限）：journal 必须留下
-                    # 明确的 terminated 终态与超时分类，供恢复时判读。
+                    # 明确的 terminated 终态与超时分类，供恢复时判读；
+                    # call_tool 作为生命周期收口，再次确保 worker 被回收
+                    # （幂等：request 内部已终止时此调用无副作用）。
+                    self._terminate_worker()
                     record["state"] = "terminated"
                     record["timeout_class"] = (
                         exc.context.get("timeout_class", timeout_class)
