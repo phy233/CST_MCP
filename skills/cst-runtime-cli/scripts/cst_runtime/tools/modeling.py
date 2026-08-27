@@ -381,64 +381,6 @@ TOOL_DEFS = {
     },
 },
 
-"create-horn-segment": {
-    "category": "modeling",
-    "risk": "write",
-    "description": "Create a Z-axis horn segment; Z means W when a local WCS is active.",
-    "handler": "tool_create_horn_segment",
-    "json_schema": {
-        "type": "object",
-        "properties": {
-            "project_path": {
-                "type": "string",
-                "examples": [
-                    "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
-                ]
-            },
-            "segment_id": {
-                "type": "integer",
-                "examples": [
-                    1
-                ]
-            },
-            "bottom_radius": {
-                "type": "number",
-                "examples": [
-                    8
-                ]
-            },
-            "top_radius": {
-                "type": "number",
-                "examples": [
-                    25
-                ]
-            },
-            "z_min": {
-                "type": "number",
-                "description": "Lower Z or W axis bound.",
-                "examples": [
-                    0
-                ]
-            },
-            "z_max": {
-                "type": "number",
-                "description": "Upper Z or W axis bound.",
-                "examples": [
-                    30
-                ]
-            }
-        },
-        "required": [
-            "project_path",
-            "segment_id",
-            "bottom_radius",
-            "top_radius",
-            "z_min",
-            "z_max"
-        ]
-    },
-},
-
 "create-loft-sweep": {
     "category": "modeling",
     "risk": "write",
@@ -2082,7 +2024,6 @@ def tool_define_analytical_curve(args: dict) -> dict: return _md.define_analytic
 def tool_define_extrude_curve(args: dict) -> dict: return _md.define_extrude_curve(**args)
 def tool_transform_shape(args: dict) -> dict: return _md.transform_shape(**args)
 def tool_transform_curve(args: dict) -> dict: return _md.transform_curve(**args)
-def tool_create_horn_segment(args: dict) -> dict: return _md.create_horn_segment(**args)
 def tool_create_loft_sweep(args: dict) -> dict: return _md.create_loft_sweep(**args)
 def tool_create_hollow_sweep(args: dict) -> dict: return _md.create_hollow_sweep(**args)
 def tool_pick_face(args: dict) -> dict: return _md.pick_face(**args)

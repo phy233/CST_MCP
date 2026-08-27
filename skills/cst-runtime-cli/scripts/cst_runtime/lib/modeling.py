@@ -40,7 +40,6 @@ _PUBLIC_OPERATIONS = (
     "define_extrude_curve",
     "transform_shape",
     "transform_curve",
-    "create_horn_segment",
     "create_loft_sweep",
     "create_hollow_sweep",
     "add_to_history",

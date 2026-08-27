@@ -1162,28 +1162,6 @@ def transform_curve(
     )
 
 
-def create_horn_segment(project_path: str, segment_id: int, bottom_radius: float, top_radius: float, z_min: float, z_max: float) -> dict[str, Any]:
-    normalized_project = _abs_project_path(project_path)
-    project, status = attach_expected_project(normalized_project)
-    if project is None:
-        return status
-    d = 5
-    outer = define_cone(project_path, name=str(segment_id), component="component1", material="PEC",
-                        bottom_radius=bottom_radius + d, top_radius=top_radius + d, axis="z",
-                        z_min=z_min, z_max=z_max, x_center=0, y_center=0)
-    if outer.get("status") == "error":
-        return outer
-    inner = define_cone(project_path, name=f"solid{segment_id}", component="component1", material="PEC",
-                        bottom_radius=bottom_radius, top_radius=top_radius, axis="z",
-                        z_min=z_min, z_max=z_max, x_center=0, y_center=0)
-    if inner.get("status") == "error":
-        return inner
-    remove = boolean_subtract(project_path, target=f"component1:{segment_id}", tool=f"component1:solid{segment_id}")
-    if remove.get("status") == "error":
-        return remove
-    return {"status": "success", "project_path": normalized_project, "message": f"Horn segment {segment_id} created"}
-
-
 def _profile_brick(project_path, project, component, name, material, xmin, xmax, ymin, ymax, z):
     vba = f'With Brick\n    .Reset\n    .Name "{name}"\n    .Component "{component}"\n    .Material "{material}"\n    .Xrange "{xmin}", "{xmax}"\n    .Yrange "{ymin}", "{ymax}"\n    .Zrange "{z}", "{z}"\n    .Create\nEnd With'
     return _single_vba(project_path, f"Create:{name}", vba, project=project)

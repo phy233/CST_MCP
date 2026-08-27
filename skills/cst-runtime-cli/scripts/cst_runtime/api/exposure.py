@@ -32,7 +32,6 @@ AGENT_TOOLS = frozenset(
         "create-blank-project",
         "create-component",
         "create-hollow-sweep",
-        "create-horn-segment",
         "create-loft-sweep",
         "create-mesh-group",
         "create-study",

@@ -8,7 +8,7 @@
 - OpenAI 官方：[Define tools](https://developers.openai.com/plugins/plan/tools)、[Optimize Metadata](https://developers.openai.com/plugins/guides/optimize-metadata)、[MCP server](https://developers.openai.com/plugins/concepts/mcp-server)。首稿据此记录用户目标、触发条件、相似工具区别、输入输出、副作用和失败行为。
 - CST 官方：本机 CST Studio Suite 2022 Online Help。重点页面包括 Solid、Brick、ExtrudeCurve、Loft、Transform、Monitor、Boundary、Background、FDSolver、FloquetPort、PlaneWave、ASCIIExport、TOUCHSTONE、ResultTree，以及 Python 的 cst.results 和 cst.interface。
 - 当前实现：Registry 的名称、风险、输入 Schema、输出 Schema 和现有 description。它们是代码事实，不自动等于官方手册事实或实机验收结果。
-- 当前暴露范围：Registry 共注册 147 个工具，其中 137 个为 `agent`，本稿与这 137 个逐一对应；`checkout-replay-copy`、`create-history-checkpoint`、`create-project-checkpoint`、`cst-session-quit`、`export-history-snapshot`、`health-repair`、`inspect-history-capabilities`、`inspect-history-status`、`install-cst-libraries`、`reconcile-history-operation` 共 10 个高风险工具为 `cli_only`，不进入 Agent 初始工具清单。
+- 当前暴露范围：Registry 共注册 146 个工具，其中 136 个为 `agent`，本稿与这 136 个逐一对应；`checkout-replay-copy`、`create-history-checkpoint`、`create-project-checkpoint`、`cst-session-quit`、`export-history-snapshot`、`health-repair`、`inspect-history-capabilities`、`inspect-history-status`、`install-cst-libraries`、`reconcile-history-operation` 共 10 个高风险工具为 `cli_only`，不进入 Agent 初始工具清单。
 - 首稿推断：关联流程、Agent 触发语句和失败恢复是基于上述资料的拟稿；有疑问的 CST 语义已标为“重点审核”。
 
 ### 本轮实际核对的 CST 2022 官方帮助页
@@ -28,7 +28,7 @@
 
 ## 审核方式
 
-- 建议按类别审核，不必从头连续阅读 137 个工具。
+- 建议按类别审核，不必从头连续阅读 136 个工具。
 - 每个工具的“当前 Registry”是现有代码文字；其他字段是拟写入 Registry 的中文首稿。
 - 如果一句话不符合 CST 实际使用，直接改句子或在该工具下留言即可。
 - OpenAI 官方建议准备直接提示、间接提示和负例提示；正式回填后再据此做工具发现测试。
@@ -50,7 +50,7 @@
 | `farfield` | 远场结果 | 4 |
 | `history` | CST History | 3 |
 | `interaction` | Agent 交互记录 | 4 |
-| `modeling` | 几何与建模 | 37 |
+| `modeling` | 几何与建模 | 36 |
 | `optimization` | 扫参与优化 | 11 |
 | `project_identity` | 工程身份与锁定状态 | 4 |
 | `project_ops` | 工程配置与求解控制 | 35 |
@@ -246,7 +246,7 @@
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；`run_id=0` 的含义按该接口当前说明处理；代码回填时保留现有 Schema 对 `project_path` 的限定。写入失败时保留原错误和上下文，修正明确输入后重试。
 - 当前 Registry：显式记录 Agent 或用户的阶段工作说明、关键设计决策或人工处置结论。
 
-## 几何与建模（`modeling`，37 个）
+## 几何与建模（`modeling`，36 个）
 
 > 本类主要写入 CST History。普通接口返回成功后信任 CST 已执行；布尔减法重叠、导出和方向符号等必要边界除外。
 
@@ -334,18 +334,6 @@
 - 接口摘要：当前风险 `write`；必填：`project_path`、`name`、`component`、`material`、`x_min1`、`x_max1`、`y_min1`、`y_max1`、`z1`、`x_min2`、`x_max2`、`y_min2`、`y_max2`、`z2`、`wall_thickness`；可选：无；关键返回：当前仅统一状态或错误外壳。
 - 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `x_min1`、`x_max1`、`y_min1`、`y_max1`、`z1`、`x_min2`、`x_max2`、`y_min2`、`y_max2`、`z2` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
 - 当前 Registry：Create a hollow loft between two rectangular profiles in active X/Y/Z or local U/V/W coordinates.
-
-### `create-horn-segment` — 创建喇叭分段
-
-- 建议定位：在指定 CST 工程中完成“创建喇叭分段”，作为用户建模流程中的一个明确步骤。
-- 何时使用：模型拓扑、材料、坐标或监视器需求已经由用户确定，并进入相应建模步骤时。
-- 不要用于：不替用户决定结构尺寸、材料或拓扑；坐标系和单位不明确时必须先询问。
-- 前置与副作用：必须提供 `project_path`、`segment_id`、`bottom_radius`、`top_radius`、`z_min`、`z_max`，并保证引用的工程、对象或文件真实存在；会修改指定 CST 工程的内存状态或 History；是否落盘取决于后续保存流程。
-- 成功与重试：接口未返回错误时信任 CST 已执行；成功后不要重复写入同一操作。
-- 关联流程：create-component 或 list-materials（需要时）→ 本工具 → boolean-* / transform-* / save-project。
-- 接口摘要：当前风险 `write`；必填：`project_path`、`segment_id`、`bottom_radius`、`top_radius`、`z_min`、`z_max`；可选：无；关键返回：当前仅统一状态或错误外壳。
-- 参数与失败：`project_path` 必须指向明确的 .cst 文件；几何数值必须服从工具声明的全局或活动坐标系和工程单位；代码回填时保留现有 Schema 对 `z_min`、`z_max` 的限定。接口返回错误时依据对象名、参数或 CST 原始文本修正；未返回错误则不追加常规读回检查。
-- 当前 Registry：Create a Z-axis horn segment; Z means W when a local WCS is active.
 
 ### `create-loft-sweep` — 创建矩形渐变扫掠体
 

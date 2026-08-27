@@ -371,27 +371,3 @@ def test_create_hollow_sweep_creates_solid(cst_case: Any) -> None:
         cst_case.shared.register_entity(component, item)
     for component, item in reversed(created):
         cst_case.shared.delete_entity(component, item)
-
-
-def test_create_horn_segment_creates_solid(cst_case: Any) -> None:
-    """实体名由大整数 segment_id 决定，内部布尔减消耗内锥。"""
-    segment_id = 70001
-    before = entity_keys(cst_case.shared.list_entities())
-    result = cst_case.call(
-        "create-horn-segment",
-        project_arguments(
-            cst_case,
-            segment_id=segment_id,
-            bottom_radius=1,
-            top_radius=2,
-            z_min=170,
-            z_max=173,
-        ),
-    )
-    assert result.get("status") == "success", result
-    assert cst_case.shared.entity_exists(COMPONENT, str(segment_id)), result
-    created = sorted(entity_keys(cst_case.shared.list_entities()) - before)
-    for component, item in created:
-        cst_case.shared.register_entity(component, item)
-    for component, item in reversed(created):
-        cst_case.shared.delete_entity(component, item)

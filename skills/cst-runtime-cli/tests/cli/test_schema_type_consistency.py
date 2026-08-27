@@ -169,7 +169,6 @@ def test_coordinate_metadata_is_concise_and_actionable() -> None:
             "x_min1", "x_max1", "y_min1", "y_max1", "z1",
             "x_min2", "x_max2", "y_min2", "y_max2", "z2",
         ),
-        "create-horn-segment": ("z_min", "z_max"),
         "create-loft-sweep": (
             "x_min1", "x_max1", "y_min1", "y_max1", "z1",
             "x_min2", "x_max2", "y_min2", "y_max2", "z2",
