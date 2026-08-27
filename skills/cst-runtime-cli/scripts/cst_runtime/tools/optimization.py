@@ -59,9 +59,8 @@ _register_tool_defs({
                         "type": "string",
                         "enum": ["minimize", "maximize"]
                     },
-                    "minItems": 1,
                     "default": [],
-                    "description": "多目标方向数组（长度即目标数）；与 direction 二选一。"
+                    "description": "多目标方向数组（长度即目标数）；与 direction 二选一；留空表示单目标。"
                 },
                 "value_names": {
                     "type": "array",
