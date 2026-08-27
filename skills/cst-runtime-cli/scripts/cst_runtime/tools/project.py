@@ -1126,15 +1126,22 @@ def tool_is_simulation_running(args: dict) -> dict:
 
 
 def tool_wait_simulation(args: dict) -> dict:
+    from ..core.environment import get_long_run_threshold
+    from ..core.phase_beacon import POLLING, write_phase
+    from ..core.relinquish import build_relinquish_result
+
     project_path = project_path_from_args(args)
-    timeout_seconds = float(args.get("timeout_seconds", 3600.0))
+    explicit_timeout = args.get("timeout_seconds") is not None
+    timeout_seconds = (
+        float(args["timeout_seconds"])
+        if explicit_timeout
+        else float(get_long_run_threshold())
+    )
     poll_interval_seconds = float(args.get("poll_interval_seconds", 10.0))
-    started = time.monotonic()
-    started_wall = time.time()
-    # 轮询间隔下限钳制，避免 poll_interval_seconds=0 时 CPU 空转自旋
+    # 轮询间隔下限钳制，避�?poll_interval_seconds=0 �?CPU 空转自旋
     effective_poll = max(float(poll_interval_seconds), 0.1)
-    # 优先使用 start-simulation-async 落盘的启动时基线，避免求解器在
-    # start 与 wait 两次调用之间报错退出时漏检；无 marker 再回退现取基线。
+    # 优先使用 start-simulation-async 落盘的启动时基线，避免求解器�?
+    # start �?wait 两次调用之间报错退出时漏检；无 marker 再回退现取基线�?
     baseline_result = _sv.load_log_baseline(project_path)
     log_baseline = (
         dict(baseline_result.get("baseline", {}))
@@ -1148,8 +1155,13 @@ def tool_wait_simulation(args: dict) -> dict:
             if fallback.get("status") == "success"
             else {}
         )
+    # 计时基线放在 baseline 捕获之后：观察等待时长不包含 COM 预检查询，
+    # 与 run-experiment 的 solver 口径精神一致。
+    started = time.monotonic()
+    started_wall = time.time()
     polls = 0
     last_result = None
+    write_phase(project_path, POLLING)
     while True:
         polls += 1
         last_result = _sim.is_simulation_running(project_path)
@@ -1190,7 +1202,9 @@ def tool_wait_simulation(args: dict) -> dict:
                 "waited_seconds": round(time.monotonic() - started, 3),
                 "runtime_module": "cst_runtime._tools.project_ops",
             }
-        if time.monotonic() - started >= timeout_seconds:
+        elapsed = time.monotonic() - started
+        if explicit_timeout and elapsed >= timeout_seconds:
+            # 传统语义：调用方显式给出阻塞上限，到点如实报告仍在运行。
             return {
                 "status": "error",
                 "error_type": "simulation_wait_timeout",
@@ -1202,6 +1216,25 @@ def tool_wait_simulation(args: dict) -> dict:
                 "last_result": last_result,
                 "runtime_module": "cst_runtime._tools.project_ops",
             }
+        if not explicit_timeout and elapsed >= timeout_seconds:
+            # L1 让出：省缺 timeout_seconds 即自动让出模式，观察等待
+            # 达到长任务分界后返回 terminal 信号；solver 状态未受触碰，
+            # 恢复/接力按 recovery 序列执行。
+            return build_relinquish_result(
+                project_path=str(
+                    last_result.get("project_path", project_path)
+                    if last_result
+                    else project_path
+                ),
+                waited_seconds=elapsed,
+                polls=polls,
+                long_run_threshold_seconds=int(timeout_seconds),
+                source_tool="wait-simulation",
+                extra={
+                    "running": True,
+                    "last_result": last_result,
+                },
+            )
         time.sleep(effective_poll)
 
 

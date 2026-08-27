@@ -49,15 +49,22 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
+from typing import Any
+
 from ..lib.experiments import run_experiment
 from ._arguments import project_path_from_args
 
 
 def tool_run_experiment(args: dict) -> dict:
+    """timeout_seconds 省缺 ⇒ 自动让出模式（L1，见 lib.experiments 文档）；
+    显式数值 ⇒ 传统阻塞上限语义，不触发自动让出。"""
+    passthrough: dict[str, Any] = {}
+    if args.get("timeout_seconds") is not None:
+        passthrough["timeout_seconds"] = float(args["timeout_seconds"])
     return run_experiment(
         project_path=str(args.get("project_path", "")),
         completion_result_paths=list(args.get("completion_result_paths") or []),
-        timeout_seconds=int(args.get("timeout_seconds", 3600)),
+        **passthrough,
     )
 
 

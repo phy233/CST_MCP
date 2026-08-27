@@ -12,6 +12,7 @@ from .results import inspect_1d_result, list_result_items, list_run_ids
 from .session import close_project, open_project
 from .simulation import is_simulation_running, start_simulation_async
 from ..core.em_setup import list_monitors
+from ..core.environment import get_long_run_threshold
 from ..core.solver_diagnostics import (
     capture_solver_log_baseline,
     read_appended_solver_logs,
@@ -167,10 +168,22 @@ def _metric_from_result(result: dict[str, Any]) -> dict[str, Any]:
 def run_experiment(
     project_path: str,
     completion_result_paths: list[str],
-    timeout_seconds: int = 3600,
+    timeout_seconds: float | None = None,
     poll_interval_seconds: float = 10.0,
 ) -> OperationResult:
-    """启动仿真并以新 Run ID 和指定非空结果节点确认完成。"""
+    """启动仿真并以新 Run ID 和指定非空结果节点确认完成。
+
+    长任务让出（L1）：``timeout_seconds`` 省缺时按配置的
+    ``long_run_threshold_seconds``（默认 600s，以 solver 实际运行时长
+    计）在达到分界处返回 ``long_run_relinquish``——不做 postflight、
+    不关闭工程、CST/DE 原样保留；显式传入数值则退回传统语义：
+    该值即阻塞上限，到点返回 ``pipeline_sim_timeout``，不触发让出
+    （CLI 用户传大值即可单次等待到底；MCP 治理层会拒绝超过其传输
+    预算的值并引导 relay 模式）。
+    """
+    from ..core import phase_beacon as beacon
+    from ..core.relinquish import build_relinquish_result
+
     normalized_paths = [str(path).strip() for path in completion_result_paths]
     if not normalized_paths or any(not path for path in normalized_paths):
         return error_result(
@@ -182,6 +195,11 @@ def run_experiment(
             "duplicate_completion_result_path",
             "completion_result_paths 不得包含重复路径",
         )
+
+    auto_relinquish = timeout_seconds is None
+    hard_cap = (
+        max(float(timeout_seconds), 0.1) if timeout_seconds is not None else None
+    )
 
     before: dict[str, set[int]] = {}
     missing_result_nodes: list[str] = []
@@ -201,6 +219,7 @@ def run_experiment(
             continue
         before[result_path] = {int(item) for item in listed.get("run_ids", [])}
 
+    beacon.write_phase(project_path, beacon.OPENING)
     opened = open_project(project_path)
     if opened.get("status") == "error":
         return error_result("pipeline_open_failed", opened.get("message", "打开工程失败"))
@@ -247,10 +266,14 @@ def run_experiment(
             )
 
     log_baseline = capture_solver_log_baseline(project_path)
+    beacon.write_phase(project_path, beacon.PREFLIGHT)
     started = start_simulation_async(project_path)
     if started.get("status") == "error":
         close_project(project_path, save=False)
         return error_result("pipeline_sim_start_failed", started.get("message", "启动仿真失败"))
+    beacon.write_phase(project_path, beacon.POLLING)
+
+    long_run_threshold = get_long_run_threshold()
 
     # 轮询间隔下限钳制，避免 poll_interval_seconds=0 时 CPU 空转自旋
     effective_poll = max(float(poll_interval_seconds), 0.1)
@@ -271,16 +294,36 @@ def run_experiment(
             )
         if not running.get("running", True):
             break
-        if waited >= timeout_seconds:
+        if (
+            auto_relinquish
+            and bool(running.get("running"))
+            and waited >= long_run_threshold
+        ):
+            # L1 让出：solver 口径到达长任务分界。不做 postflight、
+            # 不关闭工程、CST/DE 原样保留；worker 随后由 MCP proxy 回收，
+            # agent 收到 terminal payload 后停止等待并结束回合。
+            return build_relinquish_result(
+                project_path=str(opened.get("project_path", project_path)),
+                waited_seconds=waited,
+                polls=polls,
+                long_run_threshold_seconds=long_run_threshold,
+                source_tool="run-experiment",
+                extra={
+                    "completion_result_paths": normalized_paths,
+                    "missing_result_nodes": missing_result_nodes,
+                },
+            )
+        if hard_cap is not None and waited >= hard_cap:
             close_project(project_path, save=False)
             return error_result(
                 "pipeline_sim_timeout",
                 "等待仿真完成超时",
                 polls=polls,
-                timeout_seconds=timeout_seconds,
+                timeout_seconds=hard_cap,
             )
 
     # 求解器停止后先检查本次求解新增的日志错误，把 CST 原始报错回传给调用方。
+    beacon.write_phase(project_path, beacon.POSTFLIGHT)
     diagnostics = read_appended_solver_logs(project_path, baseline=log_baseline)
     if diagnostics.get("errors"):
         close_project(project_path, save=False)
@@ -295,6 +338,7 @@ def run_experiment(
             log_files=diagnostics.get("log_files", []),
         )
 
+    beacon.write_phase(project_path, beacon.CLOSING)
     closed = close_project(project_path, save=False)
     if closed.get("status") == "error":
         return error_result("pipeline_close_failed", closed.get("message", "关闭工程失败"))
