@@ -1135,9 +1135,7 @@ def tool_is_simulation_running(args: dict) -> dict:
 
 
 def tool_wait_simulation(args: dict) -> dict:
-    from ..core.environment import get_long_run_threshold
-    from ..core.phase_beacon import POLLING, write_phase
-    from ..core.relinquish import build_relinquish_result
+    from ..lib.longrun import POLLING, build_relinquish_result, get_long_run_threshold, write_phase
 
     project_path = project_path_from_args(args)
     explicit_timeout = args.get("timeout_seconds") is not None

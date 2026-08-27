@@ -131,8 +131,41 @@ Proxy 启动、IPC、退出、响应 ID 和超时故障统一为 `transport_erro
 | `solver_run_failed` | `runtime` | 同步 run_solver 返回 False；附 cst_errors/cst_error_lines 原始日志 |
 | `solver_stopped_with_error` | `runtime` | wait-simulation 检测到等待期间新增日志含 *** Error *** 块 |
 | `solver_reported_error` | `runtime` | run-experiment 在求解停止后检测到 CST 原始报错 |
+| `long_run_relinquish` | `runtime` | L1 长任务让出：solver 运行达到 `long_run_threshold_seconds`（默认 600s）时主动让出，terminal=true、CST 继续运行；详见下节 |
 | `background_incompatible_with_farfield` | `runtime` | 存在远场监视器且运行时跟踪背景不是 Normal/ε=1/μ=1 时求解前预检失败 |
 | `background_state_unknown` | `runtime` | get-background 无运行时跟踪状态；CST 2022 手册未提供背景读取接口 |
+
+## 长任务双态终止协议（L1/L2）
+
+超过约 10 分钟的仿真被归类为长时间仿真，统一走"保留 CST、断开本轮
+阻塞调用、通知 agent 停止"的协议；判定分为两层：
+
+| 层 | 判定者 | 判定口径 | 到点动作 |
+| --- | --- | --- | --- |
+| **L1 权威让出** | runtime（run-experiment / wait-simulation） | solver 实际运行时长 ≥ `runtime.long_run_threshold_seconds`（默认 600） | 返回 `long_run_relinquish`（`terminal=true`），不做 postflight、不关闭工程，CST/DE 原样保留；proxy 记录 `state=relinquished` 终态后**终止 worker 进程**释放算力 |
+| **L2 传输兜底** | mcp proxy | 请求全程挂钟超过 `runtime.simulation_timeout`（默认 1200） | 终止 worker 并返回 `transport_error`（journal `state=terminated`）；仅当阶段信标显示 worker 正在 postflight/closing 且信标新鲜（≤30s）时，先给予一次 180s 优雅宽限，迟到响应命中则按正常完成处理 |
+
+关键语义：
+
+- **MCP 连接与 worker 分离**：终止的只是 worker Python 进程，stdio
+  服务存活，因此终止信号必然以结构化响应送达 agent；
+- **CST 进程永不被 proxy 触碰**：求解继续在后台运行，恢复与取数走
+  只读链路（`list-run-ids` / `export-sparameter`），需要模型会话时
+  才通过 `cst-session-reattach` 的授权接管流程；
+- **terminal payload 契约**（两类终止共用骨架）：
+  `terminal=true`、`await_user_decision=true`、`timeout_class`
+  （`expected_simulation` | `abnormal`）、`solver_left_running`、
+  `next_action`（第一条即"立即停止本回合对该任务的所有后续 CST
+  调用"）、`recovery` 序列。agent 收到后应停止等待并结束当前回合，
+  把 detached 状态作为阶段结论汇报用户；
+- **单次等待到底的例外**：显式传入大于分界的 `timeout_seconds` 表示
+  选择不自动让出（CLI 下完全自由；MCP 下超过其等待预算会被治理层
+  以 `invalid_arguments` 拒绝并引导 relay 模式——省缺参数、让出后
+  用新的 `wait-simulation` 继续接力）；
+- 阶段信标由 runtime 在 OPENING/PREFLIGHT/POLLING/POSTFLIGHT/CLOSING
+  节点写入 `.cst_runtime/tmp/phase-<sha1(project)[:12]>.json`；
+  proxy 以镜像公式读取，信标缺失或陈旧时宽限自动失效，行为退化为
+  直接终止。超时类 journal 记录带 `timeout_class` 字段供恢复判读。
 
 ## Agent 处置矩阵
 
@@ -149,6 +182,7 @@ Proxy 启动、IPC、退出、响应 ID 和超时故障统一为 `transport_erro
 | `cst_submission_error` / `vba_runtime_error` | 保留结构化错误和原始上下文，停止当前步骤；修正原因后由用户决定是否重试 |
 | `vba_compile_or_host_error` | 按 ambiguous 处理，不能把状态文件缺失推断为未执行 |
 | `solver_run_failed` / `solver_stopped_with_error` / `solver_reported_error` | 停止优化或后续结果解释，返回新增 CST 错误日志和对应 Run 上下文 |
+| `long_run_relinquish` / L2 超时终止（`terminal=true`） | 立即停止本回合对该任务的所有后续 CST 调用（不重试、不轮询、不重启求解），把 detached 状态作为阶段结论汇报用户；恢复按 `recovery` 序列执行 |
 | 旧 Run ID、空结果或承诺的导出文件缺失 | 标为 `unvalidated` 或失败，不把缺失值填成有效观测 |
 
 对于重复建模或优化循环，用户批准的范围、预算和停止条件构成自动化边界。单个 trial 失败可以按任务卡规则记录并继续或早停；改变目标、参数硬边界、预算、工程路径或主要拓扑必须重新交给用户决定。
@@ -169,6 +203,11 @@ python -m pytest -q -s --run-cst -m cst_integration
 [CST MCP 测试指南](../development/testing.md)。
 
 ## 已知限制
+
+- 长任务双态终止中，L1 让出与 L2 兜底都会终止 worker 进程；若终止恰好发生在
+  runtime 内部 postflight 窗口，收尾可能不完整（`.lok` 可能残留）——L2 有阶段
+  信标宽限门缓解，L1 由 runtime 主动让出天然避开自身清理窗口；残余状态通过
+  `cst-session-inspect` 与 recovery 序列人工兜底，求解结果数据因落盘不受影响。
 
 - `execution=reported_ok` 表示业务 VBA 已无错误执行到状态文件 `OK`，写操作据此返回成功；
   Runtime 不再自动读回实体、材料、参数或设置来改变该成功结论。
