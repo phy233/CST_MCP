@@ -190,11 +190,22 @@ class CSTWorkerProxy:
 
     @classmethod
     def get_instance(cls) -> "CSTWorkerProxy":
-        """返回进程内唯一代理实例。"""
+        """返回进程内唯一代理实例（首次调用触发 worker 启动）。"""
         with cls._instance_lock:
             if cls._instance is None:
                 cls._instance = cls()
             return cls._instance
+
+    @classmethod
+    def shutdown_if_created(cls) -> None:
+        """已创建代理实例则优雅关闭；从未创建时不做任何事。
+
+        服务退出清理使用本方法，避免懒加载语义下意外拉起 worker。
+        """
+        with cls._instance_lock:
+            if cls._instance is None:
+                return
+            cls._instance.shutdown()
 
     def _worker_environment(self) -> dict[str, str]:
         environment = dict(os.environ)
@@ -212,12 +223,32 @@ class CSTWorkerProxy:
 
     def _start_worker(self) -> None:
         worker_python = self.config.worker_python
+        if worker_python is None:
+            candidates = "\n".join(
+                f"  - {item}" for item in self.config.worker_probe_candidates
+            ) or "  - (未记录任何候选路径)"
+            raise CSTTransportError(
+                "找不到 Python 3.9 worker 解释器；请设置 CST_WORKER_PYTHON"
+                "或在 .cst_config.json 的 runtime.worker_python 配置实际路径。\n"
+                f"已探测的候选：\n{candidates}",
+                code="worker_python_not_found",
+                context={
+                    "worker_probe_candidates": list(
+                        self.config.worker_probe_candidates
+                    ),
+                },
+            )
         if not worker_python.is_file():
             raise CSTTransportError(
                 "找不到 Python 3.9 worker 解释器："
                 f"{worker_python}；请设置 CST_WORKER_PYTHON",
                 code="worker_python_not_found",
-                context={"worker_python": str(worker_python)},
+                context={
+                    "worker_python": str(worker_python),
+                    "worker_probe_candidates": list(
+                        self.config.worker_probe_candidates
+                    ),
+                },
             )
         try:
             version = subprocess.run(

@@ -5,7 +5,7 @@ import asyncio
 from typing import Any
 
 from .config import get_config
-from .proxy import CSTTransportError, get_proxy
+from .proxy import CSTTransportError, CSTWorkerProxy, get_proxy
 
 
 def _call_tool_with_transport_envelope(
@@ -115,32 +115,78 @@ def _governance_rejection(
     }
 
 
+def _worker_unavailable_message(exc: CSTTransportError, config: Any) -> str:
+    """把 worker 不可用转成可直接执行的修复指引。"""
+    lines = [f"CST worker 无法启动：{exc}"]
+    candidates = getattr(config, "worker_probe_candidates", None) or []
+    if candidates:
+        lines.append("已探测的候选路径：")
+        lines.extend(f"  - {item}" for item in candidates)
+    lines.append(
+        "修复方式：设置环境变量 CST_WORKER_PYTHON 指向 Python 3.9 解释器，"
+        "或在 .cst_config.json 的 runtime.worker_python 配置实际路径；"
+        "runtime 部署步骤见 INSTALL.md。修复后重连 MCP 即可。"
+    )
+    return "\n".join(lines)
+
+
 def create_mcp_server():
-    """创建低层 MCP Server，不复制 runtime 函数签名。"""
+    """创建低层 MCP Server，不复制 runtime 函数签名。
+
+    worker 进程与工具清单均懒加载：首次 tools/list 或 tools/call
+    才拉起 worker；启动失败以结构化 McpError 呈现，客户端立即看到
+    可执行指引，而不是连接静默断开。
+    """
     from mcp import types
     from mcp.server import Server
+    from mcp.shared.exceptions import McpError
+    from mcp.types import ErrorData, INTERNAL_ERROR
 
     config = get_config()
     server = Server(
         config.server_name,
         instructions=config.instructions,
     )
-    proxy = get_proxy()
-    tool_descriptions = [
-        tool for tool in proxy.describe_tools()
-        if tool.get("exposure") == "agent"
-    ]
-    agent_tool_names = {tool["name"] for tool in tool_descriptions}
-    agent_tool_risks = {
-        tool["name"]: str(tool.get("risk", "read"))
-        for tool in tool_descriptions
+    state: dict[str, Any] = {
+        "proxy": None,
+        "tools": None,
+        "agent_tool_names": None,
+        "agent_tool_risks": None,
+        "governed": None,
     }
-    governed_long_running_tools = _governed_long_running_tools(
-        tool_descriptions
-    )
+
+    def _catalog() -> dict[str, Any]:
+        """首次访问时拉起 worker 并读取 Registry；失败转 McpError。"""
+        if state["tools"] is None:
+            try:
+                proxy = get_proxy()
+                descriptions = [
+                    tool
+                    for tool in proxy.describe_tools()
+                    if tool.get("exposure") == "agent"
+                ]
+            except CSTTransportError as exc:
+                raise McpError(
+                    error=ErrorData(
+                        code=INTERNAL_ERROR,
+                        message=_worker_unavailable_message(exc, config),
+                    )
+                ) from exc
+            state["proxy"] = proxy
+            state["tools"] = descriptions
+            state["agent_tool_names"] = {
+                tool["name"] for tool in descriptions
+            }
+            state["agent_tool_risks"] = {
+                tool["name"]: str(tool.get("risk", "read"))
+                for tool in descriptions
+            }
+            state["governed"] = _governed_long_running_tools(descriptions)
+        return state
 
     @server.list_tools()
     async def list_tools() -> list[types.Tool]:
+        catalog = _catalog()
         return [
             types.Tool(
                 name=tool["name"],
@@ -158,11 +204,14 @@ def create_mcp_server():
                     },
                 ),
             )
-            for tool in tool_descriptions
+            for tool in catalog["tools"]
         ]
 
     @server.call_tool(validate_input=True)
     async def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        catalog = _catalog()
+        agent_tool_names = catalog["agent_tool_names"]
+        agent_tool_risks = catalog["agent_tool_risks"]
         if name not in agent_tool_names:
             return {
                 "ok": False,
@@ -176,14 +225,15 @@ def create_mcp_server():
                 },
                 "context": {},
             }
+        risk = agent_tool_risks.get(name, "read")
         timeout = _timeout_for_risk(
-            agent_tool_risks.get(name, "read"),
+            risk,
             request_timeout=config.request_timeout,
             simulation_timeout=config.simulation_timeout,
             session_timeout=config.session_timeout,
         )
         governance = _governance_rejection(
-            governed_long_running_tools,
+            catalog["governed"],
             name,
             arguments,
             timeout,
@@ -192,14 +242,12 @@ def create_mcp_server():
             return governance
         return await asyncio.to_thread(
             _call_tool_with_transport_envelope,
-            proxy,
+            catalog["proxy"],
             name,
             arguments,
             timeout=timeout,
             timeout_class=(
-                "expected_simulation"
-                if agent_tool_risks.get(name, "read") == "long-running"
-                else "abnormal"
+                "expected_simulation" if risk == "long-running" else "abnormal"
             ),
         )
 
@@ -218,8 +266,8 @@ async def _run_stdio() -> None:
                 server.create_initialization_options(),
             )
     finally:
-        await asyncio.to_thread(get_proxy().shutdown)
-
+        # 懒加载语义：从未创建代理实例时不拉起 worker
+        await asyncio.to_thread(CSTWorkerProxy.shutdown_if_created)
 
 def main() -> None:
     """运行 stdio MCP 服务。"""
