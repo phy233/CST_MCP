@@ -8,8 +8,9 @@ def _field_export_definition(handler: str, physical_name: str) -> dict:
         "category": "results",
         "risk": "filesystem-write",
         "description": (
-            f"导出实际 ResultTree 中的{physical_name}节点；完整 result_path 为唯一依据，"
-            "支持 CST 2022 ASCIIExport 的采样、点文件、子体积和 CSV 选项。"
+            f"Use this to export an existing {physical_name} result-tree node through CST 2022 "
+            "ASCIIExport. Supply the exact full result_path; this is not a result-discovery "
+            "tool and it writes the requested ASCII or CSV file."
         ),
         "handler": handler,
         "json_schema": {
@@ -43,7 +44,11 @@ TOOL_DEFS = {
 "boolean-add": {
     "category": "modeling",
     "risk": "write",
-    "description": "Unite two solids (boolean union).",
+    "description": (
+        "Use this to unite two existing solids into one solid when their combined volume is "
+        "the intended geometry. The second solid is consumed; Curves items must be extruded "
+        "before any Solid boolean operation."
+    ),
     "handler": "tool_boolean_add",
     "json_schema": {
         "type": "object",
@@ -78,7 +83,11 @@ TOOL_DEFS = {
 "boolean-insert": {
     "category": "modeling",
     "risk": "write",
-    "description": "Insert one solid into another (boolean insert).",
+    "description": (
+        "Use this to apply CST Solid.Insert to two existing solids when the intended insert "
+        "topology is explicit. Do not substitute boolean-add; navigation-tree retention follows "
+        "CST Insert semantics, and Curves items are not valid inputs."
+    ),
     "handler": "tool_boolean_insert",
     "json_schema": {
         "type": "object",
@@ -113,7 +122,10 @@ TOOL_DEFS = {
 "boolean-intersect": {
     "category": "modeling",
     "risk": "write",
-    "description": "Intersect two solids (boolean intersection).",
+    "description": (
+        "Use this to keep only the common volume of two existing solids. Do not use it for a "
+        "union or a cutter subtraction, and extrude Curves items before calling."
+    ),
     "handler": "tool_boolean_intersect",
     "json_schema": {
         "type": "object",
@@ -149,9 +161,9 @@ TOOL_DEFS = {
     "category": "modeling",
     "risk": "write",
     "description": (
-        "Subtract one solid from another (boolean difference). CST may accept "
-        "a subtraction between non-intersecting solids without changing the target, "
-        "so confirm geometric overlap from the modeled coordinates before calling."
+        "Use this to subtract a tool solid from a target solid when their design coordinates "
+        "guarantee nonempty overlap. CST can report success for disjoint solids while leaving "
+        "the target unchanged and consuming the tool, so establish overlap before calling."
     ),
     "handler": "tool_boolean_subtract",
     "json_schema": {
@@ -192,7 +204,11 @@ TOOL_DEFS = {
 "change-material": {
     "category": "modeling",
     "risk": "write",
-    "description": "Change the material of a geometry entity. Use list-materials to see available names.",
+    "description": (
+        "Use this to assign an existing CST material to an existing solid. Use list-materials "
+        "only when the exact material name is unknown; this tool does not apply material to a "
+        "Curves item."
+    ),
     "handler": "tool_change_material",
     "json_schema": {
         "type": "object",
@@ -227,7 +243,11 @@ TOOL_DEFS = {
 "create-component": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a new component in the CST project.",
+    "description": (
+        "Use this to create a component container before creating solids that require a "
+        "component name. Do not call it for AnalyticalCurve, Polygon3D, or Rectangle items; "
+        "those are stored under Curves."
+    ),
     "handler": "tool_create_component",
     "json_schema": {
         "type": "object",
@@ -255,7 +275,11 @@ TOOL_DEFS = {
 "create-hollow-sweep": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a hollow loft between two rectangular profiles in active X/Y/Z or local U/V/W coordinates.",
+    "description": (
+        "Use this to create a hollow tapered solid between two rectangular profiles with an "
+        "explicit wall thickness in active X/Y/Z or WCS U/V/W coordinates. Use "
+        "create-loft-sweep for a filled rectangular loft."
+    ),
     "handler": "tool_create_hollow_sweep",
     "json_schema": {
         "type": "object",
@@ -384,7 +408,11 @@ TOOL_DEFS = {
 "create-loft-sweep": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a loft between two rectangular profiles in active X/Y/Z or local U/V/W coordinates.",
+    "description": (
+        "Use this to create a filled tapered solid between two rectangular profiles in active "
+        "X/Y/Z or WCS U/V/W coordinates. Use create-hollow-sweep when an explicit wall "
+        "thickness is required."
+    ),
     "handler": "tool_create_loft_sweep",
     "json_schema": {
         "type": "object",
@@ -506,7 +534,11 @@ TOOL_DEFS = {
 "create-mesh-group": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a mesh group and add items.",
+    "description": (
+        "Use this to group existing geometry items for later local mesh treatment. It does not "
+        "configure the global mesh or solver; use the matching mesh and solver tools before "
+        "simulation."
+    ),
     "handler": "tool_create_mesh_group",
     "json_schema": {
         "type": "object",
@@ -547,7 +579,11 @@ TOOL_DEFS = {
 "define-analytical-curve": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a parametric curve in active X/Y/Z or local U/V/W coordinates; each law must be differentiable over the parameter range.",
+    "description": (
+        "Use this to create a parametric Curves item from differentiable coordinate laws over "
+        "a parameter range in active X/Y/Z or WCS U/V/W coordinates. It creates no component, "
+        "material, or solid; only a closed coplanar profile can later be extruded."
+    ),
     "handler": "tool_define_analytical_curve",
     "json_schema": {
         "type": "object",
@@ -620,7 +656,11 @@ TOOL_DEFS = {
 "define-brick": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a brick in active X/Y/Z or local U/V/W coordinates.",
+    "description": (
+        "Use this to create one axis-aligned solid brick with a user-selected component, "
+        "material, and bounds in active X/Y/Z or WCS U/V/W coordinates. The tool does not "
+        "choose dimensions, material, or topology for the user."
+    ),
     "handler": "tool_define_brick",
     "json_schema": {
         "type": "object",
@@ -711,9 +751,9 @@ TOOL_DEFS = {
     "category": "modeling",
     "risk": "write",
     "description": (
-        "Create a cone along an active X/U, Y/V, or Z/W axis. axis_min/axis_max set the axial range; "
-        "the two transverse centers are mapped to axis-specific VBA setters. "
-        "bottom_radius is at the lower bound and top_radius at the upper bound."
+        "Use this to create a cone or conical frustum along an active X/U, Y/V, or Z/W axis. "
+        "bottom_radius is at axis_min, top_radius is at axis_max, and the two center inputs map "
+        "to the transverse coordinates for the selected axis."
     ),
     "handler": "tool_define_cone",
     "json_schema": {
@@ -811,8 +851,9 @@ TOOL_DEFS = {
     "category": "modeling",
     "risk": "write",
     "description": (
-        "Create a cylinder along an active X/U, Y/V, or Z/W axis. axis_min/axis_max set the axial "
-        "range; the two transverse centers are mapped to axis-specific VBA setters."
+        "Use this to create a solid or hollow cylinder along an active X/U, Y/V, or Z/W axis; "
+        "inner_radius=0 creates a solid cylinder. axis_min/axis_max set its length, and the "
+        "center inputs map to the transverse coordinates for the selected axis."
     ),
     "handler": "tool_define_cylinder",
     "json_schema": {
@@ -910,8 +951,9 @@ TOOL_DEFS = {
     "category": "modeling",
     "risk": "write",
     "description": (
-        "Extrude a closed planar curve. Positive thickness follows its ordered normal "
-        "(CST 2022 real-machine verified); negative reverses it. Compute the normal and sign first."
+        "Use this to convert one closed coplanar Curves item into a solid in an existing "
+        "component and material; the source curve is consumed. Positive thickness follows the "
+        "profile's ordered normal and negative thickness reverses it, so determine the sign first."
     ),
     "handler": "tool_define_extrude_curve",
     "json_schema": {
@@ -970,7 +1012,11 @@ TOOL_DEFS = {
 "define-loft": {
     "category": "modeling",
     "risk": "write",
-    "description": "Connect two pre-picked surfaces; CST 2022 defines no separate plane-normal argument.",
+    "description": (
+        "Use this after pick-face has selected two surfaces in order to create a loft between "
+        "them with explicit tangency and twist settings. CST 2022 defines no separate plane-normal "
+        "input for this Loft operation."
+    ),
     "handler": "tool_define_loft",
     "json_schema": {
         "type": "object",
@@ -1026,7 +1072,11 @@ TOOL_DEFS = {
 "define-material-from-mtd": {
     "category": "modeling",
     "risk": "write",
-    "description": "Define a CST material from .mtd file by material name. Material must exist in references/Materials/. Use list-materials to see available names.",
+    "description": (
+        "Use this to import a user-selected material by name from the Runtime "
+        "references/Materials library into the CST project. Use list-materials only when the "
+        "exact .mtd material name is unknown; this tool does not assign it to geometry."
+    ),
     "handler": "tool_define_material_from_mtd",
     "json_schema": {
         "type": "object",
@@ -1055,8 +1105,9 @@ TOOL_DEFS = {
     "category": "modeling",
     "risk": "write",
     "description": (
-        "Create ordered points in active X/Y/Z or local U/V/W coordinates. For extrusion, "
-        "close the loop, verify coplanarity, and compute its ordered normal."
+        "Use this to create an ordered Polygon3D item under Curves in active X/Y/Z or WCS U/V/W "
+        "coordinates. It creates no component, material, or solid; close the point loop and keep "
+        "it coplanar before extrusion."
     ),
     "handler": "tool_define_polygon_3d",
     "json_schema": {
@@ -1134,7 +1185,11 @@ TOOL_DEFS = {
 "define-rectangle": {
     "category": "modeling",
     "risk": "write",
-    "description": "Create a rectangle in the active XY or local UV plane; calculate bounds in that coordinate system first.",
+    "description": (
+        "Use this to create a closed rectangular item under Curves in the active XY or WCS UV "
+        "plane. It creates no component, material, or solid; use define-extrude-curve when a "
+        "solid rectangle is required."
+    ),
     "handler": "tool_define_rectangle",
     "json_schema": {
         "type": "object",
@@ -1201,7 +1256,11 @@ TOOL_DEFS = {
 "define-units": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set the CST project unit system.",
+    "description": (
+        "Use this to set the CST project's length, frequency, and optional temperature units "
+        "before entering dependent dimensions or frequencies. The units must come from the user "
+        "or design specification."
+    ),
     "handler": "tool_define_units",
     "json_schema": {
         "type": "object",
@@ -1232,7 +1291,7 @@ TOOL_DEFS = {
                     "Fahrenheit"
                 ],
                 "default": "Celsius",
-                "description": "CST 温度单位；省略时使用 Celsius。"
+                "description": "CST temperature unit; omit it to keep Celsius."
             }
         },
         "required": [
@@ -1246,7 +1305,11 @@ TOOL_DEFS = {
 "delete-entity": {
     "category": "modeling",
     "risk": "write",
-    "description": "Delete a geometry entity from the CST project.",
+    "description": (
+        "Use this only for an explicit modeling correction to delete one known geometry entity. "
+        "This is destructive; resolve the exact entity name first and do not repeat the call "
+        "after success."
+    ),
     "handler": "tool_delete_entity",
     "json_schema": {
         "type": "object",
@@ -1281,7 +1344,11 @@ TOOL_DEFS = {
 "delete-monitor": {
     "category": "modeling",
     "risk": "write",
-    "description": "Delete a monitor by name.",
+    "description": (
+        "Use this only for an explicit correction to delete one configured monitor by its exact "
+        "name. It removes the monitor definition, not a saved result-tree item, and must not be "
+        "repeated after success."
+    ),
     "handler": "tool_delete_monitor",
     "json_schema": {
         "type": "object",
@@ -1309,7 +1376,10 @@ TOOL_DEFS = {
 "delete-probe": {
     "category": "modeling",
     "risk": "write",
-    "description": "Delete a probe by its ID.",
+    "description": (
+        "Use this only for an explicit correction to delete one configured field probe by its "
+        "exact ID. It removes the probe definition and must not be repeated after success."
+    ),
     "handler": "tool_delete_probe",
     "json_schema": {
         "type": "object",
@@ -1337,7 +1407,11 @@ TOOL_DEFS = {
 "list-field-results": {
     "category": "results",
     "risk": "read",
-    "description": "使用 CST 2022 ResultTree.GetTreeResults 枚举 2D/3D 节点、官方 Result Type 和关联文件。",
+    "description": (
+        "Use this to enumerate saved 2D or 3D field-result nodes with CST 2022 "
+        "ResultTree.GetTreeResults, including official result types and backing files. Use "
+        "list-monitors instead to inspect configured Monitor objects before solving."
+    ),
     "handler": "tool_list_field_results",
     "json_schema": {
         "type": "object",
@@ -1359,7 +1433,11 @@ TOOL_DEFS = {
 "export-voltage-result": {
     "category": "results",
     "risk": "filesystem-write",
-    "description": "按实际 0D/1D ResultTree 完整路径导出电压结果，不生成固定监视器编号。",
+    "description": (
+        "Use this to export an existing voltage result by its exact full 0D or 1D ResultTree "
+        "path. It does not invent a fixed monitor number or discover result paths, and it writes "
+        "the requested output file."
+    ),
     "handler": "tool_export_voltage_result",
     "json_schema": {
         "type": "object",
@@ -1376,7 +1454,11 @@ TOOL_DEFS = {
 "list-entities": {
     "category": "modeling",
     "risk": "read",
-    "description": "List geometry entities from the verified CST working project.",
+    "description": (
+        "Use this to obtain exact component or solid names when a later boolean, transform, "
+        "rename, material, or delete call needs them. It is not a routine post-check after a "
+        "successful CST write."
+    ),
     "handler": "tool_list_entities",
     "json_schema": {
         "type": "object",
@@ -1404,7 +1486,11 @@ TOOL_DEFS = {
 "list-materials": {
     "category": "modeling",
     "risk": "read",
-    "description": "List available CST material names from the Materials library.",
+    "description": (
+        "Use this to discover exact material names available in the Runtime Materials library "
+        "before importing or assigning one. It does not inspect materials already assigned to "
+        "project geometry."
+    ),
     "handler": "tool_list_materials",
     "json_schema": {
         "type": "object",
@@ -1416,7 +1502,11 @@ TOOL_DEFS = {
 "pick-face": {
     "category": "modeling",
     "risk": "write",
-    "description": "Select a face by ID for loft operations (zero-thickness entities only).",
+    "description": (
+        "Use this to pick a known face ID on a zero-thickness entity as one ordered input to "
+        "define-loft. Pick the two intended surfaces in order; this tool does not create a loft "
+        "by itself."
+    ),
     "handler": "tool_pick_face",
     "json_schema": {
         "type": "object",
@@ -1458,7 +1548,10 @@ TOOL_DEFS = {
 "rename-entity": {
     "category": "modeling",
     "risk": "write",
-    "description": "Rename a geometry entity.",
+    "description": (
+        "Use this to rename one existing geometry entity when both the current full name and new "
+        "name are explicit. Use list-entities only when the current name is unknown."
+    ),
     "handler": "tool_rename_entity",
     "json_schema": {
         "type": "object",
@@ -1493,7 +1586,11 @@ TOOL_DEFS = {
 "set-background-with-space": {
     "category": "modeling",
     "risk": "write",
-    "description": "Add distances to the global X/Y/Z bounds of the calculation volume.",
+    "description": (
+        "Use this to set extra distances from the global X/Y/Z model bounds to the calculation "
+        "volume. It does not choose face boundary types or background material; use "
+        "define-boundary and define-background for those settings."
+    ),
     "handler": "tool_set_background_with_space",
     "json_schema": {
         "type": "object",
@@ -1516,7 +1613,11 @@ TOOL_DEFS = {
 "set-efield-monitor": {
     "category": "modeling",
     "risk": "write",
-    "description": "设置 E-field 监视器；CST 2022 只支持单频，start_freq 必须等于 end_freq。",
+    "description": (
+        "Use this before solving to define a single-frequency E-field monitor; CST 2022 requires "
+        "start_freq to equal end_freq. It has no geometry, component, or material prerequisite; "
+        "use set-field-monitor for the generic E/H interface."
+    ),
     "handler": "tool_set_efield_monitor",
     "json_schema": {
         "type": "object",
@@ -1529,14 +1630,14 @@ TOOL_DEFS = {
             },
             "start_freq": {
                 "type": "number",
-                "description": "监视频率；CST 2022 下必须等于 end_freq。",
+                "description": "Monitor frequency; CST 2022 requires it to equal end_freq.",
                 "examples": [
                     8.0
                 ]
             },
             "end_freq": {
                 "type": "number",
-                "description": "新版本 CST 的范围终点；CST 2022 下必须等于 start_freq。",
+                "description": "Range end for newer CST versions; CST 2022 requires it to equal start_freq.",
                 "examples": [
                     8.0
                 ]
@@ -1560,7 +1661,10 @@ TOOL_DEFS = {
 "set-entity-color": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set the display color of a geometry entity.",
+    "description": (
+        "Use this to change the display RGB color of one known geometry entity. It is a visual "
+        "setting only and does not change the entity's material or topology."
+    ),
     "handler": "tool_set_entity_color",
     "json_schema": {
         "type": "object",
@@ -1610,8 +1714,9 @@ TOOL_DEFS = {
     "category": "modeling",
     "risk": "write",
     "description": (
-        "按 CST 2022 Monitor Object 为每个频率创建独立单频远场监视器，并读回名称、类型、"
-        "域和频率验证；子体积完全可选，不含模型专用默认坐标。"
+        "Use this before solving to create one single-frequency farfield monitor per requested "
+        "frequency, with optional near-field data and subvolume. It has no geometry, component, "
+        "or material prerequisite; farfield results require a compatible Normal/Vacuum background."
     ),
     "handler": "tool_define_farfield_monitor",
     "json_schema": {
@@ -1642,7 +1747,11 @@ TOOL_DEFS = {
 "set-farfield-plot-cuts": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set farfield plot cut angles.",
+    "description": (
+        "Use this before solving to replace the automatic FarfieldPlot theta/phi cuts that CST "
+        "will evaluate for all farfield monitors after the solve. No result is required at call "
+        "time, but at least one farfield monitor must exist before simulation."
+    ),
     "handler": "tool_set_farfield_plot_cuts",
     "json_schema": {
         "type": "object",
@@ -1663,7 +1772,11 @@ TOOL_DEFS = {
 "set-field-monitor": {
     "category": "modeling",
     "risk": "write",
-    "description": "设置 E/H 场监视器；CST 2022 只支持单频。",
+    "description": (
+        "Use this before solving to define a single-frequency E-field or H-field monitor. It has "
+        "no geometry, component, or material prerequisite and does not create a farfield monitor "
+        "or point probe."
+    ),
     "handler": "tool_set_field_monitor",
     "json_schema": {
         "type": "object",
@@ -1683,21 +1796,21 @@ TOOL_DEFS = {
             },
             "start_frequency": {
                 "type": "string",
-                "description": "监视频率；CST 2022 下必须等于 end_frequency。",
+                "description": "Monitor frequency; CST 2022 requires it to equal end_frequency.",
                 "examples": [
                     "8"
                 ]
             },
             "end_frequency": {
                 "type": "string",
-                "description": "新版本 CST 的范围终点；CST 2022 下必须等于 start_frequency。",
+                "description": "Range end for newer CST versions; CST 2022 requires it to equal start_frequency.",
                 "examples": [
                     "8"
                 ]
             },
             "num_samples": {
                 "type": "string",
-                "description": "新版本 CST 的样本数；CST 2022 的 E/H 监视器只允许 1。",
+                "description": "Sample count for newer CST versions; CST 2022 E/H monitors require 1.",
                 "examples": [
                     "1"
                 ]
@@ -1716,7 +1829,11 @@ TOOL_DEFS = {
 "set-probe": {
     "category": "modeling",
     "risk": "write",
-    "description": "Set an internal E/H-field probe at a global X/Y/Z position.",
+    "description": (
+        "Use this before solving to create an internal E-field or H-field point probe at an "
+        "explicit global X/Y/Z position. It has no geometry, component, or material prerequisite "
+        "and is not a volume or surface field monitor."
+    ),
     "handler": "tool_set_probe",
     "json_schema": {
         "type": "object",
@@ -1769,7 +1886,10 @@ TOOL_DEFS = {
 "show-bounding-box": {
     "category": "modeling",
     "risk": "write",
-    "description": "Toggle bounding box display.",
+    "description": (
+        "Use this only when the user needs the model bounding-box display enabled or disabled. "
+        "It changes visualization state, not calculation-volume spacing or boundary conditions."
+    ),
     "handler": "tool_show_bounding_box",
     "json_schema": {
         "type": "object",
@@ -1790,7 +1910,11 @@ TOOL_DEFS = {
 "transform-curve": {
     "category": "modeling",
     "risk": "write",
-    "description": "Mirror a curve using Center and PlaneNormal in active X/Y/Z or local U/V/W coordinates; compute both first.",
+    "description": (
+        "Use this to mirror an existing Curves item about a plane defined by Center and "
+        "PlaneNormal in active X/Y/Z or WCS U/V/W coordinates. The result remains a curve; use "
+        "transform-shape for solids."
+    ),
     "handler": "tool_transform_curve",
     "json_schema": {
         "type": "object",
@@ -1867,8 +1991,9 @@ TOOL_DEFS = {
     "category": "modeling",
     "risk": "write",
     "description": (
-        "Mirror uses PlaneNormal; rotate uses Angle. Center and components use active X/Y/Z "
-        "or local U/V/W coordinates. Required plane_normal fields do not define a rotate axis."
+        "Use this to mirror or rotate an existing solid in active X/Y/Z or WCS U/V/W coordinates. "
+        "Mirror uses PlaneNormal, while rotate uses angle_x/y/z; the required plane_normal fields "
+        "do not define the rotation axis. Use transform-curve for Curves items."
     ),
     "handler": "tool_transform_shape",
     "json_schema": {
