@@ -409,9 +409,9 @@ def pipeline_run_probe_phase(
     probe_companion = probe_project.with_suffix("")
     source_companion = p.with_suffix("")
 
-    # 1a. 源工程锁拒绝：companion 目录存在 .lok 时说明工程正在被 CST 占用。
+    # 1a. 源工程锁拒绝：companion 目录存在 .lok 锁文件时说明工程正在被 CST 占用。
     lock_files = (
-        list(source_companion.rglob("*.lok"))
+        [item for item in source_companion.rglob("*.lok") if item.is_file()]
         if source_companion.is_dir()
         else []
     )
