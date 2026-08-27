@@ -1,7 +1,7 @@
-# Registry 元数据中文首稿（待人工审核）
+# Registry 元数据中文审核底稿（已回填）
 
-> 状态：Agent 首稿完成，等待人工审核。本文件仍是代码回填前的工作稿，不是最终用户文档。
-> 审核者只需指出 CST 专业事实、单位、坐标、对象保留或删除语义、工作顺序哪里不正确；不需要填写 MCP 字段。
+> 状态：人工专业审核与英文 Registry 回填已完成。本文件保留中文事实依据和逐工具审核记录，
+> 不是 Agent 运行时直接读取的工具清单；最终 Agent-facing 元数据以代码中的 Registry 为准。
 
 ## 依据与证据边界
 
@@ -9,7 +9,7 @@
 - CST 官方：本机 CST Studio Suite 2022 Online Help。重点页面包括 Solid、Brick、ExtrudeCurve、Loft、Transform、Monitor、Boundary、Background、FDSolver、FloquetPort、PlaneWave、ASCIIExport、TOUCHSTONE、ResultTree，以及 Python 的 cst.results 和 cst.interface。
 - 当前实现：Registry 的名称、风险、输入 Schema、输出 Schema 和现有 description。它们是代码事实，不自动等于官方手册事实或实机验收结果。
 - 当前暴露范围：Registry 共注册 146 个工具，其中 136 个为 `agent`，本稿与这 136 个逐一对应；`checkout-replay-copy`、`create-history-checkpoint`、`create-project-checkpoint`、`cst-session-quit`、`export-history-snapshot`、`health-repair`、`inspect-history-capabilities`、`inspect-history-status`、`install-cst-libraries`、`reconcile-history-operation` 共 10 个高风险工具为 `cli_only`，不进入 Agent 初始工具清单。
-- 首稿推断：关联流程、Agent 触发语句和失败恢复是基于上述资料的拟稿；有疑问的 CST 语义已标为“重点审核”。
+- 审核与回填结果：关联流程、Agent 触发语句和失败恢复已按人工意见修正；仍受实现或 CST 版本限制的内容保留明确说明，不据此宣称已通过真实 CST 验收。
 
 ### 本轮实际核对的 CST 2022 官方帮助页
 
@@ -29,12 +29,12 @@
 | ASCII 与 Touchstone 导出       | `mergedProjects/VBA_3D/common_vbaimpexp/asciiexport_object.htm`、`mergedProjects/VBA_3D/special_vbaimpexp/special_vbaimp_exp_touchstone.htm`                                                                                                          |
 | ResultTree 与 Python API       | `mergedProjects/VBA_3D/special_vbapostproc/special_vbapostproc_resulttreeo.htm`、`Python/source/cst.results.html`、`Python/source/cst.interface.html`                                                                                               |
 
-## 审核方式
+## 保留与维护方式
 
-- 建议按类别审核，不必从头连续阅读 136 个工具。
-- 每个工具的“当前 Registry”是现有代码文字；其他字段是拟写入 Registry 的中文首稿。
-- 如果一句话不符合 CST 实际使用，直接改句子或在该工具下留言即可。
-- OpenAI 官方建议准备直接提示、间接提示和负例提示；正式回填后再据此做工具发现测试。
+- 下方逐工具卡片保留人工审核时的完整中文上下文，便于以后核对 CST 专业事实。
+- 每个工具的“当前 Registry”是英文回填前的历史快照，不再代表当前代码；当前英文说明以 Registry 为准。
+- 通用的成功信任、重试、产物验证和人机分工规则只在“全局规则”保留一次；最终 Registry 仅在工具边界确有差异时重复必要限制。
+- 后续如改变工具语义，应先更新 Registry 和对应元数据测试，再按需要同步本审核底稿。
 
 ## 全局规则
 
@@ -1769,9 +1769,10 @@
 - 参数与失败：参数名称和允许值以当前 Schema 为准；不从模型名称猜测物理含义。写入失败时保留原错误和上下文，修正明确输入后重试。
 - 当前 Registry：Initialize a minimal CST runtime workspace in an empty or existing directory.
 
-## 审核完成后的处理
+## 回填完成情况
 
-1. 合并重复信息，把每个工具压缩成适合 Tool Registry 的短说明。
-2. 将中文审核稿润色并翻译为英文，参数名称、单位、坐标和边界保持一致。
-3. 只修改 Registry 元数据及必要的元数据测试，不借机修改 CST 执行代码。
-4. 再次核对 Agent 暴露工具清单和 MCP Worker 可发现性。
+1. 已将重复的全局规则从工具短说明中压缩，只保留触发意图、相似工具区别、关键前置、副作用和限制。
+2. 已统一 CST、ResultTree、Run ID、Floquet、Optuna、坐标与结果导出等专业表述，并翻译为适合 Agent 选择工具的英文。
+3. 本轮只修改 Registry 元数据、`ask-study` 的错误风险标记以及必要的元数据测试；未修改 CST 执行逻辑，也未启动 CST。
+4. Runtime `describe_tools()` 与 MCP Worker Proxy 均已核对：Registry 共 146 个工具，其中 136 个为 `agent`；Worker 能成功返回完整清单。已运行的 Server 可能缓存旧清单，更新后需要重启或重新连接 MCP。
+5. 上述结果证明元数据聚合和 Worker 获取链路可用，不等同于真实 CST VBA、COM、建模或求解验收。
