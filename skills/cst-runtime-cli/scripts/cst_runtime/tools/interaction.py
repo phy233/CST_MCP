@@ -8,18 +8,22 @@ TOOL_DEFS = {
     "list-interaction-log": {
         "category": "interaction",
         "risk": "read",
-        "description": "查询 MCP 工具调用的全生命周期交互日志流。",
+        "description": (
+            "Use this to filter the persisted lifecycle log of MCP tool calls by workspace, "
+            "project, task, run, tool, or interaction ID. Use inspect-interaction-history for "
+            "one call's linked History changes."
+        ),
         "handler": "tool_list_interaction_log",
         "json_schema": {
             "type": "object",
             "properties": {
                 "workspace": {
                     "type": "string",
-                    "description": "交互日志所属工作区；省略时使用当前配置工作区。",
+                    "description": "Runtime workspace that owns the interaction log; omit it to use the configured workspace.",
                 },
                 "project_path": {
                     "type": "string",
-                    "description": "按关联 CST 工程路径过滤。",
+                    "description": "Filter by the associated CST project path.",
                 },
                 "task_id": {
                     "type": "string",
@@ -49,7 +53,11 @@ TOOL_DEFS = {
     "inspect-interaction-history": {
         "category": "interaction",
         "risk": "read",
-        "description": "查询单次 MCP 工具调用关联的 History 快照及 Operation 详细变更。",
+        "description": (
+            "Use this with a known interaction_id to inspect its linked History snapshots and "
+            "detailed operation changes. Use list-interaction-log first only when the ID is "
+            "unknown."
+        ),
         "handler": "tool_inspect_interaction_history",
         "json_schema": {
             "type": "object",
@@ -60,11 +68,11 @@ TOOL_DEFS = {
                 },
                 "workspace": {
                     "type": "string",
-                    "description": "交互日志所属工作区；省略时使用当前配置工作区。",
+                    "description": "Runtime workspace that owns the interaction log; omit it to use the configured workspace.",
                 },
                 "project_path": {
                     "type": "string",
-                    "description": "关联 CST 工程路径；日志未携带路径时可显式提供。",
+                    "description": "Associated CST project path; provide it explicitly when the log record has no path.",
                 },
             },
             "required": ["interaction_id"],
@@ -73,7 +81,11 @@ TOOL_DEFS = {
     "record-agent-note": {
         "category": "interaction",
         "risk": "filesystem-write",
-        "description": "显式记录 Agent 或用户的阶段工作说明、关键设计决策或人工处置结论。",
+        "description": (
+            "Use this to persist an explicit Agent or user note about a plan, design decision, "
+            "confirmation, milestone, or manual reconciliation. It records context only and "
+            "does not prove CST execution."
+        ),
         "handler": "tool_record_agent_note",
         "json_schema": {
             "type": "object",
@@ -97,7 +109,7 @@ TOOL_DEFS = {
                 },
                 "project_path": {
                     "type": "string",
-                    "description": "关联的 CST 工程路径。",
+                    "description": "CST project path associated with the note.",
                 },
                 "user_confirmed": {
                     "type": "boolean",
@@ -122,7 +134,11 @@ TOOL_DEFS = {
     "list-agent-notes": {
         "category": "interaction",
         "risk": "read",
-        "description": "查询已持久化的 Agent 显式工作说明与人工处置笔记列表。",
+        "description": (
+            "Use this to retrieve persisted Agent or user notes by task, run, project, or "
+            "category. Unlike list-interaction-log, it returns explicit work notes rather than "
+            "tool-call lifecycle events."
+        ),
         "handler": "tool_list_agent_notes",
         "json_schema": {
             "type": "object",
@@ -137,7 +153,7 @@ TOOL_DEFS = {
                 },
                 "project_path": {
                     "type": "string",
-                    "description": "按关联 CST 工程路径过滤。",
+                    "description": "Filter by the CST project path associated with the note.",
                 },
                 "category": {
                     "type": "string",

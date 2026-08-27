@@ -6,7 +6,11 @@ TOOL_DEFS = {
 "calculate-farfield-neighborhood-flatness": {
     "category": "farfield",
     "risk": "filesystem-write",
-    "description": "Calculate near-boresight farfield cut flatness from exported cut JSON payloads.",
+    "description": (
+        "Use this to calculate near-boresight flatness from one or more already exported "
+        "farfield-cut JSON files and write the analysis JSON. It performs offline analysis; "
+        "use export-farfield-cut first when no cut file exists."
+    ),
     "handler": "tool_calculate_farfield_neighborhood_flatness",
     "json_schema": {
         "type": "object",
@@ -47,7 +51,11 @@ TOOL_DEFS = {
 "export-farfield-cut": {
     "category": "farfield",
     "risk": "long-running",
-    "description": "Export an existing CST Farfield Cut tree item to JSON under {export_dir}/farfield/cuts/.",
+    "description": (
+        "Use this to export one existing Farfields\\Farfield Cuts result-tree item to JSON for "
+        "offline analysis or reporting. It does not discover result paths; use "
+        "inspect-farfield-monitors when the exact tree_path is unknown."
+    ),
     "handler": "tool_export_farfield_cut",
     "json_schema": {
         "type": "object",
@@ -89,7 +97,11 @@ TOOL_DEFS = {
 "export-farfield-grid": {
     "category": "farfield",
     "risk": "long-running",
-    "description": "Compute a compatible farfield scalar grid and export as JSON under {export_dir}/farfield/. Supports fresh_session reuse.",
+    "description": (
+        "Use this to sample a selected farfield result over an explicit theta/phi grid and "
+        "export one scalar quantity to JSON. Unlike export-farfield-cut, this produces a 2D "
+        "angular grid and requires the farfield name, quantity, angular bounds, and steps."
+    ),
     "handler": "tool_export_farfield_grid",
     "json_schema": {
         "type": "object",
@@ -187,7 +199,11 @@ TOOL_DEFS = {
 "inspect-farfield-monitors": {
     "category": "farfield",
     "risk": "read",
-    "description": "Discover farfield monitors from a CST project by scanning the result tree.",
+    "description": (
+        "Use this after results exist to discover farfield result nodes by scanning the saved "
+        "result tree. Use list-monitors instead to inspect configured Monitor objects before a "
+        "solve."
+    ),
     "handler": "tool_inspect_farfield_monitors",
     "json_schema": {
         "type": "object",

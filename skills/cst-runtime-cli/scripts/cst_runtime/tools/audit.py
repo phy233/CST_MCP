@@ -6,7 +6,11 @@ TOOL_DEFS = {
 "record-stage": {
     "category": "audit",
     "risk": "filesystem-write",
-    "description": "Write a stage record and production-chain log entry.",
+    "description": (
+        "Use this to append a stage record and production-chain log entry for an existing "
+        "Runtime task and run. It records workflow evidence only; it does not prove that "
+        "CST modeling or solving completed."
+    ),
     "handler": "tool_record_stage",
     "json_schema": {
         "type": "object",
@@ -61,8 +65,12 @@ TOOL_DEFS = {
 
 "stage-evidence": {
     "category": "audit",
-    "risk": "read",
-    "description": "Capture CST project state snapshots and generate before/after comparison reports. Use --capture to snapshot, --compare to diff two snapshots into HTML.",
+    "risk": "filesystem-write",
+    "description": (
+        "Use this at an explicit audit point to capture selected CST project state or compare "
+        "two saved snapshots into an HTML report. It writes snapshot or report files and must "
+        "not be used as routine pre- or post-verification after a successful CST call."
+    ),
     "handler": "tool_stage_evidence",
     "json_schema": {
         "type": "object",
@@ -131,7 +139,11 @@ TOOL_DEFS = {
 "update-status": {
     "category": "audit",
     "risk": "filesystem-write",
-    "description": "Update the formal run status.json file.",
+    "description": (
+        "Use this to update the formal status.json for an existing Runtime run with its current "
+        "stage, result, outputs, or error. It records workflow status only and does not verify "
+        "CST execution."
+    ),
     "handler": "tool_update_status",
     "json_schema": {
         "type": "object",

@@ -8,7 +8,11 @@ TOOL_DEFS = {
     "list-history-log": {
         "category": "history",
         "risk": "read",
-        "description": "查询 CST History 操作记录流水与快照哈希变更。",
+        "description": (
+            "Use this to filter persisted CST History operation records and snapshot-hash "
+            "changes when diagnosing or auditing a run. It is read-only and should not be "
+            "called after every successful CST write."
+        ),
         "handler": "tool_list_history_log",
         "json_schema": {
             "type": "object",
@@ -37,7 +41,11 @@ TOOL_DEFS = {
     "diff-history-snapshots": {
         "category": "history",
         "risk": "read",
-        "description": "比较任意两个 History 快照并输出块级增删改及原始 VBA 统一 diff。",
+        "description": (
+            "Use this to compare two saved History snapshots and return block-level changes "
+            "plus a unified diff of raw VBA. It does not modify the project or prove later CST "
+            "execution."
+        ),
         "handler": "tool_diff_history_snapshots",
         "json_schema": {
             "type": "object",
@@ -61,7 +69,11 @@ TOOL_DEFS = {
     "generate-restore-plan": {
         "category": "history",
         "risk": "read",
-        "description": "纯只读分析基线工程与目标快照的严格前缀关系并生成重放计划。",
+        "description": (
+            "Use this to create a read-only replay plan when a target History snapshot is a "
+            "strict prefix extension of a baseline project. It plans recovery only; actual "
+            "replay is a separate CLI-only action."
+        ),
         "handler": "tool_generate_restore_plan",
         "json_schema": {
             "type": "object",
