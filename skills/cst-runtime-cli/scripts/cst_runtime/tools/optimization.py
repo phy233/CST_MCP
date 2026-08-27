@@ -16,7 +16,11 @@ _register_tool_defs({
     "create-study": {
         "category": "optimization",
         "risk": "filesystem-write",
-        "description": "Create or load an Optuna optimization study. Supports single-objective, multi-objective (directions), and constraint-enabled studies.",
+        "description": (
+            "Use this to create or load an Optuna study after the human has defined the "
+            "parameter space, objective directions, constraints, and evaluation budget. "
+            "It configures study storage only and does not run CST or choose the design problem."
+        ),
         "handler": "tool_create_study",
         "json_schema": {
             "type": "object",
@@ -36,9 +40,9 @@ _register_tool_defs({
                 "parameters": {
                     "type": ["object", "string"],
                     "description": (
-                        "参数定义，JSON 对象或 JSON 字符串；例如 "
-                        "{\"R\": {\"type\": \"float\", \"min\": 0.1, \"max\": 0.5}}。"
-                        "type 支持 float/int/categorical。"
+                        "Parameter definitions as a JSON object or JSON string, for example "
+                        "{\"R\": {\"type\": \"float\", \"min\": 0.1, \"max\": 0.5}}. "
+                        "Supported types are float, int, and categorical."
                     ),
                     "examples": [
                         {
@@ -51,7 +55,7 @@ _register_tool_defs({
                     "type": "string",
                     "enum": ["minimize", "maximize"],
                     "default": "minimize",
-                    "description": "单目标优化方向；与 directions 二选一。"
+                    "description": "Single-objective direction; mutually exclusive with directions."
                 },
                 "directions": {
                     "type": "array",
@@ -60,19 +64,22 @@ _register_tool_defs({
                         "enum": ["minimize", "maximize"]
                     },
                     "default": [],
-                    "description": "多目标方向数组（长度即目标数）；与 direction 二选一；留空表示单目标。"
+                    "description": (
+                        "Multi-objective direction array whose length is the objective count; "
+                        "mutually exclusive with direction. Leave empty for a single objective."
+                    )
                 },
                 "value_names": {
                     "type": "array",
                     "items": {"type": "string"},
                     "default": [],
-                    "description": "目标名称列表，便于报告阅读；多目标时建议提供。"
+                    "description": "Objective names for readable reports; recommended for multi-objective studies."
                 },
                 "constraints": {
                     "type": "array",
                     "items": {"type": "object"},
                     "default": [],
-                    "description": "约束定义对象数组，每个含 name/operator/threshold。",
+                    "description": "Constraint definitions, each containing name, operator, and threshold.",
                     "examples": [
                         [
                             {
@@ -99,8 +106,12 @@ _register_tool_defs({
     },
     "ask-study": {
         "category": "optimization",
-        "risk": "read",
-        "description": "Ask the study for the next trial parameter suggestion.",
+        "risk": "filesystem-write",
+        "description": (
+            "Use this when the next trial will actually be evaluated: it asks Optuna for "
+            "parameters and persists a new pending trial. It is not a passive read; finish "
+            "that trial with tell-study, or use run-optimization-step for a closed iteration."
+        ),
         "handler": "tool_ask_study",
         "json_schema": {
         "type": "object",
@@ -127,7 +138,11 @@ _register_tool_defs({
     "tell-study": {
         "category": "optimization",
         "risk": "filesystem-write",
-        "description": "Report trial result. Provide exactly one of value (single-objective) or values (multi-objective); state is complete or pruned.",
+        "description": (
+            "Use this to finish one known trial returned by ask-study. Provide exactly one "
+            "of value for a single objective or values for multiple objectives, and mark the "
+            "trial complete or pruned; it does not run CST."
+        ),
         "handler": "tool_tell_study",
         "json_schema": {
             "type": "object",
@@ -147,7 +162,7 @@ _register_tool_defs({
                 "trial_number": {
                     "type": "integer",
                     "minimum": 0,
-                    "description": "ask-study 返回的 trial 编号。",
+                    "description": "Trial number returned by ask-study.",
                     "examples": [
                         3
                     ]
@@ -155,19 +170,22 @@ _register_tool_defs({
                 "value": {
                     "type": ["number", "null"],
                     "default": None,
-                    "description": "单目标目标值；与 values 二选一。"
+                    "description": "Single-objective value; mutually exclusive with values."
                 },
                 "values": {
                     "type": ["array", "null"],
                     "items": {"type": "number"},
                     "default": None,
-                    "description": "多目标目标值数组，长度须等于 study 目标数；与 value 二选一。"
+                    "description": (
+                        "Multi-objective value array whose length must match the study's "
+                        "objective count; mutually exclusive with value."
+                    )
                 },
                 "constraints": {
                     "type": "array",
                     "items": {"type": "number"},
                     "default": [],
-                    "description": "可选约束值数组；为空表示无约束。",
+                    "description": "Optional constraint values; leave empty when the study has no constraints.",
                     "examples": [
                         [
                             -1.0,
@@ -179,7 +197,10 @@ _register_tool_defs({
                     "type": "string",
                     "enum": ["complete", "pruned"],
                     "default": "complete",
-                    "description": "trial 终态：complete 计入优化，pruned 不计入 best。"
+                    "description": (
+                        "Final trial state: complete contributes to optimization results, "
+                        "whereas pruned is excluded from the best result."
+                    )
                 }
             },
             "required": [
@@ -202,7 +223,11 @@ _register_tool_defs({
     "best-study": {
         "category": "optimization",
         "risk": "read",
-        "description": "Get current best result. For multi-objective returns Pareto front samples.",
+        "description": (
+            "Use this to read the current best completed trial for a single objective or "
+            "the Pareto-front samples for multiple objectives. It does not evaluate a trial "
+            "or decide whether optimization should stop."
+        ),
         "handler": "tool_best_study",
         "json_schema": {
         "type": "object",
@@ -229,7 +254,11 @@ _register_tool_defs({
     "study-add-trials": {
         "category": "optimization",
         "risk": "filesystem-write",
-        "description": "Inject pre-computed trials (e.g. from manual grid scan) into a study. Each trial: {params, values, constraints?}.",
+        "description": (
+            "Use this to import already evaluated trials, such as a human-managed grid scan, "
+            "into an existing study. It does not request suggestions or run CST; each trial "
+            "must provide params, values, and optional constraints."
+        ),
         "handler": "tool_add_trials",
         "json_schema": {
         "type": "object",
@@ -283,7 +312,10 @@ _register_tool_defs({
     "study-param-importances": {
         "category": "optimization",
         "risk": "read",
-        "description": "Analyze which parameters most affect the objective. Requires at least 5 completed trials.",
+        "description": (
+            "Use this after at least five completed trials to estimate which parameters most "
+            "affect the objective. It reads study history only and does not alter the study."
+        ),
         "handler": "tool_param_importances",
         "json_schema": {
         "type": "object",
@@ -310,7 +342,11 @@ _register_tool_defs({
     "study-terminate-check": {
         "category": "optimization",
         "risk": "read",
-        "description": "Check if optimization has converged using Optuna's regret-bound evaluator. Returns should_terminate.",
+        "description": (
+            "Use this to obtain a regret-bound-based should_terminate recommendation from an "
+            "existing study. It is decision support only: it neither stops the study nor "
+            "replaces a human-defined evaluation budget or engineering acceptance criteria."
+        ),
         "handler": "tool_terminate_check",
         "json_schema": {
         "type": "object",
@@ -338,17 +374,10 @@ _register_tool_defs({
         "category": "optimization",
         "risk": "long-running",
         "description": (
-            "Run the complete probe phase: design Plackett-Burman probes, simulate each "
-            "(on a main-file-only working_probe.cst copy; companion dir is recreated by CST on first open), "
-            "analyze main effects and interactions, then inject results into an Optuna study. "
-            "Returns top_params, edge_hit, and suggested_algorithm. "
-            "Objective spec supports metasurface metrics: {\"type\": \"s11_min_db\"} | "
-            "{\"type\": \"s11_at_freq\", \"freq\": 10} | {\"type\": \"gain_max\"} | "
-            "{\"type\": \"bandwidth\", \"below_db\": -10} | "
-            "{\"type\": \"amp_at_freq\", \"result_path\": \"zmax(1)\", \"freq\": 10, \"direction\": \"maximize\"} | "
-            "{\"type\": \"phase_at_freq\", \"result_path\": \"zmax(1)\", \"freq\": 10, \"target_deg\": 90} | "
-            "{\"type\": \"expression\", \"expr\": \"abs(wrap(phase_deg('zmax(1)', 10) - 90))\"}; "
-            "expression sandbox exposes s11_db/s11_freq, amp_db(path,f), phase_deg(path,f), wrap(x), min/max/len/abs."
+            "Use this to run the complete screening phase: generate Plackett-Burman probes, "
+            "evaluate each in CST on a dedicated working_probe.cst copy, analyze main and "
+            "two-way effects, and seed an Optuna study. It is not a general optimization loop; "
+            "the human must define valid parameters, completion paths, objective, and probe budget."
         ),
         "handler": "tool_run_probe_phase",
         "json_schema": {
@@ -366,7 +395,10 @@ _register_tool_defs({
                     "minItems": 1,
                     "uniqueItems": True,
                     "items": {"type": "string", "minLength": 1},
-                    "description": "用于确认本次求解产生新 Run ID 且数据非空的真实 ResultTree 完整路径；Floquet 单元常用 SZmin(1),Zmax(1)"
+                    "description": (
+                        "Exact ResultTree paths used to confirm a new Run ID with nonempty data; "
+                        "Floquet unit cells commonly use paths such as SZmin(1),Zmax(1)."
+                    )
                 },
                 "parameters": {
                     "type": "object",
@@ -407,7 +439,7 @@ _register_tool_defs({
                     "description": (
                         "Objective function spec. Types: s11_min_db | s11_at_freq{freq} | gain_max | bandwidth | "
                         "amp_at_freq{result_path?,freq,direction?} | phase_at_freq{result_path?,freq,target_deg} | "
-                        "expression{expr}. result_path 支持归一化子串匹配（如 'zmax(1)'）。"
+                        "expression{expr}. result_path supports normalized substring matching, such as 'zmax(1)'."
                     )
                 }
             }
@@ -417,15 +449,10 @@ _register_tool_defs({
         "category": "optimization",
         "risk": "long-running",
         "description": (
-            "Run one optimization iteration: ask Optuna for next parameters, apply them, simulate, "
-            "compute objective, and report back. Agent inspects the objective_value output to decide "
-            "whether to stop or continue the loop. Objective spec supports metasurface metrics: "
-            "{\"type\": \"s11_min_db\"} | {\"type\": \"s11_at_freq\", \"freq\": 10} | {\"type\": \"gain_max\"} | "
-            "{\"type\": \"bandwidth\", \"below_db\": -10} | "
-            "{\"type\": \"amp_at_freq\", \"result_path\": \"zmax(1)\", \"freq\": 10, \"direction\": \"maximize\"} | "
-            "{\"type\": \"phase_at_freq\", \"result_path\": \"zmax(1)\", \"freq\": 10, \"target_deg\": 90} | "
-            "{\"type\": \"expression\", \"expr\": \"abs(wrap(phase_deg('zmax(1)', 10) - 90))\"}; "
-            "expression sandbox exposes s11_db/s11_freq, amp_db(path,f), phase_deg(path,f), wrap(x), min/max/len/abs."
+            "Use this to execute exactly one closed Optuna iteration: request parameters, "
+            "update the project, run the solver, compute the objective, and report the trial. "
+            "It does not choose the design problem or stopping rule; inspect its output before "
+            "invoking another step within the human-defined objective and evaluation budget."
         ),
         "handler": "tool_run_optimization_step",
         "json_schema": {
@@ -443,7 +470,10 @@ _register_tool_defs({
                     "minItems": 1,
                     "uniqueItems": True,
                     "items": {"type": "string", "minLength": 1},
-                    "description": "用于确认本次求解产生新 Run ID 且数据非空的真实 ResultTree 完整路径；Floquet 单元常用 SZmin(1),Zmax(1)"
+                    "description": (
+                        "Exact ResultTree paths used to confirm a new Run ID with nonempty data; "
+                        "Floquet unit cells commonly use paths such as SZmin(1),Zmax(1)."
+                    )
                 },
                 "study_storage": {
                     "type": "string",
@@ -461,7 +491,7 @@ _register_tool_defs({
                     "description": (
                         "Objective function spec. Types: s11_min_db | s11_at_freq{freq} | gain_max | bandwidth | "
                         "amp_at_freq{result_path?,freq,direction?} | phase_at_freq{result_path?,freq,target_deg} | "
-                        "expression{expr}. result_path 支持归一化子串匹配（如 'zmax(1)'）。"
+                        "expression{expr}. result_path supports normalized substring matching, such as 'zmax(1)'."
                     )
                 },
                 "sampler": {
