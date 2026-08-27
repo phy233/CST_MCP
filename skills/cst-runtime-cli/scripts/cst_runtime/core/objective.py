@@ -7,6 +7,120 @@ from pathlib import Path
 from typing import Any
 
 
+# 复数幅度低于该线性值时 dB 取下限，避免 log(0)。
+_MAGNITUDE_FLOOR = 1e-15
+_DB_FLOOR = -300.0
+
+# amp_at_freq/phase_at_freq/expression 共用的复数通道视图：
+# 以 result_metrics 中保留的 xdata/ydata（inspect_1d_result 序列化格式）为源。
+
+
+def _wrap_deg(value: float) -> float:
+    """把相位角缠绕到 (-180, 180]。"""
+    return (float(value) + 180.0) % 360.0 - 180.0
+
+
+def _normalize_channel_key(path: Any) -> str:
+    return str(path or "").strip().replace("/", "\\").casefold()
+
+
+def _complex_channels_from_metrics(run_output: dict) -> dict[str, dict[str, list]]:
+    """从 run_output["result_metrics"] 提取按 result_path 归一化的幅相通道。
+
+    仅当指标同时带有可用 xdata/ydata 时收录；数值型 1D 数据按实数处理。
+    """
+    channels: dict[str, dict[str, list]] = {}
+    metrics = run_output.get("result_metrics")
+    if not isinstance(metrics, list):
+        return channels
+    for metric in metrics:
+        if not isinstance(metric, dict):
+            continue
+        xdata = metric.get("xdata")
+        ydata = metric.get("ydata")
+        if not isinstance(xdata, list) or not isinstance(ydata, list):
+            continue
+        freqs: list[float] = []
+        db: list[float] = []
+        phase_deg: list[float] = []
+        usable = True
+        for freq_value, value in zip(xdata, ydata):
+            real: float
+            imag: float
+            if isinstance(value, dict) and "real" in value and "imag" in value:
+                real, imag = float(value["real"]), float(value["imag"])
+            elif isinstance(value, dict) and "abs" in value and "deg" in value:
+                magnitude = float(value["abs"])
+                angle_rad = math.radians(float(value["deg"]))
+                real = magnitude * math.cos(angle_rad)
+                imag = magnitude * math.sin(angle_rad)
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                real, imag = float(value), 0.0
+            else:
+                usable = False
+                break
+            try:
+                freqs.append(float(freq_value))
+            except (TypeError, ValueError):
+                usable = False
+                break
+            magnitude = math.hypot(real, imag)
+            db.append(
+                20.0 * math.log10(magnitude)
+                if magnitude > _MAGNITUDE_FLOOR
+                else _DB_FLOOR
+            )
+            phase_deg.append(math.degrees(math.atan2(imag, real)))
+        if not usable or not freqs:
+            continue
+        key = _normalize_channel_key(metric.get("result_path", ""))
+        if key and key not in channels:
+            channels[key] = {"freq": freqs, "db": db, "phase_deg": phase_deg}
+    return channels
+
+
+def _resolve_channel(
+    channels: dict[str, dict[str, list]], result_path: str
+) -> tuple[dict[str, list], str]:
+    """按精确路径、去后缀子串或唯一通道三种规则解析目标通道。"""
+    needle = _normalize_channel_key(result_path)
+    if needle and needle in channels:
+        return channels[needle], ""
+    if needle:
+        matched = sorted(item for item in channels.items() if needle in item[0])
+        if len(matched) == 1:
+            return matched[0][1], ""
+        stem = re.sub(r"\\s1,1$", "", needle)
+        relaxed = sorted(
+            item for item in channels.items() if stem and stem in item[0]
+        )
+        if len(relaxed) == 1:
+            return relaxed[0][1], ""
+        return {}, (
+            f"result_path={result_path!r} 未匹配到唯一结果通道；"
+            f"可用通道: {sorted(channels)}"
+        )
+    if len(channels) == 1:
+        return next(iter(channels.values())), ""
+    return {}, (
+        "存在多个结果通道时必须提供 result_path；"
+        f"可用通道: {sorted(channels)}"
+    )
+
+
+def _nearest_index(channel: dict[str, list], freq: Any) -> int:
+    target = float(freq)
+    freqs = channel["freq"]
+    return min(range(len(freqs)), key=lambda i: abs(freqs[i] - target))
+
+
+def _resolve_freq(kwargs: dict[str, Any]) -> Any:
+    freq = kwargs.get("freq", kwargs.get("freq_ghz"))
+    if freq is None:
+        raise ValueError("必须提供频点参数 freq (GHz)")
+    return freq
+
+
 def _s11_from_export(run_output: dict) -> dict[str, Any] | None:
     """Parse S11 from pipeline_run_experiment output."""
     s11_metric = run_output.get("s11_metric")
@@ -84,6 +198,62 @@ def _s11_at_freq(run_output: dict, freq: float) -> dict[str, Any]:
     return {"value": all_db[idx], "details": {"at_freq": all_freq[idx], "source": "s11"}}
 
 
+def _amp_at_freq(
+    run_output: dict,
+    result_path: str = "",
+    freq: Any = None,
+    freq_ghz: Any = None,
+) -> dict[str, Any]:
+    resolved_freq = freq if freq is not None else freq_ghz
+    try:
+        resolved_freq = _resolve_freq({"freq": resolved_freq})
+    except ValueError as exc:
+        return {"value": 0.0, "error": str(exc)}
+    channels = _complex_channels_from_metrics(run_output)
+    channel, error = _resolve_channel(channels, result_path)
+    if error:
+        return {"value": 0.0, "error": error}
+    idx = _nearest_index(channel, resolved_freq)
+    return {
+        "value": channel["db"][idx],
+        "details": {
+            "freq_ghz": channel["freq"][idx],
+            "requested_freq_ghz": float(resolved_freq),
+        },
+    }
+
+
+def _phase_at_freq(
+    run_output: dict,
+    result_path: str = "",
+    freq: Any = None,
+    freq_ghz: Any = None,
+    target_deg: Any = 0.0,
+) -> dict[str, Any]:
+    resolved_freq = freq if freq is not None else freq_ghz
+    try:
+        resolved_freq = _resolve_freq({"freq": resolved_freq})
+    except ValueError as exc:
+        return {"value": 0.0, "error": str(exc)}
+    channels = _complex_channels_from_metrics(run_output)
+    channel, error = _resolve_channel(channels, result_path)
+    if error:
+        return {"value": 0.0, "error": error}
+    idx = _nearest_index(channel, resolved_freq)
+    raw_phase_deg = channel["phase_deg"][idx]
+    target = float(target_deg or 0.0)
+    wrapped_error = abs(_wrap_deg(raw_phase_deg - target))
+    return {
+        "value": wrapped_error,
+        "details": {
+            "freq_ghz": channel["freq"][idx],
+            "requested_freq_ghz": float(resolved_freq),
+            "raw_phase_deg": raw_phase_deg,
+            "target_deg": target,
+        },
+    }
+
+
 def _gain_max(run_output: dict) -> dict[str, Any]:
     farfield_files = run_output.get("farfield_exported", [])
     if not farfield_files:
@@ -125,6 +295,16 @@ _REGISTRY = {
     "s11_at_freq": {"fn": lambda r, **kw: _s11_at_freq(r, **kw), "params": ["freq"], "direction": "minimize"},
     "gain_max": {"fn": lambda r, **kw: _gain_max(r), "params": [], "direction": "maximize"},
     "bandwidth": {"fn": lambda r, **kw: _bandwidth(r, **kw), "params": ["below_db"], "direction": "maximize"},
+    "amp_at_freq": {
+        "fn": lambda r, **kw: _amp_at_freq(r, **kw),
+        "params": ["result_path", "freq", "freq_ghz"],
+        "direction": "minimize",
+    },
+    "phase_at_freq": {
+        "fn": lambda r, **kw: _phase_at_freq(r, **kw),
+        "params": ["result_path", "freq", "freq_ghz", "target_deg"],
+        "direction": "minimize",
+    },
 }
 
 
@@ -142,18 +322,47 @@ def compute_objective(objective_spec: dict, run_output: dict) -> dict[str, Any]:
     return result
 
 
-def _compute_expression(expr: str, run_output: dict) -> dict[str, Any]:
+def _expression_environment(run_output: dict) -> tuple[dict[str, Any], str | None]:
+    """构建受限表达式环境；数据不足时返回错误说明。"""
+    channels = _complex_channels_from_metrics(run_output)
+
+    def resolve(name: Any) -> dict[str, list]:
+        channel, error = _resolve_channel(channels, str(name or ""))
+        if error:
+            raise ValueError(error)
+        return channel
+
+    def amp_db(result_path: str, freq: Any) -> float:
+        channel = resolve(result_path)
+        return channel["db"][_nearest_index(channel, freq)]
+
+    def phase_deg(result_path: str, freq: Any) -> float:
+        channel = resolve(result_path)
+        return channel["phase_deg"][_nearest_index(channel, freq)]
+
     parsed = _s11_from_export(run_output)
-    if parsed is None:
-        return {"value": 0.0, "error": "no_s11_data", "type": "expression"}
-    env = {
-        "s11_db": parsed.get("all_db", []),
-        "s11_freq": parsed.get("all_freq", []),
+    if not channels and parsed is None:
+        return {}, "no_s11_data"
+    env: dict[str, Any] = {
         "min": min,
         "max": max,
         "len": len,
         "abs": abs,
+        "wrap": _wrap_deg,
+        "amp_db": amp_db,
+        "phase_deg": phase_deg,
+        "channels": {key: dict(values) for key, values in channels.items()},
     }
+    if parsed is not None:
+        env["s11_db"] = parsed.get("all_db", [])
+        env["s11_freq"] = parsed.get("all_freq", [])
+    return env, None
+
+
+def _compute_expression(expr: str, run_output: dict) -> dict[str, Any]:
+    env, error = _expression_environment(run_output)
+    if error:
+        return {"value": 0.0, "error": error, "type": "expression"}
     try:
         value = eval(expr, {"__builtins__": {}}, env)
         return {"value": float(value), "type": "expression", "details": {"expr": expr}}
