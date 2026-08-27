@@ -33,7 +33,12 @@ TOOL_DEFS = {
     "analyze-metasurface-sparameters": {
         "category": "results",
         "risk": "filesystem-write",
-        "description": "完全离线读取多个 export-sparameter JSON，计算复数幅相、R/T/A、PCR、目标相位误差和被动性，并写出非空 JSON。",
+        "description": (
+            "Use this to perform offline multi-channel metasurface S-parameter analysis "
+            "from existing export-sparameter JSON files and write a nonempty analysis JSON. "
+            "It does not call CST; R/T/A channel summation and phase-reference behavior "
+            "remain the documented current implementation and are not corrected by this tool."
+        ),
         "handler": "tool_analyze_metasurface_sparameters",
         "json_schema": {
             "type": "object",
