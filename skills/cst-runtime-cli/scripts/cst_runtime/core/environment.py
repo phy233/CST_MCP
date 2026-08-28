@@ -50,11 +50,15 @@ def get_long_run_threshold(workspace_root: str = "") -> int:
     未配置、非法或过小时回退默认 600，下限钳制 60 防止把正常仿真
     当成长任务。CLI 直调同样经由该函数，保证双端口径一致。
     """
-    raw = (
-        load_cst_config(workspace_root)
-        .get("runtime", {})
-        .get("long_run_threshold_seconds", 600)
-    )
+    raw: Any = 600
+    try:
+        raw = (
+            load_cst_config(workspace_root)
+            .get("runtime", {})
+            .get("long_run_threshold_seconds", 600)
+        )
+    except (OSError, ValueError):
+        raw = 600
     try:
         value = int(raw)
     except (TypeError, ValueError):

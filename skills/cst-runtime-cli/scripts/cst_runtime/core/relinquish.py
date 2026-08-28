@@ -13,6 +13,9 @@ from __future__ import annotations
 
 from typing import Any
 
+# 让出信号在 error_type 上的唯一标识；MCP proxy 依此识别 L1 终态。
+RELINQUISH_ERROR_TYPE = "long_run_relinquish"
+
 
 def build_relinquish_result(
     *,
@@ -26,7 +29,7 @@ def build_relinquish_result(
     """构造 L1 让出的标准错误形态（status=error 但 terminal=True）。"""
     payload: dict[str, Any] = {
         "status": "error",
-        "error_type": "long_run_relinquish",
+        "error_type": RELINQUISH_ERROR_TYPE,
         "message": (
             f"求解器已运行 {waited_seconds:.0f}s 达到长任务分界 "
             f"{long_run_threshold_seconds}s，本次调用让出等待；"
