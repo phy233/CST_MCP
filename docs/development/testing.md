@@ -8,15 +8,15 @@
 
 | 层级 | 内容 | 命令 | 典型耗时 |
 |---|---|---|---|
-| 默认（离线全量） | 纯单元 + 子进程 CLI + Worker 代理（均不启动 CST） | `.venv\Scripts\python.exe -m pytest -q` | ~45s |
-| 快速通道（纯单元） | 不含子进程与 Worker 代理 | `.venv\Scripts\python.exe -m pytest -q -m "not subprocess and not worker_proxy"` | ~6s |
-| 子进程 CLI | `subprocess` 标记：`cli/test_*.py`、`test_cli_remaining.py`、`test_cli_hygiene.py` | `.venv\Scripts\python.exe -m pytest -q -m subprocess` | ~35s |
-| Worker 代理 | `worker_proxy` 标记：`mcp_server/tests` 中拉起 py39 Worker 的用例 | `.venv\Scripts\python.exe -m pytest -q -m worker_proxy` | ~10s |
-| 真机集成（非求解器） | `cst_integration` 标记 | `.venv\Scripts\python.exe -m pytest -q -s --run-cst -m "cst_integration and not cst_solver"` | ~7 分钟 |
-| 真机求解器 | `cst_solver` 标记（真机子集） | `.venv\Scripts\python.exe -m pytest -q -s --run-cst --run-cst-solver -m cst_solver` | 另加 ~2 分钟 |
-| 真机全量 | 上述两者合并 | `.venv\Scripts\python.exe -m pytest -q -s --run-cst --run-cst-solver -m cst_integration` | ~9 分钟 |
+| 默认（离线全量） | 纯单元 + 子进程 CLI + Worker 代理（均不启动 CST） | `.envs\mcp\Scripts\python.exe -m pytest -q` | ~45s |
+| 快速通道（纯单元） | 不含子进程与 Worker 代理 | `.envs\mcp\Scripts\python.exe -m pytest -q -m "not subprocess and not worker_proxy"` | ~6s |
+| 子进程 CLI | `subprocess` 标记：`cli/test_*.py`、`test_cli_remaining.py`、`test_cli_hygiene.py` | `.envs\mcp\Scripts\python.exe -m pytest -q -m subprocess` | ~35s |
+| Worker 代理 | `worker_proxy` 标记：`mcp_server/tests` 中拉起 py39 Worker 的用例 | `.envs\mcp\Scripts\python.exe -m pytest -q -m worker_proxy` | ~10s |
+| 真机集成（非求解器） | `cst_integration` 标记 | `.envs\mcp\Scripts\python.exe -m pytest -q -s --run-cst -m "cst_integration and not cst_solver"` | ~7 分钟 |
+| 真机求解器 | `cst_solver` 标记（真机子集） | `.envs\mcp\Scripts\python.exe -m pytest -q -s --run-cst --run-cst-solver -m cst_solver` | 另加 ~2 分钟 |
+| 真机全量 | 上述两者合并 | `.envs\mcp\Scripts\python.exe -m pytest -q -s --run-cst --run-cst-solver -m cst_integration` | ~9 分钟 |
 
-> **必须用仓库 venv（Python 3.12+）运行**：根套件在 Python 3.9（如 conda `cst39`
+> **必须用仓库 MCP 环境（Python 3.12）运行**：根套件在 Python 3.9（如 `.envs/cst39`
 > 环境）下会因缺少 `tomllib`/`jsonschema` 与类型注解语法而大面积收集失败；
 > 根 conftest 检测到 Python < 3.12 会直接报 UsageError。`cst39` 只供 CST
 > Worker 使用，由 `mcp_server.proxy` 自动拉起，测试进程自身不要切换进去。
@@ -43,7 +43,7 @@
 真机模块使用装饰器级 `xfail`（会吞掉传输超时）。
 
 `worker_proxy` 用例会启动 `CSTWorkerProxy`（Python 3.9 Worker 子进程）。找不到
-Worker 解释器（`CST_WORKER_PYTHON` 环境变量或 `~/miniconda3/envs/cst39/python.exe`）
+Worker 解释器（优先为 `.envs/cst39/Scripts/python.exe`，也可由 `CST_WORKER_PYTHON` 覆盖）
 时自动跳过，不会让默认运行失败。
 
 ## 测试卫生
@@ -65,8 +65,8 @@ Worker 解释器（`CST_WORKER_PYTHON` 环境变量或 `~/miniconda3/envs/cst39/
 
 ## 真实 CST 测试
 
-真机测试由根 Python 测试进程（venv 为 Python 3.14，`requires-python >= 3.12`）
-通过一个 `CSTWorkerProxy` 调用 Python 3.9 Runtime（conda `cst39` 环境）。
+真机测试由根 Python 测试进程（`.envs/mcp` 为 Python 3.12，`requires-python >= 3.12`）
+通过一个 `CSTWorkerProxy` 调用 Python 3.9 Runtime（uv 管理的 `.envs/cst39` 环境）。
 CST 2022 Python 库与 Worker 解释器已在 `.cst_config.json` 配置，
 也可用 `CST_WORKER_PYTHON` 覆盖 Worker 路径。
 

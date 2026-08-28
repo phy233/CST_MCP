@@ -15,7 +15,7 @@ Runtime 必须由 CST 兼容的 Python 3.9 Worker 执行：
 & $env:CST_WORKER_PYTHON -m cst_runtime <tool> [args]
 ```
 
-如果没有设置该环境变量，使用 `.cst_config.json` 中 `runtime.worker_python` 的实际路径。不要通过 MCP 的现代 Python `.venv` 或 `uv run python -m cst_runtime` 启动 Runtime。
+如果没有设置该环境变量，优先使用项目内 `.envs/cst39/Scripts/python.exe`，也可以在 `.cst_config.json` 中设置 `runtime.worker_python`。Python 3.9 与 MCP 的 Python 3.12 环境都可由 uv 管理，但不得共用同一个虚拟环境，也不得通过 MCP 环境执行 `python -m cst_runtime`。
 
 首次部署或环境故障时读取 [setup_guide.md](references/setup_guide.md)。
 

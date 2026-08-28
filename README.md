@@ -126,22 +126,19 @@ Registry 工具各含严格 JSON Schema 定义，未知字段会被拒绝，输�
 
 ## 快速开始
 
-本仓库有两套必须隔离的安装流程，详细步骤见 [INSTALL.md](INSTALL.md)：
+本仓库使用两套彼此隔离、但都由 uv 管理的项目内环境，详细步骤见 [INSTALL.md](INSTALL.md)：
 
-1. `cst-runtime` 仅部署并运行在能导入 CST 库的 **Python 3.9** worker 中；不要用 `uv` 或现代 Python 安装它。
-2. `cst-mcp` 安装在 **Python 3.12+** 的现代虚拟环境中；它只通过配置的 worker executable 和 stdin/stdout JSONL 与 runtime 通信。
+1. `.envs/cst39`：Python 3.9，仅运行能导入 CST 库的 `cst-runtime` Worker；
+2. `.envs/mcp`：Python 3.12，仅运行 `cst-mcp`，通过 stdin/stdout JSONL 与 Worker 通信。
 
-先完成 `INSTALL.md` 中的 worker 配置后，再由 MCP 客户端调用工具。不要在 MCP 的 `.venv` 中执行 `python -m cst_runtime`。
+统一由 uv 管理不等于共用环境。不要在 MCP 的 Python 3.12 环境中执行 `python -m cst_runtime`。
 
 ```powershell
-# 安装现代 Python 环境中的 MCP 服务
-uv sync --extra dev
+# 创建或更新两个项目内环境
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-environments.ps1
 
-# 使用配置的 Python 3.9 worker 部署 runtime（仅在需要工作区副本时）
-& $env:CST_WORKER_PYTHON .\bootstrap.py --skill-path <skill-root>\scripts
-
-# 启动 MCP 服务；它会自动启动 Python 3.9 worker
-uv run cst-mcp
+# 启动 MCP；它会使用 .envs/cst39 中的 Worker
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-mcp.ps1
 ```
 
 ---
@@ -152,7 +149,7 @@ uv run cst-mcp
 
 仓库根目录已经是一个可分发插件：`.codex-plugin/plugin.json` 同时声明 `./skills/` 与 `./.mcp.json`。安装 `cst-mcp` 插件后，Codex 从同一插件取得四个 Skill，并由插件作用域启动 `cst-runtime` MCP 服务，不再需要单独执行 `codex mcp add cst-runtime`。
 
-插件不会打包机器相关路径。首次启动 Codex 前，仍需按 [INSTALL.md](INSTALL.md) 准备 Python 3.9 Worker 和 `.cst_config.json`，并设置 `CST_WORKER_PYTHON` 与 `CST_MCP_CONFIG`。插件会通过 `env_vars` 白名单把它们以及 Windows 子进程所需的 `SystemRoot`、`windir` 转发给 MCP 服务；Codex 进程还需能够找到 `uv`。
+插件不会打包机器相关路径。首次启动 Codex 前，按 [INSTALL.md](INSTALL.md) 创建 `.envs/mcp`、`.envs/cst39` 和 `.cst_config.json`，并把 `CST_MCP_HOME` 指向项目根目录。插件启动脚本会使用该目录中的环境；Codex 进程仍需能够找到 `uv`。
 
 ```powershell
 # 添加本仓库提供的 marketplace，然后安装插件
@@ -160,7 +157,7 @@ codex plugin marketplace add phy233/CST_MCP
 codex plugin add cst-mcp@cst-mcp
 ```
 
-安装或更新后重启 Codex 并新建任务，再确认四个 Skill 与插件作用域的 `cst-runtime` 工具均可见。CST 2022 路径和 Python 3.9 Worker 仍按 [INSTALL.md](INSTALL.md) 在本机配置，避免把开发机绝对路径写入插件包。
+安装或更新后重启 Codex 并新建任务，再确认四个 Skill 与插件作用域的 `cst-runtime` 工具均可见。CST 2022 路径仍按 [INSTALL.md](INSTALL.md) 在本机配置，避免把开发机绝对路径写入插件包。
 
 ### 方式 B：独立 Skill 源码（跨平台回退）
 
@@ -190,10 +187,11 @@ codex plugin add cst-mcp@cst-mcp
 ```powershell
 git clone https://github.com/phy233/CST_MCP.git
 cd CST_MCP
-# 必须是 CST 兼容的 Python 3.9，不是 uv 创建的现代 .venv
-& $env:CST_WORKER_PYTHON skills/cst-runtime-cli/scripts/bootstrap.py --skill-path skills/cst-runtime-cli/scripts
+# 先由 uv 创建隔离的 Python 3.9 Worker 环境
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-environments.ps1
+& .\.envs\cst39\Scripts\python.exe skills/cst-runtime-cli/scripts/bootstrap.py --skill-path skills/cst-runtime-cli/scripts
 $env:PYTHONPATH = "$PWD\\.cst_runtime"
-& $env:CST_WORKER_PYTHON -m cst_runtime list-tools
+& .\.envs\cst39\Scripts\python.exe -m cst_runtime list-tools
 ```
 
 ### 方式 D：Python 包
