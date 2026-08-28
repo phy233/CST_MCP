@@ -166,7 +166,7 @@ codex plugin marketplace add phy233/CST_MCP
 codex plugin add cst-mcp@cst-mcp
 ```
 
-插件清单使用可移植的 `uv run cst-mcp`，不会写入开发机绝对路径。首次启动 Codex 前，把本机配置路径和 Python 3.9 Worker 暴露给 Codex 进程；以下 PowerShell 示例写入当前用户环境，修改后需完全退出并重新启动 Codex：
+插件清单使用可移植的 `uv run cst-mcp`，不会写入开发机绝对路径。`.mcp.json` 通过 `env_vars` 白名单转发 `CST_MCP_CONFIG`、`CST_WORKER_PYTHON`、`SystemRoot` 和 `windir`；后两项用于保证 Windows 上由 Codex 启动的 Python 子进程能够取得系统目录。首次启动 Codex 前，设置前两项机器相关变量；以下 PowerShell 示例写入当前用户环境，修改后需完全退出并重新启动 Codex：
 
 ```powershell
 $configPath = (Resolve-Path .\.cst_config.json).Path

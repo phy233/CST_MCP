@@ -152,7 +152,7 @@ uv run cst-mcp
 
 仓库根目录已经是一个可分发插件：`.codex-plugin/plugin.json` 同时声明 `./skills/` 与 `./.mcp.json`。安装 `cst-mcp` 插件后，Codex 从同一插件取得四个 Skill，并由插件作用域启动 `cst-runtime` MCP 服务，不再需要单独执行 `codex mcp add cst-runtime`。
 
-插件不会打包机器相关路径。首次启动 Codex 前，仍需按 [INSTALL.md](INSTALL.md) 准备 Python 3.9 Worker 和 `.cst_config.json`，并让 Codex 进程能够读取 `CST_WORKER_PYTHON`、`CST_MCP_CONFIG` 与 `uv`。
+插件不会打包机器相关路径。首次启动 Codex 前，仍需按 [INSTALL.md](INSTALL.md) 准备 Python 3.9 Worker 和 `.cst_config.json`，并设置 `CST_WORKER_PYTHON` 与 `CST_MCP_CONFIG`。插件会通过 `env_vars` 白名单把它们以及 Windows 子进程所需的 `SystemRoot`、`windir` 转发给 MCP 服务；Codex 进程还需能够找到 `uv`。
 
 ```powershell
 # 添加本仓库提供的 marketplace，然后安装插件
