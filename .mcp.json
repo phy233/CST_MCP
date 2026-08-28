@@ -2,14 +2,21 @@
   "mcpServers": {
     "cst-runtime": {
       "cwd": ".",
-      "command": "uv",
+      "command": "powershell.exe",
       "args": [
-        "run",
-        "cst-mcp"
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "./scripts/start-mcp.ps1"
       ],
       "env_vars": [
+        "CST_MCP_HOME",
         "CST_MCP_CONFIG",
         "CST_WORKER_PYTHON",
+        "CST_PYTHON_LIBS",
+        "UV_CACHE_DIR",
+        "UV_PYTHON_INSTALL_DIR",
         "SystemRoot",
         "windir"
       ],

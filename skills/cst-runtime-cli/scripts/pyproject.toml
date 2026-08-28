@@ -21,6 +21,7 @@ sweep = [
     "scipy>=1.13,<1.14",
 ]
 optimization = [
+    "greenlet==3.1.1",
     "optuna>=3.6,<5",
     "scikit-learn>=1.4,<1.7",
 ]

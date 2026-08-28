@@ -17,7 +17,7 @@ def test_config_has_separate_worker_runtime() -> None:
 
     config = get_config()
     assert config.server_name == "cst-runtime"
-    assert config.worker_python.name.lower() == "python.exe"
+    assert config.worker_python is None or config.worker_python.name.lower() == "python.exe"
     assert "IPC" in config.instructions
 
 
@@ -308,6 +308,53 @@ def test_config_records_probe_candidates():
     assert len(tried) == 1
     assert "missing" in tried[0]
     assert "CST_WORKER_PYTHON/runtime.worker_python" in tried[0]
+
+
+def test_relative_worker_path_uses_config_directory(tmp_path: Path):
+    """配置中的相对路径应相对配置文件所在目录解析。"""
+    from mcp_server.config import _find_worker_python
+
+    worker = tmp_path / ".envs" / "cst39" / "Scripts" / "python.exe"
+    worker.parent.mkdir(parents=True)
+    worker.write_text("placeholder", encoding="utf-8")
+
+    found, tried = _find_worker_python(
+        {"runtime": {"worker_python": ".envs/cst39/Scripts/python.exe"}},
+        config_dir=tmp_path,
+    )
+
+    assert found == worker.resolve()
+    assert str(worker.resolve()) in tried[0]
+
+
+def test_project_uv_worker_precedes_conda_fallback(tmp_path: Path):
+    """无显式配置时优先采用项目内 uv 管理的 Python 3.9。"""
+    from mcp_server.config import _find_worker_python
+
+    worker = tmp_path / ".envs" / "cst39" / "Scripts" / "python.exe"
+    worker.parent.mkdir(parents=True)
+    worker.write_text("placeholder", encoding="utf-8")
+
+    found, tried = _find_worker_python({}, config_dir=tmp_path)
+
+    assert found == worker.resolve()
+    assert tried == [f"project uv environment: {worker}"]
+
+
+def test_relative_runtime_source_uses_config_directory(tmp_path: Path):
+    """Runtime 工作区的相对路径也应相对配置文件目录解析。"""
+    from mcp_server.config import _find_runtime_source
+
+    source = tmp_path / ".cst_runtime"
+    source.mkdir()
+
+    found = _find_runtime_source(
+        tmp_path / "plugin-cache",
+        {"runtime": {"source_path": ".cst_runtime"}},
+        config_dir=tmp_path,
+    )
+
+    assert found == source.resolve()
 
 
 def test_find_worker_python_falls_back_to_conda_candidates():

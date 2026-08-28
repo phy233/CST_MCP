@@ -11,7 +11,13 @@ from typing import Any
 
 def _load_config_file() -> tuple[Path | None, dict[str, Any]]:
     configured = os.environ.get("CST_MCP_CONFIG")
-    candidates = [Path(configured)] if configured else [Path.cwd() / ".cst_config.json"]
+    home = os.environ.get("CST_MCP_HOME")
+    if configured:
+        candidates = [Path(configured)]
+    elif home:
+        candidates = [Path(home) / ".cst_config.json"]
+    else:
+        candidates = [Path.cwd() / ".cst_config.json"]
     for path in candidates:
         try:
             if path.is_file():
@@ -23,6 +29,8 @@ def _load_config_file() -> tuple[Path | None, dict[str, Any]]:
 
 def _find_worker_python(
     config: dict[str, Any],
+    *,
+    config_dir: Path | None = None,
 ) -> tuple[Path | None, list[str]]:
     """探测 Python 3.9 worker 解释器；返回 (路径或 None, 已尝试候选清单)。
 
@@ -35,11 +43,19 @@ def _find_worker_python(
         or config.get("runtime", {}).get("worker_python")
     )
     if configured:
-        path = Path(configured).expanduser().resolve()
+        path = Path(configured).expanduser()
+        if not path.is_absolute() and config_dir is not None:
+            path = config_dir / path
+        path = path.resolve()
         tried.append(f"CST_WORKER_PYTHON/runtime.worker_python: {path}")
         return (path, tried) if path.is_file() else (None, tried)
     if sys.version_info[:2] == (3, 9):
         return Path(sys.executable).resolve(), tried
+    if config_dir is not None:
+        candidate = config_dir / ".envs" / "cst39" / "Scripts" / "python.exe"
+        tried.append(f"project uv environment: {candidate}")
+        if candidate.is_file():
+            return candidate, tried
     user_home = Path.home()
     for env_name in ("miniconda3", "anaconda3"):
         candidate = user_home / env_name / "envs" / "cst39" / "python.exe"
@@ -49,10 +65,18 @@ def _find_worker_python(
     return None, tried
 
 
-def _find_runtime_source(project_root: Path, config: dict[str, Any]) -> Path | None:
+def _find_runtime_source(
+    project_root: Path,
+    config: dict[str, Any],
+    *,
+    config_dir: Path | None = None,
+) -> Path | None:
     configured = config.get("runtime", {}).get("source_path")
     if configured:
-        path = Path(configured).expanduser().resolve()
+        path = Path(configured).expanduser()
+        if not path.is_absolute() and config_dir is not None:
+            path = config_dir / path
+        path = path.resolve()
         return path if path.is_dir() else None
     candidate = project_root / "skills" / "cst-runtime-cli" / "scripts"
     return candidate if candidate.is_dir() else None
@@ -101,8 +125,18 @@ def get_config() -> MCPConfig:
     """读取环境变量和本地配置。"""
     config_path, raw = _load_config_file()
     project_root = Path(__file__).resolve().parent.parent
+    configured_home = os.environ.get("CST_MCP_HOME")
+    if config_path is not None:
+        config_dir = config_path.parent
+    elif configured_home:
+        config_dir = Path(configured_home).expanduser().resolve()
+    else:
+        config_dir = project_root
     runtime = raw.get("runtime", {})
-    worker_python, worker_candidates = _find_worker_python(raw)
+    worker_python, worker_candidates = _find_worker_python(
+        raw,
+        config_dir=config_dir,
+    )
     return MCPConfig(
         server_name=str(runtime.get("server_name", "cst-runtime")),
         startup_timeout=int(runtime.get("startup_timeout", 30)),
@@ -116,7 +150,11 @@ def get_config() -> MCPConfig:
         config_path=config_path,
         worker_python=worker_python,
         worker_probe_candidates=worker_candidates,
-        runtime_source=_find_runtime_source(project_root, raw),
+        runtime_source=_find_runtime_source(
+            project_root,
+            raw,
+            config_dir=config_dir,
+        ),
         cst_python_libraries=str(
             os.environ.get("CST_PYTHON_LIBS")
             or runtime.get("cst_python_libraries")

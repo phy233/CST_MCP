@@ -1,4 +1,8 @@
 __pycache__/
+.venv/
+.envs/
+.python/
+.uv-cache/
 *.cst
 test_*/
 *.json
