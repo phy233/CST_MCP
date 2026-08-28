@@ -1,6 +1,6 @@
 {
   "name": "cst-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "CST Studio Suite 超表面设计辅助、重复建模、扫参与受控优化 Skills。",
   "author": {
     "name": "phy233",
@@ -17,6 +17,7 @@
     "optimization"
   ],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "CST MCP",
     "shortDescription": "CST 超表面设计与自动化辅助 Skills",
