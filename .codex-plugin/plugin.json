@@ -1,7 +1,7 @@
 {
   "name": "cst-mcp",
-  "version": "1.1.1",
-  "description": "CST Studio Suite 超表面设计辅助、重复建模、扫参与受控优化 Skills。",
+  "version": "1.1.1+codex.20260828091354",
+  "description": "CST Studio Suite \u8d85\u8868\u9762\u8bbe\u8ba1\u8f85\u52a9\u3001\u91cd\u590d\u5efa\u6a21\u3001\u626b\u53c2\u4e0e\u53d7\u63a7\u4f18\u5316 Skills\u3002",
   "author": {
     "name": "phy233",
     "url": "https://github.com/phy233"
@@ -20,8 +20,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "CST MCP",
-    "shortDescription": "CST 超表面设计与自动化辅助 Skills",
-    "longDescription": "为 Agent 提供 CST MCP 调用边界、超表面单元设计建议、重复建模、扫参与受控优化工作流；总体方案与最终判断仍由人类用户负责。",
+    "shortDescription": "CST \u8d85\u8868\u9762\u8bbe\u8ba1\u4e0e\u81ea\u52a8\u5316\u8f85\u52a9 Skills",
+    "longDescription": "\u4e3a Agent \u63d0\u4f9b CST MCP \u8c03\u7528\u8fb9\u754c\u3001\u8d85\u8868\u9762\u5355\u5143\u8bbe\u8ba1\u5efa\u8bae\u3001\u91cd\u590d\u5efa\u6a21\u3001\u626b\u53c2\u4e0e\u53d7\u63a7\u4f18\u5316\u5de5\u4f5c\u6d41\uff1b\u603b\u4f53\u65b9\u6848\u4e0e\u6700\u7ec8\u5224\u65ad\u4ecd\u7531\u4eba\u7c7b\u7528\u6237\u8d1f\u8d23\u3002",
     "developerName": "phy233",
     "category": "Productivity",
     "capabilities": [
@@ -31,9 +31,9 @@
     ],
     "websiteURL": "https://github.com/phy233/CST_MCP",
     "defaultPrompt": [
-      "使用 CST MCP 检查当前工程，并建议下一步单元设计操作。",
-      "基于现有参数制定受控扫参方案，保留人工决策点。",
-      "使用 CST MCP 完成一组已经确认的重复建模步骤。"
+      "\u4f7f\u7528 CST MCP \u68c0\u67e5\u5f53\u524d\u5de5\u7a0b\uff0c\u5e76\u5efa\u8bae\u4e0b\u4e00\u6b65\u5355\u5143\u8bbe\u8ba1\u64cd\u4f5c\u3002",
+      "\u57fa\u4e8e\u73b0\u6709\u53c2\u6570\u5236\u5b9a\u53d7\u63a7\u626b\u53c2\u65b9\u6848\uff0c\u4fdd\u7559\u4eba\u5de5\u51b3\u7b56\u70b9\u3002",
+      "\u4f7f\u7528 CST MCP \u5b8c\u6210\u4e00\u7ec4\u5df2\u7ecf\u786e\u8ba4\u7684\u91cd\u590d\u5efa\u6a21\u6b65\u9aa4\u3002"
     ]
   }
 }
