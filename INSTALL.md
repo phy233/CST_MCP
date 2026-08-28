@@ -64,13 +64,27 @@ $env:CST_WORKER_PYTHON = "C:\Users\<用户名>\miniconda3\envs\cst39\python.exe"
 {
   "runtime": {
     "worker_python": "C:\\Users\\<用户名>\\miniconda3\\envs\\cst39\\python.exe",
-    "source_path": "D:\\workspace\\.cst_runtime"
+    "source_path": "D:\\workspace\\.cst_runtime",
+    "long_run_threshold_seconds": 600,
+    "simulation_timeout": 1200,
+    "session_timeout": 300
   },
   "project": {
     "cst_path": "D:\\Program Files (x86)\\CST Studio Suite 2022\\AMD64\\python_cst_libraries"
   }
 }
 ```
+
+超时预算三键（均可省缺，省缺值即上例）：
+
+- `long_run_threshold_seconds`（默认 600）：长任务分界。solver 实际运行达到该秒数时，
+  run-experiment / wait-simulation 返回 `long_run_relinquish` 终态信号并保留 CST 继续运行；
+- `simulation_timeout`（默认 1200）：MCP 传输层硬兜底，必须大于长任务分界。超 10 小时的
+  单次求解请调大该值（如 39600），否则按 detached 协议分离后只读取证结果；
+- `session_timeout`（默认 300）：cst-session-open/close 等会话类操作的预算。
+
+语义细节见 [docs/architecture/error-handling.md](docs/architecture/error-handling.md) 的
+"长任务双态终止协议（L1/L2）"节。
 
 ### 2. 在现代 Python 环境中安装 `cst-mcp`
 

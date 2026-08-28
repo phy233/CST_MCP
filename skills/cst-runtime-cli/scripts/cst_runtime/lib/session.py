@@ -50,6 +50,10 @@ def open_project(
     Raises (抛出异常):
         RuntimeError: 如果由于进程卡死、路径错误或许可证问题导致工程无法打开时抛出。
     """
+    # 阶段信标：proxy 在 detach 前据此判断是否给予优雅收尾宽限
+    from ..core.phase_beacon import OPENING, write_phase
+
+    write_phase(project_path, OPENING)
     return call_core(
         _open_project,
         project_path,
@@ -92,6 +96,9 @@ def close_project(
     Raises:
         RuntimeError: 如果工程无法关闭，抛出错误
     """
+    from ..core.phase_beacon import CLOSING, write_phase
+
+    write_phase(project_path, CLOSING)
     return call_core(
         _close_project,
         project_path,

@@ -838,8 +838,12 @@ TOOL_DEFS = {
     "risk": "long-running",
     "description": (
         "Use this to run the explicitly selected and fully configured CST solver synchronously "
-        "until run_solver returns. It reports success only for run_solver=True; unlike "
-        "run-experiment, it does not require or validate new result-node data."
+        "until run_solver returns. It reports success only for run_solver=True; failures return "
+        "solver_run_failed with the original CST error text written to the Result log. Unlike "
+        "run-experiment, it does not require or validate new result-node data. This tool has no "
+        "internal relinquish point; if it exceeds the MCP transport fallback budget, the worker "
+        "is detached while CST remains running. Prefer start-simulation-async followed by the "
+        "wait-simulation relay for long solves."
     ),
     "handler": "tool_start_simulation",
     "json_schema": {
@@ -978,7 +982,12 @@ TOOL_DEFS = {
     "description": (
         "Use this after start-simulation-async to poll until the solver stops or the timeout "
         "expires. running=false proves only that execution stopped; use logs or required result "
-        "nodes to determine whether the solve succeeded."
+        "nodes to determine whether the solve succeeded. When timeout_seconds is omitted, the "
+        "tool automatically returns a terminal long_run_relinquish signal after "
+        "runtime.long_run_threshold_seconds (600 seconds by default) while CST keeps running. "
+        "Continue the relay by calling this tool again, or read evidence with list-run-ids or "
+        "export-sparameter. An explicit timeout preserves the traditional "
+        "simulation_wait_timeout behavior."
     ),
     "handler": "tool_wait_simulation",
     "json_schema": {
@@ -992,9 +1001,9 @@ TOOL_DEFS = {
             },
             "timeout_seconds": {
                 "type": "number",
-                "default": 3600,
+                "default": 600,
                 "examples": [
-                    3600
+                    600
                 ]
             },
             "poll_interval_seconds": {
@@ -1224,15 +1233,20 @@ def tool_is_simulation_running(args: dict) -> dict:
 
 
 def tool_wait_simulation(args: dict) -> dict:
+    from ..lib.longrun import POLLING, build_relinquish_result, get_long_run_threshold, write_phase
+
     project_path = project_path_from_args(args)
-    timeout_seconds = float(args.get("timeout_seconds", 3600.0))
+    explicit_timeout = args.get("timeout_seconds") is not None
+    timeout_seconds = (
+        float(args["timeout_seconds"])
+        if explicit_timeout
+        else float(get_long_run_threshold())
+    )
     poll_interval_seconds = float(args.get("poll_interval_seconds", 10.0))
-    started = time.monotonic()
-    started_wall = time.time()
-    # 轮询间隔下限钳制，避免 poll_interval_seconds=0 时 CPU 空转自旋
+    # 轮询间隔下限钳制，避�?poll_interval_seconds=0 �?CPU 空转自旋
     effective_poll = max(float(poll_interval_seconds), 0.1)
-    # 优先使用 start-simulation-async 落盘的启动时基线，避免求解器在
-    # start 与 wait 两次调用之间报错退出时漏检；无 marker 再回退现取基线。
+    # 优先使用 start-simulation-async 落盘的启动时基线，避免求解器�?
+    # start �?wait 两次调用之间报错退出时漏检；无 marker 再回退现取基线�?
     baseline_result = _sv.load_log_baseline(project_path)
     log_baseline = (
         dict(baseline_result.get("baseline", {}))
@@ -1246,8 +1260,13 @@ def tool_wait_simulation(args: dict) -> dict:
             if fallback.get("status") == "success"
             else {}
         )
+    # 计时基线放在 baseline 捕获之后：观察等待时长不包含 COM 预检查询，
+    # 与 run-experiment 的 solver 口径精神一致。
+    started = time.monotonic()
+    started_wall = time.time()
     polls = 0
     last_result = None
+    write_phase(project_path, POLLING)
     while True:
         polls += 1
         last_result = _sim.is_simulation_running(project_path)
@@ -1288,7 +1307,9 @@ def tool_wait_simulation(args: dict) -> dict:
                 "waited_seconds": round(time.monotonic() - started, 3),
                 "runtime_module": "cst_runtime._tools.project_ops",
             }
-        if time.monotonic() - started >= timeout_seconds:
+        elapsed = time.monotonic() - started
+        if explicit_timeout and elapsed >= timeout_seconds:
+            # 传统语义：调用方显式给出阻塞上限，到点如实报告仍在运行。
             return {
                 "status": "error",
                 "error_type": "simulation_wait_timeout",
@@ -1300,6 +1321,25 @@ def tool_wait_simulation(args: dict) -> dict:
                 "last_result": last_result,
                 "runtime_module": "cst_runtime._tools.project_ops",
             }
+        if not explicit_timeout and elapsed >= timeout_seconds:
+            # L1 让出：省缺 timeout_seconds 即自动让出模式，观察等待
+            # 达到长任务分界后返回 terminal 信号；solver 状态未受触碰，
+            # 恢复/接力按 recovery 序列执行。
+            return build_relinquish_result(
+                project_path=str(
+                    last_result.get("project_path", project_path)
+                    if last_result
+                    else project_path
+                ),
+                waited_seconds=elapsed,
+                polls=polls,
+                long_run_threshold_seconds=int(timeout_seconds),
+                source_tool="wait-simulation",
+                extra={
+                    "running": True,
+                    "last_result": last_result,
+                },
+            )
         time.sleep(effective_poll)
 
 

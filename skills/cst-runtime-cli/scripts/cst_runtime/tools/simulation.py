@@ -8,8 +8,15 @@ TOOL_DEFS = {
     "risk": "long-running",
     "description": (
         "Use this to run a fully configured solver and accept completion only when every specified "
-        "0D or 1D result path has nonempty data under one new Run ID. It does not export results; "
-        "use start-simulation for a plain synchronous solve without result-node acceptance."
+        "0D or 1D result path has nonempty data under one new Run ID. Result paths absent before "
+        "the solve form an empty baseline, which is valid for a first simulation. It does not "
+        "export results; it returns generic result_metrics and retains s11_metric only for S1,1 "
+        "compatibility. When timeout_seconds is omitted, the tool returns a terminal "
+        "long_run_relinquish signal after runtime.long_run_threshold_seconds (600 seconds by "
+        "default) while CST keeps running. Continue with wait-simulation or read evidence using "
+        "list-run-ids and export-sparameter. An explicit timeout preserves the traditional "
+        "pipeline_sim_timeout behavior and is rejected when it exceeds the MCP transport budget. "
+        "Use start-simulation for a plain synchronous solve without result-node acceptance."
     ),
     "handler": "tool_run_experiment",
     "json_schema": {
@@ -36,7 +43,7 @@ TOOL_DEFS = {
             "timeout_seconds": {
                 "type": "integer",
                 "examples": [
-                    3600
+                    600
                 ]
             }
         },
@@ -49,15 +56,22 @@ TOOL_DEFS = {
 
 # --- Handlers ---
 
+from typing import Any
+
 from ..lib.experiments import run_experiment
 from ._arguments import project_path_from_args
 
 
 def tool_run_experiment(args: dict) -> dict:
+    """timeout_seconds 省缺 ⇒ 自动让出模式（L1，见 lib.experiments 文档）；
+    显式数值 ⇒ 传统阻塞上限语义，不触发自动让出。"""
+    passthrough: dict[str, Any] = {}
+    if args.get("timeout_seconds") is not None:
+        passthrough["timeout_seconds"] = float(args["timeout_seconds"])
     return run_experiment(
         project_path=str(args.get("project_path", "")),
         completion_result_paths=list(args.get("completion_result_paths") or []),
-        timeout_seconds=int(args.get("timeout_seconds", 3600)),
+        **passthrough,
     )
 
 

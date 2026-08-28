@@ -112,7 +112,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "required_context": ["working_project", "S11 treepath"],
         "commands": [
             "uv run python -m cst_runtime start-simulation-async --project-path <run>\\projects\\working.cst",
-            "uv run python -m cst_runtime wait-simulation --project-path <run>\\projects\\working.cst --timeout-seconds 3600 --poll-interval-seconds 10",
+            "uv run python -m cst_runtime wait-simulation --project-path <run>\\projects\\working.cst --poll-interval-seconds 10",
             "uv run python -m cst_runtime cst-session-close --project-path <run>\\projects\\working.cst --save false",
             "uv run python -m cst_runtime list-run-ids --project-path <run>\\projects\\working.cst --treepath \"1D Results\\S-Parameters\\S1,1\" --module-type 3d --allow-interactive true --max-mesh-passes-only false",
             "uv run python -m cst_runtime get-1d-result --args-file <stages>\\get_1d_result_args.json",

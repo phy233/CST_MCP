@@ -581,7 +581,7 @@ TOOL_DEFS = {
     "risk": "write",
     "description": (
         "Use this to create a parametric Curves item from differentiable coordinate laws over "
-        "a parameter range in active X/Y/Z or WCS U/V/W coordinates. It creates no component, "
+        "a parameter range in active X/Y/Z or WCS U/V/W coordinates; creates no component, "
         "material, or solid; only a closed coplanar profile can later be extruded."
     ),
     "handler": "tool_define_analytical_curve",
@@ -952,8 +952,8 @@ TOOL_DEFS = {
     "risk": "write",
     "description": (
         "Use this to convert one closed coplanar Curves item into a solid in an existing "
-        "component and material; the source curve is consumed. Positive thickness follows the "
-        "profile's ordered normal and negative thickness reverses it, so determine the sign first."
+        "component and material; the curve is consumed. Positive thickness follows the "
+        "profile's ordered normal, negative reverses it; determine the sign first."
     ),
     "handler": "tool_define_extrude_curve",
     "json_schema": {
@@ -1991,8 +1991,8 @@ TOOL_DEFS = {
     "category": "modeling",
     "risk": "write",
     "description": (
-        "Use this to mirror or rotate an existing solid in active X/Y/Z or WCS U/V/W coordinates. "
-        "Mirror uses PlaneNormal, while rotate uses angle_x/y/z; the required plane_normal fields "
+        "Use this to mirror or rotate an existing solid in active X/Y/Z or WCS U/V/W coordinates; "
+        "mirror uses PlaneNormal, rotate uses angle_x/y/z; the plane_normal fields "
         "do not define the rotation axis. Use transform-curve for Curves items."
     ),
     "handler": "tool_transform_shape",

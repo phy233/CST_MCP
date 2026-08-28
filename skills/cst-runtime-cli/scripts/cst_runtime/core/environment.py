@@ -43,6 +43,31 @@ def load_cst_config(workspace_root: str = "") -> dict[str, Any]:
     return json.loads(content)
 
 
+def get_long_run_threshold(workspace_root: str = "") -> int:
+    """读取长任务分界（秒）：solver 运行达到该值时本次调用主动让出。
+
+    来源为 ``.cst_config.json`` 的 ``runtime.long_run_threshold_seconds``；
+    未配置、非法或过小时回退默认 600，下限钳制 60 防止把正常仿真
+    当成长任务。CLI 直调同样经由该函数，保证双端口径一致。
+    """
+    raw: Any = 600
+    try:
+        raw = (
+            load_cst_config(workspace_root)
+            .get("runtime", {})
+            .get("long_run_threshold_seconds", 600)
+        )
+    except (OSError, ValueError):
+        raw = 600
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 600
+    if value < 60:
+        return 60
+    return value
+
+
 def extract_cst_version_from_path(cst_path: str) -> str:
     """
     从绝对路径中提取 CST 的版本年份（例如返回 "2022"）。

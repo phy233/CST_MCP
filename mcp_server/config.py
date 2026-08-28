@@ -21,24 +21,32 @@ def _load_config_file() -> tuple[Path | None, dict[str, Any]]:
     return None, {}
 
 
-def _find_worker_python(config: dict[str, Any]) -> Path:
+def _find_worker_python(
+    config: dict[str, Any],
+) -> tuple[Path | None, list[str]]:
+    """探测 Python 3.9 worker 解释器；返回 (路径或 None, 已尝试候选清单)。
+
+    None 表示未找到可用解释器——不再虚构一个不存在的路径，让调用方
+    能基于候选清单给出可诊断的错误信息。
+    """
+    tried: list[str] = []
     configured = (
         os.environ.get("CST_WORKER_PYTHON")
         or config.get("runtime", {}).get("worker_python")
     )
     if configured:
-        return Path(configured).expanduser().resolve()
+        path = Path(configured).expanduser().resolve()
+        tried.append(f"CST_WORKER_PYTHON/runtime.worker_python: {path}")
+        return (path, tried) if path.is_file() else (None, tried)
     if sys.version_info[:2] == (3, 9):
-        return Path(sys.executable).resolve()
+        return Path(sys.executable).resolve(), tried
     user_home = Path.home()
-    candidates = [
-        user_home / "miniconda3" / "envs" / "cst39" / "python.exe",
-        user_home / "anaconda3" / "envs" / "cst39" / "python.exe",
-    ]
-    for candidate in candidates:
+    for env_name in ("miniconda3", "anaconda3"):
+        candidate = user_home / env_name / "envs" / "cst39" / "python.exe"
+        tried.append(f"conda fallback ({env_name}): {candidate}")
         if candidate.is_file():
-            return candidate
-    return candidates[0]
+            return candidate, tried
+    return None, tried
 
 
 def _find_runtime_source(project_root: Path, config: dict[str, Any]) -> Path | None:
@@ -52,27 +60,41 @@ def _find_runtime_source(project_root: Path, config: dict[str, Any]) -> Path | N
 
 @dataclass
 class MCPConfig:
-    """MCP 服务和 worker 传输配置。"""
+    """MCP 服务和 worker 传输配置。
+
+    超时预算分三层（均为秒，可在 ``.cst_config.json`` 的 ``runtime.*`` 下覆盖）：
+
+    - ``long_run_threshold_seconds``：长任务分界（权威判定在 runtime 侧，
+      按 solver 实际运行时长计算）；MCP 层仅透传/文档引用；
+    - ``simulation_timeout``：transport 硬兜底，必须大于长任务分界；
+      到点对 long-running 工具执行 detach 并终止 worker；
+    - ``session_timeout``：cst-session-open/close 等 session 或
+      process-control 类工具的预算（冷启动 Design Environment 耗时较长）；
+    - ``request_timeout``：其余轻量请求预算。
+    """
 
     server_name: str = "cst-runtime"
     transport: str = "stdio"
     startup_timeout: int = 30
     request_timeout: int = 120
-    simulation_timeout: int = 3600
+    simulation_timeout: int = 1200
+    session_timeout: int = 300
+    long_run_threshold_seconds: int = 600
     project_root: Path = field(
         default_factory=lambda: Path(__file__).resolve().parent.parent
     )
     config_path: Path | None = None
-    worker_python: Path = field(default_factory=lambda: Path(sys.executable))
+    # None 表示未找到可用 worker 解释器；worker_probe_candidates 记录
+    # 已尝试的候选，供启动失败的结构化错误引用。
+    worker_python: Path | None = None
+    worker_probe_candidates: list[str] = field(default_factory=list)
     runtime_source: Path | None = None
     cst_python_libraries: str = ""
 
-    @property
-    def instructions(self) -> str:
-        return (
-            "CST Studio Suite 自动化服务。工具定义和业务行为由独立的 "
-            "cst_runtime Python 库提供；MCP 层只负责协议转换和 IPC。"
-        )
+    instructions: str = (
+        "CST Studio Suite 自动化服务。工具定义和业务行为由独立的 "
+        "cst_runtime Python 库提供；MCP 层只负责协议转换和 IPC。"
+    )
 
 
 def get_config() -> MCPConfig:
@@ -80,14 +102,20 @@ def get_config() -> MCPConfig:
     config_path, raw = _load_config_file()
     project_root = Path(__file__).resolve().parent.parent
     runtime = raw.get("runtime", {})
+    worker_python, worker_candidates = _find_worker_python(raw)
     return MCPConfig(
         server_name=str(runtime.get("server_name", "cst-runtime")),
         startup_timeout=int(runtime.get("startup_timeout", 30)),
         request_timeout=int(runtime.get("request_timeout", 120)),
-        simulation_timeout=int(runtime.get("simulation_timeout", 3600)),
+        simulation_timeout=int(runtime.get("simulation_timeout", 1200)),
+        session_timeout=int(runtime.get("session_timeout", 300)),
+        long_run_threshold_seconds=int(
+            runtime.get("long_run_threshold_seconds", 600)
+        ),
         project_root=project_root,
         config_path=config_path,
-        worker_python=_find_worker_python(raw),
+        worker_python=worker_python,
+        worker_probe_candidates=worker_candidates,
         runtime_source=_find_runtime_source(project_root, raw),
         cst_python_libraries=str(
             os.environ.get("CST_PYTHON_LIBS")
