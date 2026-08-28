@@ -132,7 +132,7 @@ uv run python -m pytest -q
 
 - `worker_proxy` 用例：Worker 启动成功，`list_open` 返回 `{'status': 'success', ...}`；kill 后自动重启（PID 变化）
 
-## MCP 客户端配置示例
+## 独立 MCP 客户端配置示例（非 Codex 插件方式）
 
 Claude Desktop（`claude_desktop_config.json`）或其他 MCP 客户端：
 
@@ -147,26 +147,34 @@ Claude Desktop（`claude_desktop_config.json`）或其他 MCP 客户端：
 }
 ```
 
-> 客户端进程需要能找到 `uv`，并有权限执行配置的 Python 3.9 Worker。若客户端在配置修改前已启动，需重启客户端。
+> 该段仅供不支持插件的 MCP 客户端使用。Codex 插件用户不应再单独注册同名 `cst-runtime`，否则会同时加载两份服务。客户端进程需要能找到 `uv`，并有权限执行配置的 Python 3.9 Worker；若环境或配置在客户端启动后才修改，需重启客户端。
 
 ## 插件优先的 Skill 安装与获取验证
 
-### MCP 工具和 Skill 是两条独立链路
+### 同一插件中的 MCP 工具与 Skill
 
-- MCP 客户端配置决定 Agent 能否取得 `cst-runtime` 工具；
-- 插件或独立 Skill 安装位置决定 Agent 能否发现 `cst-mcp`、`cst-metasurface-design`、`cst-runtime-optimization` 和 `cst-runtime-cli`；
-- MCP 工具可见不代表 Skill 已安装，Skill 可见也不代表 MCP 服务已经连接。
+- `.codex-plugin/plugin.json` 声明四个 Skill，并通过 `mcpServers` 指向根目录 `.mcp.json`；
+- `.mcp.json` 由插件作用域执行 `uv run cst-mcp`，Runtime Registry 仍动态决定 Agent 实际取得的工具；
+- Skill 发现和 MCP 进程启动是同一插件的两个组件，仍需分别验收：Skill 可见不代表本机 Worker 配置正确，工具连接成功也不代表具体 CST 仿真已经执行。
 
 ### 默认方式：安装仓库插件
 
-仓库根目录的 `.codex-plugin/plugin.json` 直接把 `./skills/` 作为插件组件，`.agents/plugins/marketplace.json` 则把 `cst-mcp` 指向 Git 仓库根目录。Codex / ChatGPT 用户默认通过插件取得全部四个 Skill：
+仓库根目录的 `.codex-plugin/plugin.json` 把 `./skills/` 和 `./.mcp.json` 作为插件组件，`.agents/plugins/marketplace.json` 则把 `cst-mcp` 指向 Git 仓库根目录。Codex 用户默认通过插件取得全部四个 Skill 与 `cst-runtime` 工具服务：
 
 ```powershell
 codex plugin marketplace add phy233/CST_MCP
 codex plugin add cst-mcp@cst-mcp
 ```
 
-插件安装后新建任务再检查 Skill；旧任务不作为冷启动发现验收。当前插件没有声明 `.mcp.json`，因为本项目的 CST 安装路径、Python 3.9 Worker 和 `.cst_config.json` 都是机器相关配置。插件解决 Skill 发现，MCP 服务仍按上一节配置。
+插件清单使用可移植的 `uv run cst-mcp`，不会写入开发机绝对路径。首次启动 Codex 前，把本机配置路径和 Python 3.9 Worker 暴露给 Codex 进程；以下 PowerShell 示例写入当前用户环境，修改后需完全退出并重新启动 Codex：
+
+```powershell
+$configPath = (Resolve-Path .\.cst_config.json).Path
+[Environment]::SetEnvironmentVariable("CST_MCP_CONFIG", $configPath, "User")
+[Environment]::SetEnvironmentVariable("CST_WORKER_PYTHON", "C:\Users\<用户名>\miniconda3\envs\cst39\python.exe", "User")
+```
+
+项目内 `.codex/config.toml` 只保留 `plugins."cst-mcp".mcp_servers.cst-runtime` 下的启用状态和工具审批策略，不再声明独立的 `[mcp_servers.cst-runtime]`。插件安装后应重启 Codex 并新建任务；旧任务不作为冷启动发现验收。
 
 ### 回退方式：直接安装 Skill 源文件
 
@@ -191,7 +199,7 @@ codex plugin add cst-mcp@cst-mcp
 安装或更新后，新建一个 Codex 任务并分别检查：
 
 1. **Skill 获取**：在 `/skills` 或 `$` 选择器中能够看到已安装的 Skill；显式输入 `$cst-mcp` 时能加载对应说明。
-2. **MCP 工具获取**：客户端工具目录中能够看到来自 `cst-runtime` 的工具。工具数量由当前 Runtime Registry 动态决定，不以 README 中的固定数字验收。
+2. **MCP 工具获取**：客户端工具目录中能够看到由 `cst-mcp` 插件提供的 `cst-runtime` 工具。工具数量由当前 Runtime Registry 动态决定，不以 README 中的固定数字验收。
 3. **路由边界**：超表面任务可组合加载 `cst-metasurface-design`；优化意图可组合加载 `cst-runtime-optimization`；纯理论讨论不应因为出现普通 RF 术语而自动调用 CST。
 
 | 现象 | 结论与下一步 |

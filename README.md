@@ -150,7 +150,9 @@ uv run cst-mcp
 
 ### 方式 A（默认）：Codex / ChatGPT 插件
 
-仓库根目录已经是一个可分发插件：`.codex-plugin/plugin.json` 直接声明 `./skills/`，安装 `cst-mcp` 插件即可让 Codex / ChatGPT 从同一份源码发现四个 Skill，不需要再复制一套插件专用 Skill。
+仓库根目录已经是一个可分发插件：`.codex-plugin/plugin.json` 同时声明 `./skills/` 与 `./.mcp.json`。安装 `cst-mcp` 插件后，Codex 从同一插件取得四个 Skill，并由插件作用域启动 `cst-runtime` MCP 服务，不再需要单独执行 `codex mcp add cst-runtime`。
+
+插件不会打包机器相关路径。首次启动 Codex 前，仍需按 [INSTALL.md](INSTALL.md) 准备 Python 3.9 Worker 和 `.cst_config.json`，并让 Codex 进程能够读取 `CST_WORKER_PYTHON`、`CST_MCP_CONFIG` 与 `uv`。
 
 ```powershell
 # 添加本仓库提供的 marketplace，然后安装插件
@@ -158,7 +160,7 @@ codex plugin marketplace add phy233/CST_MCP
 codex plugin add cst-mcp@cst-mcp
 ```
 
-安装或更新后新建任务，再在 `/skills` 或 `$` 选择器中确认 `cst-mcp`、`cst-metasurface-design`、`cst-runtime-optimization` 和 `cst-runtime-cli` 可见。插件当前只负责分发 Skills；CST 2022 路径、Python 3.9 Worker 和本机 MCP 启动方式仍按 [INSTALL.md](INSTALL.md) 显式配置，避免把开发机绝对路径打包给其他用户。
+安装或更新后重启 Codex 并新建任务，再确认四个 Skill 与插件作用域的 `cst-runtime` 工具均可见。CST 2022 路径和 Python 3.9 Worker 仍按 [INSTALL.md](INSTALL.md) 在本机配置，避免把开发机绝对路径写入插件包。
 
 ### 方式 B：独立 Skill 源码（跨平台回退）
 
@@ -214,7 +216,8 @@ data = get_1d_result(
 ```
 CST_MCP/
 ├── .codex-plugin/
-│   └── plugin.json                      # 默认插件入口，直接分发顶层 Skills
+│   └── plugin.json                      # 默认插件入口，声明 Skills 与 MCP 服务
+├── .mcp.json                            # 插件作用域的 cst-runtime 启动清单
 ├── .agents/plugins/
 │   └── marketplace.json                 # 仓库 marketplace 与远端根插件入口
 ├── devkit/                              # 扩展开发工具包
