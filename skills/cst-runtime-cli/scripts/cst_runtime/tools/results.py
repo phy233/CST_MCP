@@ -7,8 +7,10 @@ TOOL_DEFS = {
     "category": "results",
     "risk": "read",
     "description": (
-        "枚举实际 ResultTree 中的普通端口与 Floquet S 参数节点及可用 Run ID。"
-        "允许工程同时在 CST 中打开；此时读取最近保存到磁盘的工程状态。"
+        "Use this after saved results exist to enumerate exact regular-port and Floquet "
+        "S-parameter ResultTree paths with available Run IDs. It discovers nodes only; "
+        "use export-sparameter or get-1d-result to read data, and an open project yields "
+        "its latest saved disk state."
     ),
     "handler": "tool_list_sparameter_results",
     "json_schema": {
@@ -28,8 +30,10 @@ TOOL_DEFS = {
     "category": "results",
     "risk": "filesystem-write",
     "description": (
-        "按真实 ResultTree 节点导出一条 S 参数曲线。可直接指定 result_path，或使用响应端口、"
-        "激励端口及可选模式；支持 S1,1 和 SZmin(1),Zmax(1) 等 CST 2022 名称。"
+        "Use this to export one saved S-parameter curve to JSON by exact result_path or "
+        "explicit response/excitation port and optional mode identifiers. It writes one "
+        "channel, not a full network matrix; use list-sparameter-results only when the "
+        "node or Run ID is unknown."
     ),
     "handler": "tool_export_sparameter",
     "json_schema": {
@@ -53,7 +57,9 @@ TOOL_DEFS = {
     "category": "results",
     "risk": "filesystem-write",
     "description": (
-        "使用 CST 2022 TOUCHSTONE Object 导出完整 S/Y/Z 网络矩阵；端口模式顺序由 CST 文件头给出。"
+        "Use this to export the complete saved S-, Y-, or Z-parameter network matrix "
+        "through the CST 2022 TOUCHSTONE object. Unlike export-sparameter, it writes the "
+        "full network; read the generated header for the actual port and mode order."
     ),
     "handler": "tool_export_touchstone",
     "json_schema": {
@@ -79,7 +85,10 @@ TOOL_DEFS = {
 "generate-report": {
     "category": "results",
     "risk": "filesystem-write",
-    "description": "Generate a modular HTML report from exported S11, farfield, and audit files. Supports --modules and --split.",
+    "description": (
+        "Use this to build a modular HTML report from already exported S-parameter, "
+        "farfield, and audit files. It does not run CST or discover and export ResultTree data."
+    ),
     "handler": "tool_generate_report",
     "json_schema": {
         "type": "object",
@@ -99,7 +108,7 @@ TOOL_DEFS = {
             "page_title": {
                 "type": "string",
                 "examples": [
-                    "电磁仿真报告"
+                    "Electromagnetic Simulation Report"
                 ]
             },
             "modules": {
@@ -128,7 +137,11 @@ TOOL_DEFS = {
 "get-1d-result": {
     "category": "results",
     "risk": "filesystem-write",
-    "description": "Read an exact 0D/1D result-tree path with cst.results and serialize its saved data to JSON.",
+    "description": (
+        "Use this to read one exact saved 0D or 1D ResultTree path through cst.results and "
+        "serialize its data to JSON. Unlike export-sparameter, it is generic; use "
+        "list-result-items or a specialized list tool only when the path is unknown."
+    ),
     "handler": "tool_get_1d_result",
     "json_schema": {
         "type": "object",
@@ -153,7 +166,10 @@ TOOL_DEFS = {
             },
             "run_id": {
                 "type": "integer",
-                "description": "run_id=0（默认）选择最新结果；非参数化仿真中 0 也可能是唯一真实 Run ID",
+                "description": (
+                    "Run ID 0 selects the latest result by default and may also be the only "
+                    "actual Run ID for a nonparametric simulation."
+                ),
                 "examples": [
                     1
                 ]
@@ -193,7 +209,11 @@ TOOL_DEFS = {
 "get-2d-result": {
     "category": "results",
     "risk": "filesystem-write",
-    "description": "Serialize 2D data only when the installed cst.results API exposes get_result2d_item; CST 2022 does not document it.",
+    "description": (
+        "Use this only when the installed cst.results API exposes get_result2d_item to "
+        "serialize a 2D result to JSON. CST 2022 does not document that method; otherwise "
+        "use a supported field-export tool rather than approximating."
+    ),
     "handler": "tool_get_2d_result",
     "json_schema": {
         "type": "object",
@@ -256,7 +276,10 @@ TOOL_DEFS = {
 "get-parameter-combination": {
     "category": "results",
     "risk": "read",
-    "description": "Read the parameter combination for a result run ID.",
+    "description": (
+        "Use this to read the CST parameter combination associated with one known result "
+        "Run ID. It does not read result values or validate solver completion."
+    ),
     "handler": "tool_get_parameter_combination",
     "json_schema": {
         "type": "object",
@@ -269,7 +292,10 @@ TOOL_DEFS = {
             },
             "run_id": {
                 "type": "integer",
-                "description": "run_id=0 返回最新参数组合；非参数化仿真中 0 也可能是唯一真实 Run ID",
+                "description": (
+                    "Run ID 0 returns the latest parameter combination and may also be the "
+                    "only actual Run ID for a nonparametric simulation."
+                ),
                 "examples": [
                     1
                 ]
@@ -299,7 +325,10 @@ TOOL_DEFS = {
 "get-version-info": {
     "category": "results",
     "risk": "read",
-    "description": "Read cst.results version information.",
+    "description": (
+        "Use this only to inspect the installed cst.results version when diagnosing "
+        "compatibility. It does not inspect a project or its results."
+    ),
     "handler": "tool_get_version_info",
     "json_schema": {
         "type": "object",
@@ -311,7 +340,11 @@ TOOL_DEFS = {
 "list-result-items": {
     "category": "results",
     "risk": "read",
-    "description": "List result tree items from a project path.",
+    "description": (
+        "Use this to discover saved ResultTree item paths, optionally filtered by module, "
+        "result type, or subproject. It lists nodes only; use get-1d-result, get-2d-result, "
+        "or an export tool for data."
+    ),
     "handler": "tool_list_result_items",
     "json_schema": {
         "type": "object",
@@ -360,7 +393,10 @@ TOOL_DEFS = {
 "list-run-ids": {
     "category": "results",
     "risk": "read",
-    "description": "List CST result run IDs from a project path.",
+    "description": (
+        "Use this to list available Run IDs for one exact saved ResultTree path, with "
+        "optional nonparametric or mesh-pass filtering. It does not read the result data."
+    ),
     "handler": "tool_list_run_ids",
     "json_schema": {
         "type": "object",
@@ -416,7 +452,10 @@ TOOL_DEFS = {
 "list-subprojects": {
     "category": "results",
     "risk": "read",
-    "description": "List subprojects from a CST results project by explicit project_path.",
+    "description": (
+        "Use this to list result subprojects from one explicit CST project path before "
+        "subproject-scoped discovery. It does not list result items or data."
+    ),
     "handler": "tool_list_subprojects",
     "json_schema": {
         "type": "object",
@@ -444,7 +483,11 @@ TOOL_DEFS = {
 "open-results-project": {
     "category": "results",
     "risk": "read",
-    "description": "Validate that cst.results can open a project path.",
+    "description": (
+        "Use this only to verify that cst.results can open an explicit project or "
+        "subproject path. It does not enumerate nodes, Run IDs, or data and is not a "
+        "routine pre-check."
+    ),
     "handler": "tool_open_results_project",
     "json_schema": {
         "type": "object",
@@ -479,7 +522,10 @@ TOOL_DEFS = {
 "plot-exported-file": {
     "category": "results",
     "risk": "filesystem-write",
-    "description": "Render an exported JSON result or CST farfield ASCII/TXT file to an HTML preview.",
+    "description": (
+        "Use this to render an already exported JSON result or CST farfield ASCII/TXT "
+        "file into an HTML preview. It does not read CST ResultTree data or perform a new export."
+    ),
     "handler": "tool_plot_exported_file",
     "json_schema": {
         "type": "object",

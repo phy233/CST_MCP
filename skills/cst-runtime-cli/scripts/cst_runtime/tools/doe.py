@@ -10,7 +10,11 @@ _register_tool_defs({
     "design-probes": {
         "category": "optimization",
         "risk": "read",
-        "description": "Design a Plackett-Burman probe plan to screen parameters. Returns a list of experiments; run each via prepare-experiment + run-experiment, then feed results to analyze-probes.",
+        "description": (
+            "Use this to generate a Plackett-Burman parameter-screening plan without "
+            "running CST. Evaluate the returned experiments with prepare-experiment and "
+            "run-experiment, then pass parameter and objective values to analyze-probes."
+        ),
         "handler": "tool_design_probes",
         "json_schema": {
         "type": "object",
@@ -57,7 +61,11 @@ _register_tool_defs({
     "analyze-probes": {
         "category": "optimization",
         "risk": "read",
-        "description": "Analyze probe results: compute main effects and two-way interactions. Input must include the parameter values and the objective value for each probe.",
+        "description": (
+            "Use this to analyze completed probe data offline and estimate main effects and "
+            "two-way interactions. Each probe must include its parameter values and objective; "
+            "this tool neither runs CST nor asks or updates an Optuna study."
+        ),
         "handler": "tool_analyze_probes",
         "json_schema": {
         "type": "object",

@@ -1423,12 +1423,12 @@ TOOL_DEFS = {
     },
 },
 
-"export-e-field": _field_export_definition("tool_export_e_field", "电场"),
-"export-h-field": _field_export_definition("tool_export_h_field", "磁场"),
-"export-surface-current": _field_export_definition("tool_export_surface_current", "表面电流"),
-"export-power-flow": _field_export_definition("tool_export_power_flow", "功率流"),
-"export-current-density": _field_export_definition("tool_export_current_density", "电流密度"),
-"export-power-loss-density": _field_export_definition("tool_export_power_loss_density", "功率损耗密度"),
+"export-e-field": _field_export_definition("tool_export_e_field", "electric-field"),
+"export-h-field": _field_export_definition("tool_export_h_field", "magnetic-field"),
+"export-surface-current": _field_export_definition("tool_export_surface_current", "surface-current"),
+"export-power-flow": _field_export_definition("tool_export_power_flow", "power-flow"),
+"export-current-density": _field_export_definition("tool_export_current_density", "current-density"),
+"export-power-loss-density": _field_export_definition("tool_export_power_loss_density", "power-loss-density"),
 
 "export-voltage-result": {
     "category": "results",

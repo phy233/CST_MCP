@@ -140,9 +140,10 @@ def _workflow_operations() -> dict[str, OperationSpec]:
             name="array.build",
             tool_name="build-array",
             description=(
-                "按普通 code 和受控 builder 批量构建 CST 阵列；"
-                "元素坐标是参考模板的相对平移量。brick-v1 的 origin 是最小角点，"
-                "如使用中心坐标应由调用方预先换算。"
+                "Use this to instantiate a user-provided set of controlled unit builders at "
+                "user-provided relative translations. It repeats modeling work but does not "
+                "synthesize an array or select units; brick-v1 origin is the minimum corner, "
+                "so convert center coordinates before calling when needed."
             ),
             risk="write",
             exposure=exposure_for("build-array"),
@@ -158,8 +159,8 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                                 "parameters": {
                                     "type": "object",
                                     "description": (
-                                        "builder 参数；brick-v1 的 origin 为最小角点，"
-                                        "size 沿 X/Y/Z 正方向延伸。"
+                                        "Builder parameters. For brick-v1, origin is the minimum "
+                                        "corner and size extends in the positive X, Y, and Z directions."
                                     ),
                                 },
                             },
@@ -175,11 +176,13 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                             "properties": {
                                 "code": {
                                     "type": "string",
-                                    "description": "普通 builder 查询键；字符串 0 不表示空单元。",
+                                    "description": (
+                                        "Ordinary builder lookup key; the string '0' does not mean an empty cell."
+                                    ),
                                 },
-                                "x": {"type": "number", "description": "X 方向相对平移量。"},
-                                "y": {"type": "number", "description": "Y 方向相对平移量。"},
-                                "z": {"type": "number", "description": "Z 方向相对平移量。"},
+                                "x": {"type": "number", "description": "Relative translation along X."},
+                                "y": {"type": "number", "description": "Relative translation along Y."},
+                                "z": {"type": "number", "description": "Relative translation along Z."},
                             },
                             "required": ["code", "x", "y", "z"],
                             "additionalProperties": False,
@@ -195,7 +198,12 @@ def _workflow_operations() -> dict[str, OperationSpec]:
         "sweep.run": OperationSpec(
             name="sweep.run",
             tool_name="quick-sweep",
-            description="运行参数扫描并导出 JSON、CSV 和 NPZ 结果。",
+            description=(
+                "Use this to run a generic parameter sweep and export JSON, CSV, and NPZ "
+                "results after the human has specified parameter values, target frequency, "
+                "and an actual ResultTree path. It does not choose the unit structure, ranges, "
+                "objective, or stopping rule."
+            ),
             risk="long-running",
             exposure=exposure_for("quick-sweep"),
             input_schema=_object_schema(

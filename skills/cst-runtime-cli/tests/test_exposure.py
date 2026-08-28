@@ -1,6 +1,9 @@
 """Agent/MCP 完整工程能力与高风险隔离策略测试。"""
 from __future__ import annotations
 
+import json
+import re
+
 
 def test_every_operation_has_valid_exposure() -> None:
     from cst_runtime.api.exposure import VALID_EXPOSURES
@@ -110,3 +113,30 @@ def test_all_atomic_tools_have_output_schema() -> None:
     }
     assert "result_metrics" in result_tools["run-experiment"]["properties"]
     assert "results" in result_tools["list-field-results"]["properties"]
+
+
+def test_agent_tool_metadata_is_english_and_selection_oriented() -> None:
+    """Agent 可见元数据应使用便于工具选择的英文说明。"""
+    from cst_runtime.api import describe_tools
+    from cst_runtime.api.exposure import AGENT_TOOLS
+
+    agent_tools = [
+        item for item in describe_tools()
+        if item["exposure"] == "agent"
+    ]
+    assert {item["name"] for item in agent_tools} == AGENT_TOOLS
+
+    han_pattern = re.compile(r"[\u3400-\u9fff]")
+    invalid_descriptions = [
+        item["name"]
+        for item in agent_tools
+        if not item["description"].startswith("Use this")
+        or han_pattern.search(item["description"])
+    ]
+    invalid_schemas = [
+        item["name"]
+        for item in agent_tools
+        if han_pattern.search(json.dumps(item["input_schema"], ensure_ascii=False))
+    ]
+    assert invalid_descriptions == []
+    assert invalid_schemas == []

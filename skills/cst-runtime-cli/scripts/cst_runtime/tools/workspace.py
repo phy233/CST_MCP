@@ -6,7 +6,10 @@ TOOL_DEFS = {
 "get-run-context": {
     "category": "run",
     "risk": "read",
-    "description": "Read standard run context through cst_runtime.",
+    "description": (
+        "Use this to read an existing standard run context by task path and Run ID. It does "
+        "not create a run, modify CST, or prove that modeling or simulation has completed."
+    ),
     "handler": "tool_get_run_context",
     "json_schema": {
         "type": "object",
@@ -34,7 +37,11 @@ TOOL_DEFS = {
 "health-check": {
     "category": "workspace",
     "risk": "read",
-    "description": "只读检查 Python、工作区、CST 库和导入状态；不会初始化、安装或修改配置。",
+    "description": (
+        "Use this at initial setup, after an environment change, or when imports fail to "
+        "inspect Python, workspace, and CST-library availability. It is read-only, is not a "
+        "routine pre-check, and does not prove real CST compatibility."
+    ),
     "handler": "tool_health_check",
     "json_schema": {
         "type": "object",
@@ -54,7 +61,10 @@ TOOL_DEFS = {
 "health-repair": {
     "category": "workspace",
     "risk": "filesystem-write",
-    "description": "显式修复 health-check 发现的可自动处理问题；默认仅供人工 CLI 使用。",
+    "description": (
+        "Use this from the human CLI only to apply explicitly requested automatic repairs "
+        "reported by health-check. It is not exposed to the Agent and does not install CST itself."
+    ),
     "handler": "tool_health_repair",
     "json_schema": {
         "type": "object",
@@ -69,7 +79,11 @@ TOOL_DEFS = {
 "init-task": {
     "category": "workspace",
     "risk": "filesystem-write",
-    "description": "Create a task.json and runs directory inside a runtime workspace.",
+    "description": (
+        "Use this after init-workspace to create task.json and a runs directory for one "
+        "human-defined goal and explicit source project. It establishes traceable Runtime "
+        "metadata only and does not open, model, or simulate the CST project."
+    ),
     "handler": "tool_init_task",
     "json_schema": {
         "type": "object",
@@ -125,7 +139,10 @@ TOOL_DEFS = {
 "init-workspace": {
     "category": "workspace",
     "risk": "filesystem-write",
-    "description": "Initialize a minimal CST runtime workspace in an empty or existing directory.",
+    "description": (
+        "Use this to initialize the minimal CST Runtime directory structure in an explicit "
+        "empty or existing directory. It does not install CST or validate a real CST session."
+    ),
     "handler": "tool_init_workspace",
     "json_schema": {
         "type": "object",
@@ -146,7 +163,11 @@ TOOL_DEFS = {
 "install-cst-libraries": {
     "category": "workspace",
     "risk": "filesystem-write",
-    "description": "Install or verify CST Python libraries (cst, cst.results, cst.interface) using the uv-managed environment.",
+    "description": (
+        "Use this from the human CLI only to install or verify cst, cst.results, and "
+        "cst.interface in the uv-managed environment. It is not exposed to the Agent and "
+        "does not validate a real CST modeling or solver workflow."
+    ),
     "handler": "tool_install_cst_libraries",
     "json_schema": {
         "type": "object",
@@ -174,7 +195,10 @@ TOOL_DEFS = {
 "prepare-run": {
     "category": "run",
     "risk": "filesystem-write",
-    "description": "Create a standard run workspace through cst_runtime.",
+    "description": (
+        "Use this to create the standard directory and metadata for a new run inside an "
+        "existing Runtime task. It does not open CST, change a model, or start a simulation."
+    ),
     "handler": "tool_prepare_run",
     "json_schema": {
         "type": "object",
