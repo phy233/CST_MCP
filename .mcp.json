@@ -7,6 +7,12 @@
         "run",
         "cst-mcp"
       ],
+      "env_vars": [
+        "CST_MCP_CONFIG",
+        "CST_WORKER_PYTHON",
+        "SystemRoot",
+        "windir"
+      ],
       "startup_timeout_sec": 120,
       "tool_timeout_sec": 3600
     }
