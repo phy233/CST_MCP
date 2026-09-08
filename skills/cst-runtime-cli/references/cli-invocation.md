@@ -19,8 +19,9 @@
 
 ## 返回值
 
-每次读取 stdout JSON：
+每次读取 stdout JSON，先判断终止标志，再判断业务状态：
 
+- `terminal=true` 或 `await_user_decision=true`：停止本回合的后续 CST 调用，报告求解器状态和恢复建议；按 [故障判断与恢复](failure-recovery.md#先处理终止信号) 处理，不进入下方普通超时分支；
 - `status=success`：充分相信 CST 已成功执行该工具对应的 VBA，不再查询实体、参数或配置证明执行成功；结果导出等文件产物和异步求解结果仍按工具承诺取得；
 - `status=error`：读取 `error_type`、`message`、`error` 和 `context`；
 - transport/worker timeout：操作可能已经提交，先检查实际状态，不直接重复；

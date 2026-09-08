@@ -1,5 +1,15 @@
 # 故障判断与恢复
 
+## 先处理终止信号
+
+在普通错误或超时处理之前检查 `terminal` 和 `await_user_decision`。任一为 `true` 时，立即停止本回合对该任务的所有后续 CST 调用，包括状态查询、轮询、重试和重新启动求解。
+
+- `long_run_relinquish`：Runtime 达到长任务分界后让出等待，CST 求解可能仍在后台运行；这不是求解失败证据。
+- 带 `terminal=true` 的传输超时：同样停止，不能按普通传输错误继续检查副作用。
+- 报告 `project_path`、`error_type`、`timeout_class`、`solver_left_running` 和返回的 `recovery`；未返回的信息标为未知。只在用户决定恢复后，按该次返回的恢复序列继续。
+
+以下故障流程仅用于未触发上述终止分支的调用。
+
 ## 写操作失败
 
 - `validation_error`：尚未提交 CST，修正输入后可以重新调用；

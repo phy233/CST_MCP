@@ -16,7 +16,7 @@ Codex / 其他 MCP 客户端
 .envs/cst39    Python 3.9，运行 cst_runtime.worker
     │ CST Python API / VBA
     ▼
-CST Studio Suite 2022+
+CST Studio Suite 2022（支持基线）
 ```
 
 默认目录均位于项目根目录：
@@ -34,8 +34,10 @@ CST Studio Suite 2022+
 
 - Windows PowerShell；
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)；
-- CST Studio Suite 2022 或更高版本及有效许可证；
+- CST Studio Suite 2022 及有效许可证；其他版本须按具体工具核对兼容性，不保证向上兼容；
 - CST 安装目录中的 `AMD64\python_cst_libraries`。
+
+当前周期边界、Floquet、Plane Wave 和频域求解器设置构造器仅支持 CST 2022；其他版本的能力边界见 [CST 兼容性记录](docs/compatibility/cst-2022.md#当前状态2026-08-核查结论)。
 
 ## 一次性创建环境
 
@@ -137,6 +139,8 @@ Skill 可见只证明工作流文档成功分发；MCP 工具可见只证明服�
 ## 不支持插件的平台
 
 OpenCode 等不支持 OpenAI 插件分发的平台，可以继续使用仓库顶层 `skills/` 作为规范源文件。必须复制或链接完整 Skill 文件夹，包括 `references/` 和 `scripts/`，不能只复制 `SKILL.md`。
+
+独立安装 Skill 不等于部署 Runtime 或连接 MCP。首次使用本文的环境创建和启动命令时，需要另外取得完整 CST_MCP 仓库，并在该仓库根目录运行；`scripts/setup-environments.ps1`、`scripts/start-mcp.ps1` 和 MCP 服务源码不包含在单个 Skill 文件夹中。已有部署可复用其环境和连接，`CST_MCP_HOME` 指向环境与默认配置所在目录。
 
 独立 MCP 客户端可直接调用启动脚本：
 

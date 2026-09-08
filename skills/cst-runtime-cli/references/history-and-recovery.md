@@ -37,7 +37,7 @@
 - 基线比目标更长：不能正向回退，选择更早物理检查点；
 - 两者分叉：禁止向基线继续追加，从共同基线的物理副本恢复。
 
-每步执行前校验 expected-before 哈希，执行后校验 expected-after 哈希；不匹配立即停止并保留副本。
+仅在已授权的重放流程中，每步执行前校验 expected-before 哈希，执行后校验 expected-after 哈希；不匹配立即停止并保留副本。普通业务写入不使用这组重放校验。
 
 ## MCP 交互和工作笔记
 
@@ -50,15 +50,17 @@
 
 大型请求、结果或错误可以外置到内容寻址 payload 文件。MCP 日志不包含 Agent 完整聊天或隐藏推理；Agent note 只保存主动提交的可见文本。
 
-## 最小安全流程
+## 显式 History 审计流程
+
+以下示例只用于用户明确要求比较一次修改前后 History 的审计任务，不是普通建模的固定前后检查。普通写操作按结构化返回记录结果，已有 interaction journal 足够时直接查询现有记录。
 
 ```text
 inspect-history-status
 → export-history-snapshot
-→ diff-history-snapshots（需要比较时）
-→ create-history-checkpoint
-→ 一个业务修改
-→ 再导出 snapshot 并检查 interaction
+→ create-history-checkpoint（需要命名检查点时）
+→ 用户已授权的一个业务修改
+→ export-history-snapshot
+→ diff-history-snapshots / inspect-interaction-history
 ```
 
 需要回退时先生成 restore plan；只有用户审查计划后，才创建物理副本并重放。

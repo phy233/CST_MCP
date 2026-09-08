@@ -1,11 +1,11 @@
 ---
 name: cst-metasurface-design
-description: 在人类主导的 CST 超表面设计中提供分步骤辅助，包括单元建议、工程检查、周期设置、重复建模和结果整理。涉及超表面/metasurface、频率选择表面/FSS、周期单元/periodic unit cell、反射阵列/reflectarray、透射阵列/transmitarray、Floquet 端口、Plane Wave、复数 S 参数、幅相或极化转换时使用；不替代用户作最终设计决定，也不承诺端到端或全自动设计。
+description: 辅助 CST 超表面/metasurface、FSS、周期单元/periodic unit cell、反射阵列/reflectarray 或透射阵列/transmitarray 的方案判断、物理设置和结果解释。Floquet、Plane Wave、幅相或极化转换须具有上述设计语境；普通天线 S 参数分析、代码和插件文档审核不使用。
 ---
 
 # CST 超表面设计辅助 Skill
 
-本 Skill 负责电磁设计判断，不负责替代 MCP 或 Runtime CLI。优先使用当前环境已经提供的 CST MCP 工具；只有用户明确要求 CLI 或操作被限制为 CLI-only 时，才走 Runtime CLI。
+本 Skill 负责电磁设计判断，不负责替代 MCP 或 Runtime CLI。涉及工程操作时组合使用 `cst-mcp`；用户明确要求 CLI、MCP 未连接或操作被限制为 CLI-only 时，使用 `cst-runtime-cli`。调用状态和终止信号遵循对应执行 Skill。
 
 ## 定位与人机分工
 
@@ -18,10 +18,10 @@ Agent 建议必须标明依据、假设、权衡和未验证项，不能写成�
 采用可检查的小步循环：
 
 1. 明确用户给出的目标、结构类型和本轮授权边界；
-2. 只读检查当前工程；
+2. 涉及已有工程且初始信息未知时，只读检查本轮需要的工程状态；
 3. 提出一个供用户判断的物理假设或候选修改；
 4. 由用户确认关键设计选择、参数边界和执行成本；
-5. 只执行这一小步；
+5. 执行本轮已批准的步骤；仅讨论方案时不调用工程写入或求解工具；
 6. 接口未返回错误时，将对应 VBA 操作记录为成功执行；仅在导出、异步求解和结果读取等必要边界检查产物；
 7. 记录工具交互、必要的 History/快照和阶段结论；
 8. 把事实、推断和候选建议交给用户，再共同决定下一步。

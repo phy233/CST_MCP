@@ -169,7 +169,7 @@ codex plugin add cst-mcp@cst-mcp
 | 当前用户 | `%USERPROFILE%\.agents\skills\<skill-name>` | 在本机多个仓库中使用 |
 | 其他 Agent | 以相应客户端的 Skill 文档为准 | OpenCode、Cursor、Claude Code 等跨平台回退 |
 
-应复制或链接整个 Skill 文件夹，不能只复制 `SKILL.md`，因为部分流程还依赖 `references/` 或 `scripts/`。不要同时通过插件和手动路径安装同名副本。详细安装和冷启动获取检查见 [INSTALL.md](INSTALL.md#插件优先的-skill-安装与获取验证)，官方结构规则见 [OpenAI Build skills](https://developers.openai.com/plugins/build/skills) 与 [Package your plugin](https://developers.openai.com/plugins/build/plugins)。
+应复制或链接整个 Skill 文件夹，不能只复制 `SKILL.md`，因为部分流程还依赖 `references/` 或 `scripts/`。这一步只安装工作流资源，不会创建 Python 环境或连接 MCP。使用本项目的一键部署流程还需保留完整 CST_MCP 仓库，根目录的 `scripts/setup-environments.ps1` 和 `scripts/start-mcp.ps1` 不在独立 Skill 内；已有环境则可继续复用。不要同时通过插件和手动路径安装同名副本。详细安装见 [INSTALL.md](INSTALL.md#codex-插件安装默认分发方式)，获取检查见[冷启动验收](INSTALL.md#冷启动验收)。官方结构规则见 [OpenAI Build skills](https://developers.openai.com/plugins/build/skills) 与 [Package your plugin](https://developers.openai.com/plugins/build/plugins)。
 
 推荐组合如下：
 

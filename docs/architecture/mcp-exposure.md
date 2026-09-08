@@ -34,7 +34,7 @@ MCP 工具和 Agent Skill 是两条独立链路：
 - `cst-mcp` 等 Skill 出现在 `/skills` 或选择器中，只证明工作流文档已安装；
 - 任一链路成功都不能替另一条链路作证，也不能证明真实 CST 已完成仿真。
 
-Codex 的插件安装、独立源码回退和冷启动验收见 [INSTALL.md](../../INSTALL.md#插件优先的-skill-安装与获取验证)。
+Codex 的插件安装见 [INSTALL.md](../../INSTALL.md#codex-插件安装默认分发方式)，独立源码回退见[不支持插件的平台](../../INSTALL.md#不支持插件的平台)，获取检查见[冷启动验收](../../INSTALL.md#冷启动验收)。
 
 ## 授权与自动化范围
 

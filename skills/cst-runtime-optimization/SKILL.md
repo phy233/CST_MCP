@@ -1,6 +1,6 @@
 ---
 name: cst-runtime-optimization
-description: 使用 CST Runtime 或 MCP，在人类确认设计边界后辅助执行参数优化、灵敏度探测、多轮仿真对比和早停判断。用户提出优化 S 参数、幅相、增益、带宽或超表面指标的意图时使用；目标、范围或预算尚不完整时先协助形成任务卡，但在用户确认前不得开始探测或优化。单次仿真和纯建模不使用。
+description: 辅助 CST 参数扫参/parameter sweep、灵敏度分析和优化/optimization，管理多轮仿真、候选对比和早停。用于改善 S 参数、幅相、增益、带宽或超表面指标，包括先完善目标与预算的请求；单次仿真、纯建模、一般优化算法或文档审核不使用。
 ---
 
 # CST Runtime 优化 Skill
@@ -18,7 +18,7 @@ description: 使用 CST Runtime 或 MCP，在人类确认设计边界后辅助�
 7. 将结果反馈给优化器并记录 trial；
 8. 立即判断达标、无改进、越界、失败或继续。
 
-完整规则见 [optimization-loop.md](references/optimization-loop.md)，任务卡和记录要求见 [task-and-records.md](references/task-and-records.md)。
+先按 [task-and-records.md](references/task-and-records.md) 记录工程、目标、变量、约束和预算；信息不完整或尚未获得授权时，只完善任务卡。准备执行已批准任务时，再读 [optimization-loop.md](references/optimization-loop.md)。已有明确授权应如实记录，不要求用户重复批准同一范围。
 
 ## 自动化边界
 
@@ -36,11 +36,13 @@ MCP 工具 `run-probe-phase`、`run-optimization-step`、`prepare-experiment` �
 
 - 每个 trial 必须关联工程副本、参数、Run ID、结果来源、目标值和状态；
 - 目标计算使用明确公式和单位，S 参数先确认复数/线性/dB 表示；
-- 没有新 Run ID、结果为空、日志含错误或结果来源不明时，该 trial 记为失败或未验证，不能反馈为有效观测；
+- 求解完成后没有新 Run ID、结果为空、本轮新增日志含错误或结果来源不明时，该 trial 记为失败或未验证，不能反馈为有效观测；
 - 不能只保存初始点和最佳点，失败样本和被拒绝样本也要保留原因；
 - 当前仓库没有代理模型训练与模型版本管理能力，不在本 Skill 中承诺相关产物。
 
 ## 停止条件
+
+优先处理工具返回的 `terminal=true` 或 `await_user_decision=true`：立即停止本回合的后续 CST 调用和候选执行，报告返回的求解器状态并等待用户决定恢复时机。`long_run_relinquish` 可能保留后台求解，将本 trial 记录为等待恢复、结果未验证，不向优化器提交虚构目标值，也不据此宣称仿真失败。
 
 满足任一条件就停止并报告：达到目标、预算耗尽、连续无改进、候选违反约束、仿真状态不明确、History ambiguous、结果验证失败或用户要求停止。
 
