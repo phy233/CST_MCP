@@ -254,6 +254,8 @@ class CSTWorkerProxy:
         try:
             version = subprocess.run(
                 [str(worker_python), "-c", "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')"],
+                # 版本探测不读取输入，避免与 MCP 的读取线程共享 Windows 管道而阻塞。
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
