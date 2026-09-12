@@ -295,7 +295,7 @@ def test_plane_wave_write_does_not_run_post_execution_readback(monkeypatch, tmp_
     "excitation,expected",
     [
         ({"strategy": "all"}, 'Stimulation "All", "All"'),
-        ({"strategy": "all_with_floquet"}, 'Stimulation "All+Floquet", "All+Floquet"'),
+        ({"strategy": "all_with_floquet"}, 'Stimulation "All+Floquet", "All"'),
         ({"strategy": "plane_wave"}, 'Stimulation "Plane Wave", 1'),
         ({"strategy": "single", "port": 2, "mode": 3}, "Stimulation 2, 3"),
         ({"strategy": "list", "items": [{"port": "1", "mode": "2"}]}, 'AddToExcitationList "1", "2"'),

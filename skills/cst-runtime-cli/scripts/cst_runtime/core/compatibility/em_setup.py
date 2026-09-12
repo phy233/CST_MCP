@@ -198,7 +198,7 @@ def frequency_domain_solver_vba(
     if strategy == "all":
         lines.append('FDSolver.Stimulation "All", "All"')
     elif strategy == "all_with_floquet":
-        lines.append('FDSolver.Stimulation "All+Floquet", "All+Floquet"')
+        lines.append('FDSolver.Stimulation "All+Floquet", "All"')
     elif strategy == "plane_wave":
         lines.append('FDSolver.Stimulation "Plane Wave", 1')
     elif strategy == "single":
