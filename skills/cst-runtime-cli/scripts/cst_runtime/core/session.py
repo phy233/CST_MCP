@@ -582,7 +582,7 @@ def close_project(
     else:
         project, a_status = project_identity.attach_expected_project(normalized_project)
     de_pid: int | None = registered_de_pid or a_status.get("design_environment_pid")
-    had_dirty_state = gateway.has_dirty_state(normalized_project)
+    had_unsaved_params = gateway.has_unsaved_params(normalized_project)
     close_result: dict[str, Any] = a_status if project is None else {"status": "success"}
     if project is not None:
         try:
@@ -595,6 +595,7 @@ def close_project(
                 
             if effective_save:
                 project.save()
+                gateway.mark_params_saved(normalized_project)
             project.close()
             environment_closed = False
             if registered_de is not None and runtime_owned_environment:
@@ -617,12 +618,11 @@ def close_project(
                 close_result["t3_warning"] = t3_warning
                 close_result["requested_save"] = True
                 close_result["trap"] = "T3_farfield_export_save_forced_false"
-            # 保存与关闭成功后才清理运行时状态（含 T2 脏标记）；
-            # 若提前清理，save=False/保存失败会静默丢失未落盘的参数改动。
+            # 关闭成功后释放会话状态，待重建标记继续保留。
             _OPENED_PROJECTS.pop(normalized_project, None)
             _OPENED_DESIGN_ENVIRONMENTS.pop(normalized_project, None)
             gateway.on_session_close(normalized_project)
-            if not effective_save and had_dirty_state:
+            if not effective_save and had_unsaved_params:
                 close_result["warning"] = (
                     "close 时 save=False 且存在未保存的参数改动；"
                     "改动未落盘，重新打开将使用磁盘上的旧参数"

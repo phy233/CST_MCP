@@ -3,6 +3,26 @@ from . import _register_tool_defs
 
 
 TOOL_DEFS = {
+"rebuild-model": {
+    "category": "simulation",
+    "risk": "write",
+    "description": (
+        "Use this after changing model parameters, in this required order: change-parameter / define-parameters -> "
+        "rebuild-model -> save-project. Write all parameters for the current update before rebuilding once. Only save "
+        "or solve after rebuild succeeds; stop on failure. This does not start a solver. By default it rebuilds affected "
+        "history blocks and removes invalidated results. full_rebuild=true replays all history and deletes all results. "
+        "Saving or reopening the project cannot replace rebuilding."
+    ),
+    "handler": "tool_rebuild_model",
+    "json_schema": {
+        "type": "object",
+        "properties": {
+            "project_path": {"type": "string"},
+            "full_rebuild": {"type": "boolean", "default": False},
+        },
+        "required": ["project_path"],
+    },
+},
 "run-experiment": {
     "category": "simulation",
     "risk": "long-running",
@@ -59,7 +79,13 @@ TOOL_DEFS = {
 from typing import Any
 
 from ..lib.experiments import run_experiment
+from ..lib.solver import rebuild
 from ._arguments import project_path_from_args
+
+
+def tool_rebuild_model(args: dict) -> dict:
+    """默认只更新受参数影响的历史块，不启动求解器。"""
+    return rebuild(project_path_from_args(args), full_rebuild=args.get("full_rebuild", False))
 
 
 def tool_run_experiment(args: dict) -> dict:

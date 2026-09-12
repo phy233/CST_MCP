@@ -8,9 +8,11 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "Use this to change one known CST parameter to a numeric value or an expression that "
-        "evaluates to a number. Use define-parameters for a batch definition and "
-        "prepare-experiment when the parameter change must be saved and the project closed."
+        "Use this to change one known CST parameter to a numeric value; use define-parameters for expressions or batches. "
+        "Required order for model parameters: change-parameter / define-parameters -> rebuild-model -> save-project. "
+        "Write all parameters for the current update before rebuilding once. Only save or solve after rebuild succeeds; "
+        "stop on rebuild failure. A successful parameter write does not update geometry; saving or reopening cannot replace "
+        "rebuilding. Use prepare-experiment to apply parameters, rebuild, save, and close in one pipeline."
     ),
     "handler": "tool_change_parameter",
     "json_schema": {
@@ -265,9 +267,11 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "Use this to create or overwrite multiple CST parameters in one StoreParameters call "
-        "when names and values are already user-defined and aligned. Use change-parameter for "
-        "one existing parameter."
+        "Use this to create or overwrite multiple CST parameters in one StoreParameters call; names and values must align "
+        "and values may be expressions. Required order for model parameters: define-parameters -> rebuild-model -> "
+        "save-project. Write all parameters for the current update before rebuilding once. Only save or solve after "
+        "rebuild succeeds; stop on rebuild failure. Parameter writes, saving, or reopening do not replace rebuilding. "
+        "Use change-parameter for one known parameter's numeric value."
     ),
     "handler": "tool_define_parameters",
     "json_schema": {
@@ -580,9 +584,9 @@ TOOL_DEFS = {
     "category": "project_ops",
     "risk": "write",
     "description": (
-        "Use this to apply one or more already selected parameter values, then save and close the "
-        "project before run-experiment. It does not run the solver; names and values must remain "
-        "aligned for a batch update."
+        "Use this to apply selected parameter values, rebuild affected history blocks, save, then close the project "
+        "before run-experiment. It does not start the solver; rebuild failure stops saving and closing. Batch names "
+        "and values must align. Do not repeat rebuild-model or save-project after this pipeline succeeds."
     ),
     "handler": "tool_prepare_experiment",
     "json_schema": {

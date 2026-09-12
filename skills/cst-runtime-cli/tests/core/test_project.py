@@ -33,7 +33,7 @@ def test_change_parameter_marks_dirty_and_annotates(mocker, tmp_path):
         return_value=(mock_project, {"status": "success"}),
     )
     mocker.patch(
-        "cst_runtime.core.project._single_vba",
+        "cst_runtime.core.project.execute_immediate_vba",
         return_value={
             "ok": True,
             "status": "success",

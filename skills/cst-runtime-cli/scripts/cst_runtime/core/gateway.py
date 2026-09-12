@@ -45,6 +45,7 @@ class ProjectState:
     session_type: str = "unknown"   # "modeler" | "results"
     stage: str = "clean"            # "clean" | "params_dirty" | "farfield_exported" | "closed"
     params_changed: list[str] = None  # list of param names changed this session
+    params_saved: bool = False  # 参数是否已保存；与几何是否重建分别记录
 
     def __post_init__(self):
         if self.params_changed is None:
@@ -122,8 +123,12 @@ def on_session_open(project_path: str, session_type: str) -> None:
             "Do NOT manually cst-session-open before pipeline tools.",
             UserWarning,
         )
-    _registry[np] = ProjectState(path=np, session_type=session_type)
-    _clear_dirty_marker(project_path)  # model rebuilds from disk, dirty state resolved
+    # 实机表明打开工程不会自动重建，保留磁盘上的待重建标记。
+    dirty = _dirty_marker_path(project_path).exists()
+    _registry[np] = ProjectState(
+        path=np, session_type=session_type,
+        stage="params_dirty" if dirty else "clean", params_saved=True,
+    )
 
 
 def _clear_farfield_marker(project_path: str) -> None:
@@ -133,7 +138,9 @@ def _clear_farfield_marker(project_path: str) -> None:
 
 
 def on_session_close(project_path: str) -> None:
-    _remove_state(project_path)
+    # 关闭只释放会话；只有成功重建才能清除待重建标记。
+    _registry.pop(_normalize(project_path), None)
+    _background_states.pop(_normalize(project_path), None)
 
 
 def guard_cross_session(project_path: str, expected_type: str) -> dict[str, Any] | None:
@@ -209,11 +216,25 @@ def has_dirty_state(project_path: str) -> bool:
 def mark_params_dirty(project_path: str, param_name: str = "", param_value: Any = None) -> None:
     st = _ensure_state(project_path)
     st.stage = "params_dirty"
+    st.params_saved = False
     if param_name and param_name not in st.params_changed:
         st.params_changed.append(param_name)
     marker = _dirty_marker_path(project_path)
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("params_dirty", encoding="utf-8")
+
+
+def mark_params_saved(project_path: str) -> None:
+    """保存不等于重建，只登记参数已经落盘。"""
+    st = _get_state(project_path)
+    if st is not None:
+        st.params_saved = True
+
+
+def has_unsaved_params(project_path: str) -> bool:
+    """用于关闭提示，不把已经保存但未重建的参数误报为丢失。"""
+    st = _get_state(project_path)
+    return st is not None and st.stage == "params_dirty" and not st.params_saved
 
 
 def guard_before_simulation(project_path: str) -> dict[str, Any] | None:
@@ -223,7 +244,7 @@ def guard_before_simulation(project_path: str) -> dict[str, Any] | None:
         return error_response(
             "params_not_rebuilt",
             f"Parameters changed ({', '.join(st.params_changed) if st.params_changed else 'unknown'}) "
-            "but model NOT rebuilt from disk. Simulation would use cached old geometry.",
+            "但几何尚未按新参数重建。",
             trap="T2_params_not_rebuilt",
             project_path=project_path,
             cst_raw={
@@ -231,10 +252,9 @@ def guard_before_simulation(project_path: str) -> dict[str, Any] | None:
                 "params_changed": st.params_changed,
                 "dirty_marker": dirty_marker,
                 "dirty_marker_exists": Path(dirty_marker).exists(),
-                _explain: "CST saves parameter table changes immediately but geometry rebuild only happens on project open",
+                _explain: "参数写入、保存和几何重建是不同操作，保存重开不能替代重建。",
             },
-            next_action=f"cst-session-close --project-path {project_path} --save true, "
-                        f"then cst-session-open --project-path {project_path} to force model rebuild from disk",
+            next_action=f"调用 rebuild-model，project_path={project_path}，成功后保存工程。",
         )
     return None
 
@@ -244,6 +264,7 @@ def clear_dirty(project_path: str) -> None:
     if st.stage == "params_dirty":
         st.stage = "clean"
         st.params_changed.clear()
+    _clear_dirty_marker(project_path)
 
 
 # ---------------------------------------------------------------------------
@@ -339,20 +360,17 @@ def annotate_change_param_result(result: dict[str, Any], project_path: str = "",
         return {
             **result,
             "warning": (
-                "Parameter table updated. Model geometry has NOT been regenerated from disk. "
-                "The solver will rebuild from disk on next open. "
-                "Close and reopen the project before simulation for changes to take effect."
+                "参数表已更新，几何尚未重建。请调用 rebuild-model 更新建模历史；"
+                "此操作不启动仿真，保存重开不能替代重建。"
             ),
             "trap_note": "T13_restore_double_not_model_rebuild",
             "cst_raw": {
                 "model_rebuilt": False,
                 "param_table_updated": True,
                 "dirty_marker": str(_dirty_marker_path(project_path)),
-                _explain: "StoreDoubleParameter updates the parameter table in memory; "
-                          "geometry rebuild happens when solver starts (reads from disk on open)",
+                _explain: "StoreDoubleParameter 只更新参数表，需要显式执行参数化重建。",
             },
-            "next_action": f"Use prepare-experiment pipeline to close+save+reopen, "
-                           f"then run-experiment to simulate with new values",
+            "next_action": "调用 rebuild-model，成功后保存工程；准备试验可使用 prepare-experiment。",
         }
     return result
 

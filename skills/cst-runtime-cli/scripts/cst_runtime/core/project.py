@@ -9,6 +9,7 @@ from . import gateway
 from .identity import attach_expected_project
 from .utils import abs_project_path as _abs_project_path
 from .modeling import _single_vba
+from .compatibility.execution import execute_immediate_vba, vba_string
 from .compatibility import (
     compatibility_metadata,
     create_design_environment,
@@ -30,6 +31,7 @@ def save_project(project_path: str) -> dict[str, Any]:
         fp = Path(normalized_project)
         mtime_before = fp.stat().st_mtime if fp.exists() else 0
         project.save()
+        gateway.mark_params_saved(normalized_project)
         import time
         for _ in range(10):
             time.sleep(0.1)
@@ -188,17 +190,15 @@ def change_parameter(project_path: str, name: str = "", value: float | int | str
     if project is None:
         return status
     try:
-        res = _single_vba(
-            normalized_project,
-            "ChangeParameter",
-            f'StoreDoubleParameter "{parameter_name}", {parameter_value}',
-            project=project
-        )
-        if res.get("status") == "error":
-            return res
+        # 参数表在历史之外更新，避免重建时回放旧赋值覆盖新参数。
+        execute_immediate_vba(project, [
+            f'StoreDoubleParameter "{vba_string(str(parameter_name))}", {parameter_value}'
+        ])
         gateway.mark_params_dirty(normalized_project, param_name=str(parameter_name), param_value=parameter_value)
         result = {
             "status": "success",
+            "submission": "accepted",
+            "execution": "reported_ok",
             "project_path": normalized_project,
             "changed": {str(parameter_name): parameter_value},
             "runtime_module": "cst_runtime.modeler",
@@ -224,11 +224,13 @@ def define_parameters(project_path: str, names: list[str], values: list[str]) ->
     try:
         dim = len(names)
         dim_decl = f"Dim names(1 To {dim}) As String\nDim values(1 To {dim}) As String\n"
-        entries = "\n".join(f'names({i+1}) = "{names[i]}"\nvalues({i+1}) = "{values[i]}"' for i in range(dim))
+        entries = "\n".join(f'names({i+1}) = "{vba_string(names[i])}"\nvalues({i+1}) = "{vba_string(values[i])}"' for i in range(dim))
         vba = f"{dim_decl}{entries}\nStoreParameters names, values"
-        res = _single_vba(normalized_project, "Define Parameters", vba, project=project)
-        if res.get("status") == "error":
-            return res
-        return {"status": "success", "project_path": normalized_project, "count": dim, "runtime_module": "cst_runtime.core.project"}
+        execute_immediate_vba(project, [vba])
+        gateway.mark_params_dirty(normalized_project)
+        return {"status": "success", "submission": "accepted", "execution": "reported_ok",
+                "project_path": normalized_project, "count": dim, "model_rebuilt": False,
+                "next_action": "调用 rebuild-model 更新几何，随后保存。",
+                "runtime_module": "cst_runtime.core.project"}
     except Exception as exc:
         return error_response("define_parameters_failed", str(exc), project_path=normalized_project, runtime_module="cst_runtime.core.project")

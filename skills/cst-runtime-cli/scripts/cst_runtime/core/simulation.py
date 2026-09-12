@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import gateway
+from . import buffer, gateway
+from .compatibility.execution import execute_text_query
 from .errors import error_response
 from .compatibility import (
     delete_project_results,
@@ -288,23 +289,32 @@ def set_frequency_range(project_path: str, fmin: float, fmax: float) -> dict[str
     )
 
 
-def rebuild_structure(project_path: str) -> dict[str, Any]:
-    """根据当前参数重建结构；CST 官方说明该操作会删除全部结果。"""
-    result = _single_vba_pops(
-        project_path,
-        "Rebuild",
-        "\n".join(
-            [
-                "If Not Rebuild Then",
-                '    ReportError "Rebuild returned False"',
-                "End If",
-            ]
-        ),
-    )
-    if result.get("status") != "error":
-        result["results_deleted"] = True
-        result["warning"] = "Rebuild 会删除当前工程中的全部求解结果"
-    return result
+def rebuild_structure(project_path: str, *, full_rebuild: bool = True) -> dict[str, Any]:
+    """即时执行历史重建，不向待重放的历史中插入 Rebuild 自身。"""
+    normalized = _abs_project_path(project_path)
+    if buffer.is_batch_mode(normalized):
+        return error_response("batch_pending", "批次尚未提交，不能重建模型。", project_path=normalized)
+    project, status = attach_expected_project(normalized)
+    if project is None:
+        return status
+    command = "Rebuild" if full_rebuild else "RebuildOnParametricChange(False, False)"
+    try:
+        # 读取命令本身的布尔返回值，不另行查询模型或重复执行。
+        returned = execute_text_query(project, [f"Print #cstRtQueryFile, CStr({command})"])
+        if not returned or returned[0].strip().lower() not in {"true", "-1"}:
+            return error_response("rebuild_failed", f"{command} 未返回 True", project_path=normalized)
+        gateway.clear_dirty(normalized)
+        result = {
+            "status": "success", "submission": "accepted", "execution": "reported_ok",
+            "project_path": normalized, "model_rebuilt": True, "full_rebuild": full_rebuild,
+            "results_policy": "delete_all" if full_rebuild else "delete_invalidated",
+            "warning": "完整重建会删除全部结果" if full_rebuild else "参数重建会删除因参数变化而失效的结果",
+        }
+        if full_rebuild:
+            result["results_deleted"] = True
+        return result
+    except Exception as exc:
+        return error_response("rebuild_failed", str(exc), project_path=normalized)
 
 
 def delete_results(project_path: str) -> dict[str, Any]:

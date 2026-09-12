@@ -205,8 +205,8 @@ def stop(project_path: str) -> OperationResult:
     return call_core(_stop_simulation, project_path)
 
 
-def rebuild(project_path: str) -> OperationResult:
-    """根据最新参数重建几何结构；CST 官方说明此操作会删除全部结果。
+def rebuild(project_path: str, *, full_rebuild: bool = True) -> OperationResult:
+    """根据最新参数重建几何结构；完整重建会删除全部结果。
 
     Args:
         project_path: .cst 文件的绝对路径
@@ -214,7 +214,7 @@ def rebuild(project_path: str) -> OperationResult:
     Raises:
         RuntimeError: 如果重建失败时抛出
     """
-    return call_core(_rebuild_structure, project_path)
+    return call_core(_rebuild_structure, project_path, full_rebuild=full_rebuild)
 
 
 def delete_results(project_path: str) -> OperationResult:

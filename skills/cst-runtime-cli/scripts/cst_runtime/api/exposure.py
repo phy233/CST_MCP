@@ -23,6 +23,7 @@ AGENT_TOOLS = frozenset(
         "boolean-intersect",
         "boolean-subtract",
         "build-array",
+        "rebuild-model",
         "calculate-farfield-neighborhood-flatness",
         "capture-3d-view",
         "change-material",

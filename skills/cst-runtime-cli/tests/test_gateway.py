@@ -83,6 +83,19 @@ class TestGatewayT10ProjectPath:
 
 
 class TestGatewayT2ParamsDirty:
+    def test_save_and_reopen_do_not_replace_rebuild(self, project_path):
+        """参数已保存时不误报丢失，但保存重开仍不能放行未重建模型。"""
+        from cst_runtime.core.gateway import mark_params_saved, has_unsaved_params
+        mark_params_dirty(project_path, "w", 3)
+        assert has_unsaved_params(project_path)
+        mark_params_saved(project_path)
+        assert not has_unsaved_params(project_path)
+        on_session_close(project_path)
+        on_session_open(project_path, "modeler")
+        assert guard_before_simulation(project_path)["error_type"] == "params_not_rebuilt"
+        clear_dirty(project_path)
+        assert guard_before_simulation(project_path) is None
+
     def test_mark_params_dirty_sets_stage(self, project_path):
         _ensure_state(project_path)
         mark_params_dirty(project_path)

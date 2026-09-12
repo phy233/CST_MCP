@@ -178,7 +178,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
     "prepare-experiment": {
         "category": "project-ops",
         "risk": "write",
-        "description": "Open a CST project, change a parameter (CST 未报错即视为已实施), then save and close.",
+        "description": "打开工程、修改参数、重建受影响的历史块，然后保存并关闭；不启动求解器。",
         "when_to_use": "Before each simulation round to update parameter values.",
         "required_context": ["working_project", "param_name", "param_value"],
         "commands": [
@@ -187,6 +187,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "steps": [
             {"tool": "cst-session-open", "purpose": "Open the CST project."},
             {"tool": "change-parameter", "purpose": "Change the parameter to the new value."},
+            {"tool": "rebuild-model", "purpose": "按新参数更新几何，删除失效结果，不启动求解器。"},
             {"tool": "save-project", "purpose": "Persist the change to disk."},
             {"tool": "cst-session-close", "purpose": "Close with save=false (already saved)."},
         ],

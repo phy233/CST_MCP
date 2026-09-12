@@ -9,6 +9,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from helpers import assert_json_error
 
 
+def test_prepare_experiment_rebuilds_before_saving(monkeypatch):
+    """准备试验必须包含重建，不依赖保存重开自动更新几何。"""
+    from cst_runtime.lib import project, session, solver
+    from cst_runtime.cli.pipelines.impl import pipeline_prepare_experiment
+    events = []
+    monkeypatch.setattr(session, "open_project", lambda path: {"status": "success"})
+    monkeypatch.setattr(project, "change_parameter", lambda **kw: events.append("change") or {"status": "success"})
+    monkeypatch.setattr(solver, "rebuild", lambda path, **kw: events.append(("rebuild", kw)) or {"status": "success"})
+    monkeypatch.setattr(project, "save_project", lambda path: events.append("save") or {"status": "success"})
+    monkeypatch.setattr(session, "close_project", lambda path, **kw: events.append("close") or {"status": "success"})
+    result = pipeline_prepare_experiment("model.cst", param_name="w", param_value=3)
+    assert result["status"] == "success"
+    assert events == ["change", ("rebuild", {"full_rebuild": False}), "save", "close"]
+
+
 def test_start_sim_async_rejects_dirty_project(tmp_path):
     """T2: start_simulation_async refuses dirty project without reopen."""
     from cst_runtime.core.simulation import start_simulation_async
@@ -122,26 +137,31 @@ def test_fdsolver_stimulation_rejects_invalid_manual_arguments(port, mode) -> No
         fdsolver_stimulation_vba(port=port, mode=mode, profile=profile)
 
 
-def test_rebuild_warns_that_results_are_deleted_and_checks_return(monkeypatch):
+@pytest.mark.parametrize("full_rebuild", [False, True])
+@pytest.mark.parametrize("returned", ["True", "False"])
+def test_rebuild_uses_immediate_return_and_clears_dirty_only_on_success(monkeypatch, tmp_path, full_rebuild, returned):
+    """重建自身不得进入历史；失败时保留待重建状态。"""
     from cst_runtime.core import simulation
+    from cst_runtime.core import gateway
 
     captured: dict[str, str] = {}
 
-    def fake_single(project_path, history_name, vba_line):
-        captured["vba_line"] = vba_line
-        return {"status": "success", "project_path": project_path}
+    def fake_query(project, lines):
+        captured["vba_line"] = "\n".join(lines)
+        return [returned]
 
-    monkeypatch.setattr(simulation, "_single_vba_pops", fake_single)
+    monkeypatch.setattr(simulation, "attach_expected_project", lambda path: (object(), {}))
+    monkeypatch.setattr(simulation, "execute_text_query", fake_query)
+    monkeypatch.setattr(simulation, "_single_vba", lambda *a, **k: pytest.fail("重建不得写入历史"))
+    path = str(tmp_path / "model.cst")
+    gateway.mark_params_dirty(path)
 
-    result = simulation.rebuild_structure("D:/work/model.cst")
+    result = simulation.rebuild_structure(path, full_rebuild=full_rebuild)
 
-    assert result["status"] == "success"
-    assert result["results_deleted"] is True
-    assert "删除" in result["warning"]
-    assert captured["vba_line"] == "\n".join(
-        [
-            "If Not Rebuild Then",
-            '    ReportError "Rebuild returned False"',
-            "End If",
-        ]
-    )
+    assert result["status"] == ("success" if returned == "True" else "error")
+    assert gateway._dirty_marker_path(path).exists() == (returned == "False")
+    if returned == "True":
+        assert result["model_rebuilt"] is True
+        assert result["results_policy"] == ("delete_all" if full_rebuild else "delete_invalidated")
+    command = "Rebuild" if full_rebuild else "RebuildOnParametricChange(False, False)"
+    assert captured["vba_line"] == f"Print #cstRtQueryFile, CStr({command})"

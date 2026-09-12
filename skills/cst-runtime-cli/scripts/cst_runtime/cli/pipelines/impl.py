@@ -316,6 +316,7 @@ def pipeline_prepare_experiment(
 ) -> dict[str, Any]:
     from ...lib.session import open_project as sm_open, close_project as sm_close
     from ...lib.project import change_parameter, save_project
+    from ...lib.solver import rebuild
 
     resolved_names: list[str] = []
     resolved_values: list[float] = []
@@ -358,6 +359,9 @@ def pipeline_prepare_experiment(
             )
         all_changed.update(cr.get("changed", {}))
 
+    rebuilt = rebuild(project_path, full_rebuild=False)
+    if rebuilt.get("status") != "success":
+        return rebuilt
     save_result = save_project(project_path)
     if save_result.get("status") != "success":
         sm_close(project_path, save=False)
