@@ -28,4 +28,6 @@
 
 ## 优化管道
 
-`run-probe-phase`、`run-optimization-step`、`prepare-experiment` 和 `run-experiment` 可以作为可选快捷方式，但不是默认工作流。用户要求逐步调整时，应拆回参数建议、改参、求解、读取、评价和记录等原子步骤；改参成功后不再增加参数读回。
+`run-probe-phase`、`run-optimization-step`、`prepare-experiment` 和 `run-experiment` 可以作为可选快捷方式，但不是默认工作流。用户要求逐步调整时，应拆回参数建议、改参、重建、求解、读取、评价和记录等原子步骤；改参成功后不再增加参数读回。
+
+修改几何参数必须按 `change-parameter` / `define-parameters` → `rebuild-model` → `save-project` 执行；本轮参数全部写入后统一重建一次，成功后再保存或求解，重建失败则停止后续流程。重建工具不会启动求解器。默认执行受参数变化影响的历史块并删除失效结果，`full_rebuild=true` 会重放完整历史并删除全部结果。仅保存和重开工程不能代替重建。`prepare-experiment` 已包含改参、重建、保存及关闭，不再重复这些步骤。

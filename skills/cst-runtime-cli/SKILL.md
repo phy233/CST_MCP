@@ -33,8 +33,10 @@ Runtime 必须由 CST 兼容的 Python 3.9 Worker 执行：
 
 ## 工程与 Session
 
+- 发送给 CST 的命令及文本参数统一使用英文或 ASCII，不得含中文，包括变量名、对象名、历史标题、注释和工程路径，避免 CST 的中文处理问题；面向用户的说明与报告仍使用中文。
 - 所有 `project_path`、`source_project` 和 `working_project` 都必须指向具体 `.cst` 文件。
 - 默认操作 `prepare-run` 创建的工作副本；参考工程视为只读蓝本。
+- 修改模型参数按 `change-parameter` / `define-parameters` → `rebuild-model` → `save-project` 执行；同轮参数全部写入后统一重建一次，成功后再保存或求解，失败则停止。参数写入成功、保存或重开均不代表已重建。`prepare-experiment` 内含改参、重建、保存及关闭，无需再重复调用。
 - 不使用无目标的 `connect_to_any()` 回退。多个工程或目标身份不唯一时停止写入和关闭。
 - 只有 Runtime 自己创建的 Design Environment 才能由 Runtime 退出或终止；用户已有会话即使确认附着也不转移所有权。
 - 关闭、保存或复制工程前检查结构化返回值和 `.lok` 状态。

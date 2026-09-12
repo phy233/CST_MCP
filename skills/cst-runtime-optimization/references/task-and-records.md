@@ -28,7 +28,7 @@
     "user_owned_decisions": ["objective", "parameters", "hard_bounds", "budget", "final_selection"],
     "agent_suggestions": ["candidate_order", "sampler", "early_stop"]
   },
-  "approved_actions": ["change-parameter", "run-experiment", "export-sparameter", "tell-study"],
+  "approved_actions": ["change-parameter", "rebuild-model", "save-project", "run-experiment", "export-sparameter", "tell-study"],
   "automation_scope": "只在已确认的变量、硬范围、预算和停止条件内连续执行",
   "approval_status": "proposed"
 }

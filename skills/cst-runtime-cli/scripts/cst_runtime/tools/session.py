@@ -235,8 +235,9 @@ TOOL_DEFS = {
     "category": "session_manager",
     "risk": "filesystem-write",
     "description": (
-        "Use this to persist changes in the explicitly identified CST working project when "
-        "a saved artifact is required. A successful save should not be repeated merely as a check."
+        "Use this to persist changes in the explicitly identified CST working project. After changing model parameters, "
+        "call rebuild-model first, then save-project only after rebuild succeeds; stop saving and solving on rebuild "
+        "failure. Saving or reopening cannot replace rebuilding. Do not repeat a successful save merely as a check."
     ),
     "handler": "tool_save_project",
     "json_schema": {
