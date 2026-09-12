@@ -103,6 +103,10 @@ def _workflow_operations() -> dict[str, OperationSpec]:
     number_array = {"type": "array", "items": {"type": "number"}, "minItems": 1}
     array_output = _object_schema(
         {
+            "id": {"type": "string"},
+            "ok": {"type": "boolean"},
+            "submission": {"type": "string"},
+            "execution": {"type": "string"},
             "status": {"type": "string"},
             "project_path": {"type": "string"},
             "groups_built": {"type": "integer"},
@@ -160,7 +164,8 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                                     "type": "object",
                                     "description": (
                                         "Builder parameters. For brick-v1, origin is the minimum "
-                                        "corner and size extends in the positive X, Y, and Z directions."
+                                        "corner and size extends in the positive X, Y, and Z directions. "
+                                        "Both accept CST parameter expressions; rebuild-model applies later changes."
                                     ),
                                 },
                             },
@@ -180,9 +185,9 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                                         "Ordinary builder lookup key; the string '0' does not mean an empty cell."
                                     ),
                                 },
-                                "x": {"type": "number", "description": "Relative translation along X."},
-                                "y": {"type": "number", "description": "Relative translation along Y."},
-                                "z": {"type": "number", "description": "Relative translation along Z."},
+                                "x": {"type": ["number", "string"], "description": "Relative X translation; accepts a CST expression."},
+                                "y": {"type": ["number", "string"], "description": "Relative Y translation; accepts a CST expression."},
+                                "z": {"type": ["number", "string"], "description": "Relative Z translation; accepts a CST expression."},
                             },
                             "required": ["code", "x", "y", "z"],
                             "additionalProperties": False,

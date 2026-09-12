@@ -122,6 +122,29 @@ def test_proxy_does_not_misclassify_serialization_error() -> None:
         proxy.request("call_tool", arguments={"invalid": object()})
 
 
+def test_proxy_request_preserves_chinese_in_gbk_worker() -> None:
+    """模拟GBK Worker读取请求，确保中文不会在IPC边界损坏。"""
+    from mcp_server.proxy import CSTWorkerProxy
+    proxy = object.__new__(CSTWorkerProxy)
+    proxy._call_lock = threading.RLock()
+    proxy._ensure_worker = lambda: None
+    proxy.config = SimpleNamespace(request_timeout=2)
+    proxy._responses = queue.Queue()
+    received = {}
+
+    class Input:
+        def write(self, line):
+            received.update(json.loads(line.encode("utf-8").decode("gbk")))
+            proxy._responses.put({"id": received["id"], "status": "success"})
+
+        def flush(self):
+            pass
+
+    proxy.process = SimpleNamespace(stdin=Input())
+    proxy.request("call_tool", arguments={"content": "最小批量建模验收：中文参数"})
+    assert received["arguments"]["content"] == "最小批量建模验收：中文参数"
+
+
 def test_proxy_wraps_worker_process_start_failure(monkeypatch, tmp_path) -> None:
     from mcp_server import proxy as proxy_module
 

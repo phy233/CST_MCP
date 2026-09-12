@@ -145,3 +145,20 @@ def test_builtin_brick_builder(monkeypatch) -> None:
     )
     assert result == array.BuildResult("demo", ["cube"])
     assert calls[0]["x_range"] == (0.0, 2.0)
+
+
+def test_array_keeps_geometry_and_translation_expressions(monkeypatch) -> None:
+    """尺寸、原点和周期表达式必须保留到历史，不能冻结为浮点值。"""
+    _fake_batch(monkeypatch)
+    bricks, translations = [], []
+    monkeypatch.setattr(array, "brick", lambda path, **kw: bricks.append(kw))
+    monkeypatch.setattr(array, "translate", lambda path, name, vector, **kw: translations.append(vector))
+    result = array.build_array("model.cst", units={"A": {
+        "builder_id": "brick-v1", "parameters": {
+            "origin": ["-w/2", 0, 0], "size": ["w", "h", "t"],
+        },
+    }}, elements=[{"code": "A", "x": 0, "y": 0, "z": 0},
+                  {"code": "A", "x": "p", "y": 0, "z": 0}])
+    assert result.status == "success"
+    assert bricks[0]["x_range"] == ("-w/2", "(-w/2)+(w)")
+    assert translations == [("p", 0.0, 0.0)]

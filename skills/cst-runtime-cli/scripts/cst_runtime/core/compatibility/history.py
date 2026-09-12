@@ -34,7 +34,14 @@ def get_raw_history(project: Any) -> dict[str, Any]:
     get_history = getattr(modeler, "_GetHistory", None)
     if not callable(get_history):
         raise RuntimeError("当前 CST Modeler 不支持 _GetHistory 接口")
-    raw = get_history()
+    try:
+        raw = get_history()
+    except UnicodeDecodeError as exc:
+        # CST 私有绑定在转换中文标题或内容时可能直接失败，不能伪造完整快照。
+        raise RuntimeError(
+            "CST _GetHistory 私有接口无法解码当前历史中的中文文本；"
+            "本次工具请求和执行结果仍记录在交互日志中，但完整历史快照不可用。"
+        ) from exc
     if raw is None:
         return {"list": None}
     if isinstance(raw, dict):

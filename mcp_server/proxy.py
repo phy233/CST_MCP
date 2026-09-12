@@ -391,7 +391,8 @@ class CSTWorkerProxy:
         """
         request_id = uuid.uuid4().hex
         request = {"id": request_id, "action": action, **payload}
-        serialized_request = json.dumps(request, ensure_ascii=False)
+        # 双向都使用 ASCII JSON 转义，避免 Worker 按 Windows 本地编码误读中文。
+        serialized_request = json.dumps(request, ensure_ascii=True)
         with self._call_lock:
             self._ensure_worker()
             process = self.process

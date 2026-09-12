@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from importlib import metadata
+import math
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from ..lib import batch
@@ -26,9 +27,9 @@ class ArrayElement:
     """阵列中的一个实例；x/y/z 是参考模板的相对平移量。"""
 
     code: str
-    x: float
-    y: float
-    z: float
+    x: float | str
+    y: float | str
+    z: float | str
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,10 @@ class ArrayBuildResult:
 
     def to_dict(self) -> dict[str, Any]:
         """转换为 JSON 可序列化字典。"""
-        return asdict(self)
+        payload = asdict(self)
+        if self.status == "success":
+            payload.update(submission="accepted", execution="reported_ok")
+        return payload
 
 
 class UnitBuilder(Protocol):
@@ -129,6 +133,30 @@ class UnitBuilderRegistry:
             return
 
 
+def _coordinate(value: Any) -> float | str:
+    """保留 CST 参数表达式；纯数值继续执行有限数检查。"""
+    if isinstance(value, str):
+        value = value.strip()
+        if not value or any(char in value for char in ('"', '\r', '\n')):
+            raise ValueError("参数表达式不能为空或包含引号、换行")
+        try:
+            number = float(value)
+        except ValueError:
+            return value
+    else:
+        number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("坐标或尺寸必须为有限数")
+    return number
+
+
+def _upper_bound(origin: float | str, size: float | str) -> float | str:
+    """表达式相加保留括号，不提前求值并冻结参数。"""
+    if isinstance(origin, float) and isinstance(size, float):
+        return origin + size
+    return f"({origin})+({size})"
+
+
 def _build_brick(
     project_path: str,
     code: str,
@@ -144,18 +172,18 @@ def _build_brick(
         raise ValueError("brick-v1 的 size 必须包含三个数值")
     if not isinstance(origin, (list, tuple)) or len(origin) != 3:
         raise ValueError("brick-v1 的 origin 必须包含三个数值")
-    sx, sy, sz = (float(value) for value in size)
-    ox, oy, oz = (float(value) for value in origin)
-    if sx <= 0 or sy <= 0 or sz <= 0:
+    sx, sy, sz = (_coordinate(value) for value in size)
+    ox, oy, oz = (_coordinate(value) for value in origin)
+    if any(isinstance(value, float) and value <= 0 for value in (sx, sy, sz)):
         raise ValueError("brick-v1 的 size 必须全部大于 0")
     created = brick(
         project_path,
         component=component,
         name=name,
         material=material,
-        x_range=(ox, ox + sx),
-        y_range=(oy, oy + sy),
-        z_range=(oz, oz + sz),
+        x_range=(ox, _upper_bound(ox, sx)),
+        y_range=(oy, _upper_bound(oy, sy)),
+        z_range=(oz, _upper_bound(oz, sz)),
     )
     if isinstance(created, dict) and created.get("status") == "error":
         return BuildResult(
@@ -179,9 +207,9 @@ def _coerce_elements(elements: Sequence[ArrayElement | Mapping[str, Any]]) -> li
         normalized.append(
             ArrayElement(
                 code=str(raw["code"]),
-                x=float(raw["x"]),
-                y=float(raw["y"]),
-                z=float(raw["z"]),
+                x=_coordinate(raw["x"]),
+                y=_coordinate(raw["y"]),
+                z=_coordinate(raw["z"]),
             )
         )
     return normalized
@@ -258,9 +286,8 @@ def build_array(
             keep_reference = False
             for element in group:
                 if (
-                    abs(element.x) < 1e-9
-                    and abs(element.y) < 1e-9
-                    and abs(element.z) < 1e-9
+                    all(isinstance(value, (float, int)) and abs(value) < 1e-9
+                        for value in (element.x, element.y, element.z))
                 ):
                     keep_reference = True
                     instances_created += 1

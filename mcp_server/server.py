@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from .config import get_config
@@ -208,7 +209,7 @@ def create_mcp_server():
         ]
 
     @server.call_tool(validate_input=True)
-    async def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any] | types.CallToolResult:
         catalog = _catalog()
         agent_tool_names = catalog["agent_tool_names"]
         agent_tool_risks = catalog["agent_tool_risks"]
@@ -240,7 +241,7 @@ def create_mcp_server():
         )
         if governance is not None:
             return governance
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             _call_tool_with_transport_envelope,
             catalog["proxy"],
             name,
@@ -250,6 +251,14 @@ def create_mcp_server():
                 "expected_simulation" if risk == "long-running" else "abnormal"
             ),
         )
+        if result.get("status") == "error" or result.get("ok") is False:
+            # 业务错误使用 MCP 错误结果，避免被成功输出 Schema 遮盖原始原因。
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False))],
+                structuredContent=result,
+                isError=True,
+            )
+        return result
 
     return server
 
