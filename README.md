@@ -159,7 +159,13 @@ codex plugin add cst-mcp@cst-mcp
 
 安装或更新后重启 Codex 并新建任务，再确认四个 Skill 与插件作用域的 `cst-runtime` 工具均可见。CST 2022 路径仍按 [INSTALL.md](INSTALL.md) 在本机配置，避免把开发机绝对路径写入插件包。
 
-### 方式 B：独立 Skill 源码（跨平台回退）
+### 方式 B：OpenCode 标准 MCP 接入
+
+OpenCode 可通过标准 MCP stdio 连接同一服务，不需要安装 Codex 插件。先完成上面的双 Python 环境部署，再把 [OpenCode 1.18.23 配置示例](examples/opencode.jsonc)中的路径替换为实际仓库路径，合并到 OpenCode 的用户配置或项目配置。已有 `cst-runtime` 条目应直接更新。
+
+示例通过 `scripts/start-mcp.ps1` 启动服务，显式指定环境与配置路径，并通过 `skills.paths` 发现仓库中的四个完整 Skill。模型由 OpenCode 自身配置；CST MCP 不需要添加模型厂商的 API。超时含义、版本边界和连接验证见 [OpenCode 安装说明](INSTALL.md#opencode-接入11823)。
+
+### 方式 C：独立 Skill 源码（其他客户端回退）
 
 顶层 `skills/` 同时保留为规范源文件。OpenCode 等不支持 OpenAI 插件清单的平台，或不希望使用插件的用户，可以把所需的完整 Skill 文件夹复制或链接到该客户端规定的发现位置。对于 Codex，手动回退位置为：
 

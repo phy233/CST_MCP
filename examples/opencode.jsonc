@@ -1,0 +1,31 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // 适用于 OpenCode 1.18.23；将所有 D:/path/to/CST_MCP 替换为实际仓库路径。
+  // 合并到已有配置，保留原有模型、权限和其他 MCP 设置。
+  "mcp": {
+    "cst-runtime": {
+      "type": "local",
+      "command": [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "D:/path/to/CST_MCP/scripts/start-mcp.ps1"
+      ],
+      "environment": {
+        "CST_MCP_HOME": "D:/path/to/CST_MCP",
+        "CST_MCP_CONFIG": "D:/path/to/CST_MCP/.cst_config.json",
+        "CST_WORKER_PYTHON": "D:/path/to/CST_MCP/.envs/cst39/Scripts/python.exe",
+        "PYTHONUTF8": "1"
+      },
+      "enabled": true,
+      // 单位为毫秒；1.18.23 也将此值用于工具请求，给服务端超时处置留出余量。
+      "timeout": 3600000
+    }
+  },
+  "skills": {
+    // 直接发现仓库中的完整技能目录，正文、参考资料和脚本保持同一来源。
+    "paths": ["D:/path/to/CST_MCP/skills"]
+  }
+}
