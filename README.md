@@ -149,7 +149,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-mcp.ps1
 
 仓库根目录已经是一个可分发插件：`.codex-plugin/plugin.json` 同时声明 `./skills/` 与 `./.mcp.json`。安装 `cst-mcp` 插件后，Codex 从同一插件取得四个 Skill，并由插件作用域启动 `cst-runtime` MCP 服务，不再需要单独执行 `codex mcp add cst-runtime`。
 
-插件不会打包机器相关路径。首次启动 Codex 前，按 [INSTALL.md](INSTALL.md) 创建 `.envs/mcp`、`.envs/cst39` 和 `.cst_config.json`，并把 `CST_MCP_HOME` 指向项目根目录。插件启动脚本会使用该目录中的环境；Codex 进程仍需能够找到 `uv`。
+插件不会打包机器相关路径。首次启动 Codex 前，按 [INSTALL.md](INSTALL.md) 创建 `.envs/mcp`、`.envs/cst39` 和 `.cst_config.json`，并把 `CST_MCP_HOME` 指向项目根目录。启动脚本直接使用该目录中已部署的 Python 环境；`uv` 仅用于环境安装和更新。
 
 ```powershell
 # 添加本仓库提供的 marketplace，然后安装插件
