@@ -73,6 +73,20 @@ def _array_build(args: dict[str, Any]) -> dict[str, Any]:
     ).to_dict()
 
 
+def _list_unit_builders(args: dict[str, Any]) -> dict[str, Any]:
+    """读取当前 Worker 的模板注册表，无需连接 CST。"""
+    from ..workflows.array import DEFAULT_REGISTRY
+
+    return success_response(builders=DEFAULT_REGISTRY.describe())
+
+
+def _discard_array_batch(args: dict[str, Any]) -> dict[str, Any]:
+    """只丢弃当前 Worker 的命令缓存，不撤销或删除 CST 几何。"""
+    from ..lib.batch import discard
+
+    return dict(discard(args["project_path"]))
+
+
 def _sweep_run(args: dict[str, Any]) -> dict[str, Any]:
     """quick-sweep：本工具自行管理会话（open → sweep → close）。"""
     from ..lib.session import close_project, open_project
@@ -100,6 +114,8 @@ def _sweep_run(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _workflow_operations() -> dict[str, OperationSpec]:
+    from ..workflows.array_templates import EXAMPLE_ELEMENTS, EXAMPLE_UNITS
+
     number_array = {"type": "array", "items": {"type": "number"}, "minItems": 1}
     array_output = _object_schema(
         {
@@ -111,6 +127,10 @@ def _workflow_operations() -> dict[str, OperationSpec]:
             "project_path": {"type": "string"},
             "groups_built": {"type": "integer"},
             "instances_created": {"type": "integer"},
+            "instances_reused": {"type": "integer"},
+            "groups_planned": {"type": "integer"},
+            "instances_planned": {"type": "integer"},
+            "failure": {"type": "object"},
             "reference_objects": {"type": "object"},
             "message": {"type": "string"},
         },
@@ -140,14 +160,48 @@ def _workflow_operations() -> dict[str, OperationSpec]:
         ],
     )
     return {
+        "array.discard": OperationSpec(
+            name="array.discard",
+            tool_name="discard-array-batch",
+            description=(
+                "Use this after reconciling a failed build-array call to discard its retained "
+                "command buffer in the same Worker. It does not undo geometry, close CST or retry "
+                "modeling. Inspect ambiguous side effects before preparing a new batch; follow "
+                "terminal or await_user_decision stop signals before any recovery call."
+            ),
+            risk="write",
+            exposure=exposure_for("discard-array-batch"),
+            input_schema=_object_schema({"project_path": {"type": "string", "minLength": 1}}, ["project_path"]),
+            handler=_discard_array_batch,
+        ),
+        "array.builders": OperationSpec(
+            name="array.builders",
+            tool_name="list-unit-builders",
+            description=(
+                "Use this before build-array when template capabilities are unknown. It lists "
+                "builders installed in this Worker, their parameter schemas and examples, without "
+                "opening CST. create-brick-template creates one brick template per code; "
+                "copy-template copies existing same-component solids and preserves the source "
+                "template. These are builder_id values, not separate tools. "
+                "Custom builders require a deployed extension."
+            ),
+            exposure=exposure_for("list-unit-builders"),
+            input_schema=_object_schema({}, []),
+            handler=_list_unit_builders,
+        ),
         "array.build": OperationSpec(
             name="array.build",
             tool_name="build-array",
             description=(
-                "Use this to instantiate a user-provided set of controlled unit builders at "
-                "user-provided relative translations. It repeats modeling work but does not "
-                "synthesize an array or select units; brick-v1 origin is the minimum corner, "
-                "so convert center coordinates before calling when needed."
+                "Use this to build approved unit templates at relative translations in one batch. "
+                "Use list-unit-builders for builder IDs, parameter schemas and examples. Create "
+                "parameters, materials and components first. create-brick-template creates one "
+                "temporary template per code whose origin is its minimum corner; copy-template uses existing same-component "
+                "solids and always preserves them, with zero translation reusing the source. "
+                "Use unique names and one entry per code/translation. The call is not idempotent "
+                "and does not save; save-project after success. After parameter changes use "
+                "rebuild-model then save-project. On failure inspect failure details and actual "
+                "side effects before retrying; counts are confirmed only on success."
             ),
             risk="write",
             exposure=exposure_for("build-array"),
@@ -156,6 +210,8 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                     "project_path": {"type": "string", "minLength": 1},
                     "units": {
                         "type": "object",
+                        "minProperties": 1,
+                        "examples": [EXAMPLE_UNITS],
                         "additionalProperties": {
                             "type": "object",
                             "properties": {
@@ -163,9 +219,12 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                                 "parameters": {
                                     "type": "object",
                                     "description": (
-                                        "Builder parameters. For brick-v1, origin is the minimum "
-                                        "corner and size extends in the positive X, Y, and Z directions. "
-                                        "Both accept CST parameter expressions; rebuild-model applies later changes."
+                                        "Use list-unit-builders for the exact schema. create-brick-template accepts "
+                                        "component, name, material, size[3], origin[3]; origin is the minimum "
+                                        "corner and numeric sizes must be positive. copy-template requires "
+                                        "component and reference_names (unqualified solid names); all source "
+                                        "solids are preserved. Names must be ASCII. Expressions are supported; "
+                                        "define parameters first. Unknown built-in fields are rejected."
                                     ),
                                 },
                             },
@@ -176,6 +235,7 @@ def _workflow_operations() -> dict[str, OperationSpec]:
                     "elements": {
                         "type": "array",
                         "minItems": 1,
+                        "examples": [EXAMPLE_ELEMENTS],
                         "items": {
                             "type": "object",
                             "properties": {

@@ -15,6 +15,7 @@ class CommandBuffer:
     def __init__(self, summary: str) -> None:
         self.summary = summary
         self._scripts: List[str] = []
+        self.failed = False
 
     def append(self, vba_script: str) -> None:
         self._scripts.append(vba_script)
@@ -47,6 +48,8 @@ def append_to_batch(session_id: str, vba_lines: List[str]) -> None:
     buf = _buffers.get(session_id)
     if buf is None:
         raise RuntimeError(f"No active batch for session: {session_id}")
+    if buf.failed:
+        raise RuntimeError("批次执行失败且可能存在副作用；请先核查，再显式 discard，禁止追加建模")
     buf.append("\n".join(vba_lines))
 
 
@@ -74,6 +77,17 @@ def commit_batch(session_id: str) -> None:
     if session_id not in _buffers:
         raise RuntimeError(f"No active batch for session: {session_id}")
     del _buffers[session_id]
+
+
+def mark_failed(session_id: str) -> None:
+    """冻结失败批次，保留诊断脚本但禁止后续写入或重复提交。"""
+    _buffers[session_id].failed = True
+
+
+def is_failed(session_id: str) -> bool:
+    """判断当前缓冲区是否因执行失败而被冻结。"""
+    buf = _buffers.get(session_id)
+    return buf is not None and buf.failed
 
 
 def discard_batch(session_id: str) -> None:

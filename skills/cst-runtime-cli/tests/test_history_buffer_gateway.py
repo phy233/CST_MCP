@@ -92,6 +92,14 @@ def test_flush_retains_batch_after_vba_failure(monkeypatch) -> None:
     assert result["retry_safe"] is False
     assert buffer.is_batch_mode(project_path)
     assert buffer.peek_batch(project_path)[1] == "broken command\n"
+    assert modeling.flush_batch("model.cst")["error_type"] == "batch_requires_reconciliation"
+    with pytest.raises(RuntimeError, match="禁止追加建模"):
+        buffer.append_to_batch(project_path, ["another command"])
+    from cst_runtime.api import invoke_tool
+
+    discarded = invoke_tool("discard-array-batch", {"project_path": "model.cst"})
+    assert discarded["submission"] == "discarded"
+    assert not buffer.is_batch_mode(project_path)
 
 
 def test_flush_retains_batch_when_project_attach_fails(monkeypatch) -> None:

@@ -164,6 +164,11 @@ def begin_batch(project_path: str, summary: str = "Batch Execution") -> dict[str
 
 def flush_batch(project_path: str) -> dict[str, Any]:
     normalized_project = _abs_project_path(project_path)
+    if buffer.is_failed(normalized_project):
+        return error_response(
+            "batch_requires_reconciliation", "失败批次仅保留诊断；核查实际副作用后显式 discard，禁止重复提交",
+            project_path=normalized_project, batch_retained=True, retry_safe=False,
+        )
     try:
         name, script = buffer.peek_batch(normalized_project)
     except RuntimeError as exc:
@@ -186,6 +191,8 @@ def flush_batch(project_path: str) -> dict[str, Any]:
     if project is None:
         return {**status, "batch_retained": True, "retry_safe": True}
 
+    # 提交一旦开始就冻结缓冲区；即使网关抛出异常，也不能再次执行同一批次。
+    buffer.mark_failed(normalized_project)
     result = submit_vba_history(
         project,
         name,

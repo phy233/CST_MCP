@@ -237,13 +237,13 @@ def test_array_api_matches_python_result(monkeypatch) -> None:
         "array.build",
         {
             "project_path": "model.cst",
-            "units": {"a": {"builder_id": "brick-v1"}},
+            "units": {"a": {"builder_id": "create-brick-template"}},
             "elements": [{"code": "a", "x": 0, "y": 0, "z": 0}],
         },
     )
     assert payload["ok"] is True
-    assert payload["submission"] == "not_applicable"
-    assert payload["execution"] == "not_run"
+    assert payload["submission"] == "accepted"
+    assert payload["execution"] == "reported_ok"
     assert "verification" not in payload
     for key, value in expected.to_dict().items():
         assert payload[key] == value

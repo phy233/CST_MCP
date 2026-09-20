@@ -260,7 +260,7 @@ def test_20_array_batch_creates_and_deletes_every_instance(cst_case: Any) -> Non
             cst_case,
             units={
                 "a": {
-                    "builder_id": "brick-v1",
+                    "builder_id": "create-brick-template",
                     "parameters": {
                         "component": COMPONENT,
                         "name": reference_name,
