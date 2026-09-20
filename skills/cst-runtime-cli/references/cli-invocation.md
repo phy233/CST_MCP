@@ -14,6 +14,7 @@
 - 标量且已由 `describe-tool` 确认支持时可使用 CLI flag；
 - 数组、对象和复杂参数必须使用 `--args-file`；
 - `args-template --tool <工具名>` 生成临时模板，编辑后再调用；
+- 批量建模先用 `list-unit-builders` 查看当前 Worker 的模板参数契约。`args-template --tool build-array` 生成可编辑的完整 `units` / `elements` 示例；`create-brick-template` 创建方块样板后复制，`copy-template` 复制同工程、同 component 的已有样板并保留源实体。每个 code 的样板只准备一次，逐位置仅复制和平移；零位移复用源样板。完整示例见[批量调用规范](../../cst-mcp/references/batch-modeling.md)。先建立参数、材料和 component，批次成功后保存。失败批次禁止盲目重试；MCP 的残留缓存须在原 Worker 通过 `discard-array-batch` 清除，另起 CLI 进程无法访问它。清除缓存不撤销几何。
 - 所有工程路径使用绝对 `.cst` 路径；
 - 不向命令添加 Schema 未声明字段。
 

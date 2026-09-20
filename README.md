@@ -36,6 +36,7 @@ Agent 适合协助：
 | 分类               | 代表工具                                                                                                      |
 | ------------------ | ------------------------------------------------------------------------------------------------------------- |
 | **几何建模** | `define-brick`, `define-cylinder`, `boolean-subtract`, `change-material`, `transform-shape`         |
+| **批量建模** | `list-unit-builders`, `build-array`；`copy-template` 复制已有样板，`create-brick-template` 创建方块样板后复制；每种样板只准备一次，见[调用规范](skills/cst-mcp/references/batch-modeling.md) |
 | **工程操作** | `change-parameter`, `define-port`, `define-mesh`, `inspect-project`, `capture-3d-view`              |
 | **结果读取** | `list-sparameter-results`, `export-sparameter`, `list-field-results`, `export-touchstone`       |
 | **优化**     | `create-study`, `ask-study`, `tell-study`, `run-probe-phase`, `run-optimization-step`               |

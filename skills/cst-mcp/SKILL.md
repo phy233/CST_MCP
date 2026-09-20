@@ -24,6 +24,8 @@ description: 通过已连接的 CST MCP 检查和操作具体 CST 工程、运�
 
 ## 成功信任与必要检查
 
+批量建模时，按需读取 [模板建立与批量调用](references/batch-modeling.md)：主流程是先建立若干种样板，再用 `copy-template`（复制已有样板）复制并平移已有实体，不逐位置重新创建样板几何。模板契约未知时使用 `list-unit-builders`；`create-brick-template`（创建方块样板后复制）仅是每个 code 建立一次方块样板的便捷入口。两者都是 `build-array` 的 `builder_id` 取值，都只准备一次样板，逐位置仅复制和平移。将样板与位移分别放入 `units`、`elements`，批次串行执行；成功后保存，失败时不得直接重复提交。
+
 公开 MCP 工具没有返回错误并给出结构化成功状态时，充分相信 CST 已成功执行对应 VBA。不要为了再次证明执行成功，在普通参数、材料、几何、布尔、边界、端口、监视器或求解器配置调用前后重复查询参数、实体树、配置 getter 或 History diff。
 
 只有以下边界保留必要检查：
