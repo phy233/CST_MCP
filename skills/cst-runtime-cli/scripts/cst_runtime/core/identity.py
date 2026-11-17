@@ -355,3 +355,160 @@ def attach_expected_project(project_path: str) -> tuple[Any | None, dict[str, An
 def verify_project_identity(project_path: str) -> dict[str, Any]:
     _, status = attach_expected_project(project_path)
     return status
+
+
+def probe_target_solver_state(
+    project_path: str,
+    design_environment_pid: int | None = None,
+) -> dict[str, Any]:
+    """只读探测目标工程的求解器状态，绝不激活、保存、关闭或新建工程。"""
+    runtime_module = "cst_runtime.core.identity"
+    if not project_path:
+        return error_response(
+            "solver_state_unreadable",
+            "project_path is required to probe target solver state",
+            project_path="",
+            design_environment_pid=design_environment_pid,
+            running=None,
+            runtime_module=runtime_module,
+        )
+    absolute = os.path.abspath(os.path.expanduser(str(project_path)))
+    expected = normalize_project_path(str(project_path))
+
+    pid_filter: int | None = None
+    if design_environment_pid is not None:
+        try:
+            pid_filter = int(design_environment_pid)
+        except (TypeError, ValueError):
+            return error_response(
+                "solver_state_unreadable",
+                f"design_environment_pid is not a valid integer: {design_environment_pid!r}",
+                project_path=absolute,
+                design_environment_pid=None,
+                running=None,
+                runtime_module=runtime_module,
+            )
+
+    if pid_filter is not None:
+        try:
+            environment = connect_design_environment(pid_filter)
+        except Exception as exc:
+            return error_response(
+                "solver_state_unreadable",
+                f"failed to connect to Design Environment {pid_filter}: {exc}",
+                project_path=absolute,
+                design_environment_pid=pid_filter,
+                running=None,
+                runtime_module=runtime_module,
+            )
+        environments: list[tuple[Any, int | None]] = [(environment, pid_filter)]
+    else:
+        environments, connection_errors = _connected_design_environments()
+        if not environments:
+            if _discover_design_environment_pids():
+                return error_response(
+                    "solver_state_unreadable",
+                    "could not connect to a visible CST Design Environment"
+                    + (f": {connection_errors}" if connection_errors else ""),
+                    project_path=absolute,
+                    design_environment_pid=None,
+                    running=None,
+                    runtime_module=runtime_module,
+                )
+            return {
+                "status": "not_open",
+                "project_path": absolute,
+                "design_environment_pid": None,
+                "running": False,
+                "runtime_module": runtime_module,
+            }
+
+    errors: list[str] = []
+    matched: tuple[Any, int | None] | None = None
+    for environment, environment_pid in environments:
+        label = str(environment_pid) if environment_pid is not None else "unknown-pid"
+        try:
+            open_paths = list_open_project_paths(environment)
+        except Exception as exc:
+            errors.append(f"{label}: {exc}")
+            continue
+        matching_paths = [
+            str(path)
+            for path in open_paths
+            if normalize_project_path(str(path)) == expected
+        ]
+        if not matching_paths:
+            continue
+        project = None
+        for matching_path in matching_paths:
+            try:
+                project = get_open_project(environment, matching_path)
+                break
+            except Exception:
+                project = None
+        if project is None:
+            # 回退：仅当活动工程确实是目标工程时使用；绝不激活任何工程。
+            try:
+                candidate = active_project(environment)
+                candidate_name = (
+                    getattr(candidate, "filename", None) if candidate is not None else None
+                )
+                candidate_value = (
+                    candidate_name() if callable(candidate_name) else candidate_name
+                )
+                if (
+                    candidate_value
+                    and normalize_project_path(str(candidate_value)) == expected
+                ):
+                    project = candidate
+            except Exception as exc:
+                errors.append(f"{label}: {exc}")
+                project = None
+        if project is None:
+            errors.append(f"{label}: target project handle is not readable")
+            continue
+        matched = (project, environment_pid)
+        break
+
+    if matched is None:
+        if errors:
+            return error_response(
+                "solver_state_unreadable",
+                "could not read the target project solver state: " + "; ".join(errors),
+                project_path=absolute,
+                design_environment_pid=pid_filter,
+                running=None,
+                runtime_module=runtime_module,
+            )
+        return {
+            "status": "not_open",
+            "project_path": absolute,
+            "design_environment_pid": None,
+            "running": False,
+            "runtime_module": runtime_module,
+        }
+
+    project, matched_pid = matched
+    try:
+        modeler = project.modeler
+        reader = getattr(modeler, "is_solver_running", None)
+        if reader is None:
+            raise RuntimeError("project.modeler.is_solver_running is not available")
+        running = bool(reader() if callable(reader) else reader)
+    except Exception as exc:
+        return error_response(
+            "solver_state_unreadable",
+            f"failed to read target solver state: {exc}",
+            project_path=absolute,
+            design_environment_pid=matched_pid,
+            running=None,
+            runtime_module=runtime_module,
+        )
+
+    return {
+        "status": "success",
+        "project_path": absolute,
+        "design_environment_pid": matched_pid,
+        "running": running,
+        "runtime_module": runtime_module,
+    }

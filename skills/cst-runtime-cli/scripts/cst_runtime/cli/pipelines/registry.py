@@ -67,8 +67,8 @@ PIPELINES: dict[str, dict[str, Any]] = {
             {"tool": "wait-project-unlocked", "purpose": "Check that the companion CST directory has no .lok lock files."},
         ],
         "recovery": [
-            "If wait-project-unlocked reports a lock, close the matching CST project before retrying.",
-            "If cleanup is needed, use cst-session-quit or close_project (kill_processes=True) and record Access is denied residuals.",
+            "If wait-project-unlocked reports a lock, release that target session normally (cst-session-close) and retry; unrelated sessions may stay open.",
+            "If process release is unavoidable, use cst-session-quit scoped to the target project; shared services and unrelated sessions are retained, and Access is denied stays unhandled.",
         ],
         "stop_rules": [
             "Do not copy or reopen a locked project.",
@@ -91,17 +91,17 @@ PIPELINES: dict[str, dict[str, Any]] = {
             "uv run python -m cst_runtime cst-session-inspect --project-path <run>\\projects\\working.cst",
         ],
         "steps": [
-            {"tool": "cst-session-inspect", "purpose": "Record initial allowlisted processes, lock files, open projects, and attach readiness."},
+            {"tool": "cst-session-inspect", "purpose": "Record target-project conflicts, lock files, open sessions, and attach readiness; shared services are background."},
             {"tool": "cst-session-open", "purpose": "Open the explicit working .cst through the central manager."},
             {"tool": "cst-session-reattach", "purpose": "Verify the expected project is the only attach target."},
             {"tool": "cst-session-close", "purpose": "Close save=false and verify lock release."},
-            {"tool": "cst-session-quit", "purpose": "Dry-run, then real allowlist-only process cleanup when the project is closed."},
+            {"tool": "cst-session-quit", "purpose": "Dry-run, then release only the Runtime-owned target Design Environment; shared services and unrelated sessions stay running."},
             {"tool": "cst-session-inspect", "purpose": "Confirm final lock/process/readiness state."},
         ],
         "stop_rules": [
             "Do not run the non-dry-run quit step until close returned status=success and lock files are clear.",
             "If Access is denied remains after locks clear, record it as nonblocking_access_denied_residual with PID/name; do not claim it was killed.",
-            "If multiple CST projects are open, stop before write or close actions unless the expected project is isolated.",
+            "Unrelated open projects may remain; stop only when the target project's identity or occupancy is ambiguous, or its session lacks authorization for the requested write/close action.",
         ],
     },
     "async-simulation-refresh-results": {

@@ -174,8 +174,11 @@ def _open_project_with_pid_handoff_fallback(
         return replacement.open_project(normalized_project), replacement
 
 
-def inspect(project_path: str = "") -> dict[str, Any]:
-    return process_cleanup.inspect_cst_environment(project_path=project_path)
+def inspect(project_path: str = "", operation: str = "") -> dict[str, Any]:
+    return process_cleanup.inspect_cst_environment(
+        project_path=project_path,
+        operation=operation,
+    )
 
 
 def create_blank_project(project_path: str) -> dict[str, Any]:
@@ -701,25 +704,37 @@ def quit_cst(
     settle_seconds: float = 0.5,
     force_global_cleanup: bool = False,
 ) -> dict[str, Any]:
-    """彻底退出整个 CST 应用程序实例并清理所有相关的后台子进程。
-    
-    默认只允许终止本 Runtime 明确创建并登记的 Design Environment；
-    全局扫描仅用于 dry_run 或显式 force_global_cleanup。
+    """退出与目标工程关联的 CST Design Environment。
+
+    默认只在目标工程范围内检查并释放本 Runtime 明确创建并登记的
+    Design Environment；无关工程、许可证和 DC 基础服务保持运行。
+    全局扫描仅用于 dry_run 或显式 force_global_cleanup，且共享服务始终
+    不是终止候选。Access is denied 的进程保留为未处理审计项。
 
     Args:
         project_path: 可选的工程路径，用于精准定位它的子进程。
         dry_run: 若为 True，则只扫描不实际杀死进程（用于调试）。
         settle_seconds: 杀死进程后的冷却时间。
+        force_global_cleanup: 显式请求全局 DE 清理（不包含共享服务）。
 
     Returns:
         清理报告字典。
     """
     before = inspect(project_path)
-    if dry_run or force_global_cleanup:
+    if force_global_cleanup:
         cleanup = process_cleanup.cleanup_cst_processes(
             project_path=project_path,
             dry_run=dry_run,
             settle_seconds=settle_seconds,
+            scope="global",
+            confirm_global_cleanup=True,
+        )
+    elif dry_run:
+        cleanup = process_cleanup.cleanup_cst_processes(
+            project_path=project_path,
+            dry_run=True,
+            settle_seconds=settle_seconds,
+            scope="target",
         )
     elif not project_path:
         cleanup = error_response(

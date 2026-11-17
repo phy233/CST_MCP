@@ -70,14 +70,14 @@ Worker 解释器（优先为 `.envs/cst39/Scripts/python.exe`，也可由 `CST_W
 CST 2022 Python 库与 Worker 解释器已在 `.cst_config.json` 配置，
 也可用 `CST_WORKER_PYTHON` 覆盖 Worker 路径。
 
-默认基准工程是：
+默认基准工程是本地测试资产，已被 `.gitignore` 忽略、不入库：
 
 ```text
 skills/cst-runtime-cli/tests/refs/ref_0/ref_0.cst
 ```
 
-该工程连同其 `Model/`、`Result/` 伴随目录已完整纳入 git（`.gitattributes`
-禁止对其做任何 EOL 转换），新 clone 即可复现真机套件。如需其他基准工程：
+运行 `--run-cst` 前，请把该工程连同其 `Model/`、`Result/` 伴随目录放到上述位置；
+CST 运行会改写这些二进制文件，因此不纳入版本控制。如需其他基准工程：
 
 ```powershell
 $env:CST_TEST_PROJECT = "D:\path\to\disposable-source.cst"

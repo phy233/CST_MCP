@@ -33,8 +33,8 @@ TOOL_DEFS = {
     "risk": "session",
     "description": (
         "Use this to close the expected Runtime-managed CST project, optionally save it and "
-        "wait for its lock to clear. Do not close or kill an external Design Environment; "
-        "process cleanup remains limited by the Runtime ownership and allowlist rules."
+        "wait for its lock to clear. Only the target project and a Runtime-owned target Design "
+        "Environment are affected; unrelated sessions and shared license/DC services stay running."
     ),
     "handler": "tool_cst_session_close",
     "json_schema": {
@@ -89,9 +89,10 @@ TOOL_DEFS = {
     "category": "session_manager",
     "risk": "read",
     "description": (
-        "Use this when project ownership, process identity, a file lock, or reattach readiness "
-        "is unclear. It is a read-only diagnostic gate, not a routine pre-check or post-check "
-        "after every successful CST call."
+        "Use this when target-project ownership, occupancy, a lock, running-solver state, or "
+        "reattach readiness is unclear. It reports target-scoped conflicts, keeps shared "
+        "license/DC services and unrelated sessions as background, and is a read-only diagnostic "
+        "gate: it never triggers cleanup and is not a routine pre-check after every successful call."
     ),
     "handler": "tool_cst_session_inspect",
     "json_schema": {
@@ -102,6 +103,15 @@ TOOL_DEFS = {
                 "examples": [
                     "C:\\path\\to\\tasks\\task_xxx\\runs\\run_001\\projects\\working.cst"
                 ]
+            },
+            "operation": {
+                "type": "string",
+                "enum": ["inspect", "read", "write", "solve", "copy", "reopen"],
+                "default": "inspect",
+                "description": (
+                    "Planned operation used to decide which target-project conflicts block. "
+                    "Read-only inspection and result reads do not inherit write or solve restrictions."
+                )
             }
         },
         "required": [
@@ -154,9 +164,10 @@ TOOL_DEFS = {
     "category": "session_manager",
     "risk": "process-control",
     "description": (
-        "Use this from the human CLI only to quit a Runtime-owned CST Design Environment "
-        "identified by the process allowlist and project-lock evidence. Never use it to quit "
-        "an external session that was merely attached with user confirmation."
+        "Use this from the human CLI only to release a Runtime-owned CST Design Environment "
+        "tied to the target project. Default scope is the target project; force_global_cleanup "
+        "is an explicit human request for all Design Environments. Shared license/DC services and "
+        "unrelated sessions are never default termination targets."
     ),
     "handler": "tool_cst_session_quit",
     "json_schema": {
@@ -182,7 +193,11 @@ TOOL_DEFS = {
             },
             "force_global_cleanup": {
                 "type": "boolean",
-                "default": False
+                "default": False,
+                "description": (
+                    "Explicit human-authorized global Design Environment cleanup; shared license/DC "
+                    "services are still retained."
+                )
             }
         },
         "required": [
@@ -280,7 +295,10 @@ def tool_cst_session_close(args: dict) -> dict:
 
 
 def tool_cst_session_inspect(args: dict) -> dict:
-    return _sm.inspect(project_path=str(args.get("project_path") or ""))
+    return _sm.inspect(
+        project_path=str(args.get("project_path") or ""),
+        operation=str(args.get("operation") or ""),
+    )
 
 
 def tool_cst_session_open(args: dict) -> dict:

@@ -51,6 +51,8 @@ Agent 适合协助：
 
 Registry 工具各含严格 JSON Schema 定义，未知字段会被拒绝，输出格式以通用 `OperationResult` 为基础。工具数量和分类由 Registry 动态生成，不在文档中手工维护；可用 `devkit/tools/generate_agent_tools_list.py` 生成 Agent 暴露面快照 `tools-list.json`。
 
+会话与进程检查按**目标工程和计划操作**界定范围：`cst-session-inspect` 报告目标工程的锁、占用、运行中求解器与身份冲突；许可证 `cstd`、DC Controller、DC Solver Server 以及无关的已打开工程只作为背景信息，不会被要求关闭，也不会进入默认终止列表。`cst-session-quit` 默认只释放 Runtime 自有的目标 Design Environment，全局清理需显式 `force_global_cleanup` 且共享服务仍然保留；Access is denied 的进程保留为未处理审计项。
+
 ---
 
 ## 架构
@@ -246,7 +248,7 @@ CST_MCP/
 │   │   │       └── analysis/            # 远场解析与平坦度分析
 │   │   ├── references/                  # CLI、故障、History 与部署说明
 │   │   └── tests/
-│   │       ├── refs/ref_0/              # 参考工程（四脊喇叭天线，8-12 GHz）
+│   │       ├── refs/ref_0/              # 参考工程（本地真机测试资产，不入库；四脊喇叭天线，8-12 GHz）
 │   │       └── ...                      # 合约测试、架构不变式、管道合约
 │   │
 │   └── cst-runtime-optimization/        # 分步骤优化 Skill

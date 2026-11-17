@@ -7,7 +7,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from . import process as process_cleanup
 from . import gateway
 from .errors import error_response, UnsupportedFeatureError
 from .error_gateway import submit_vba_history
@@ -502,12 +501,8 @@ def export_farfield_grid(
     output_path = ff_dir / f"{slug}.json"
     flow_log: list[dict[str, Any]] = []
 
-    if fresh_session:
-        start_quit = process_cleanup.cleanup_cst_processes(dry_run=False, settle_seconds=0.5)
-        flow_log.append({"step": "quit_before_open", "result": start_quit})
-        if start_quit.get("status") != "success":
-            return error_response("kill_cst_failed", "failed to clean CST processes before export", flow_log=flow_log)
-
+    # 目标工程范围：不在此处执行全局进程清场。其它工程、许可证与 DC 服务
+    # 保持运行；fresh_session 只影响本次目标工程的打开/关闭路径。
     open_result = _gui_open_project(normalized_project)
     flow_log.append({"step": "open_project", "result": {k: v for k, v in open_result.items() if k not in {"project", "design_environment"}}})
     if open_result.get("status") != "success":
@@ -591,10 +586,8 @@ def export_farfield_grid(
                 reset_result = {"status": "error", "message": "reset navigator selection failed (non-fatal)"}
             flow_log.append({"step": "reset_result_navigator_selection", "result": reset_result})
         if not reuse:
+            # 只释放目标工程及其 Runtime 自有 DE；不做全局清场。
             close_project(normalized_project, save=False, kill_processes=fresh_session)
-            if fresh_session:
-                end_quit = process_cleanup.cleanup_cst_processes(dry_run=False, settle_seconds=0.5)
-                flow_log.append({"step": "quit_after_close", "result": end_quit})
 
 
 def export_farfield_cut(
@@ -619,12 +612,8 @@ def export_farfield_cut(
     temp_txt = cuts_dir / f"_{slug}_tmp.txt"
     flow_log: list[dict[str, Any]] = []
 
-    if fresh_session:
-        start_quit = process_cleanup.cleanup_cst_processes(dry_run=False, settle_seconds=0.5)
-        flow_log.append({"step": "quit_before_open", "result": start_quit})
-        if start_quit.get("status") != "success":
-            return error_response("kill_cst_failed", "failed to clean CST processes before export", flow_log=flow_log)
-
+    # 目标工程范围：不在此处执行全局进程清场。其它工程、许可证与 DC 服务
+    # 保持运行；fresh_session 只影响本次目标工程的打开/关闭路径。
     open_result = _gui_open_project(normalized_project)
     flow_log.append({"step": "open_project", "result": {k: v for k, v in open_result.items() if k not in {"project", "design_environment"}}})
     if open_result.get("status") != "success":
@@ -692,10 +681,8 @@ def export_farfield_cut(
     finally:
         temp_txt.unlink(missing_ok=True)
         if not reuse:
+            # 只释放目标工程及其 Runtime 自有 DE；不做全局清场。
             close_project(normalized_project, save=False, kill_processes=fresh_session)
-            if fresh_session:
-                end_quit = process_cleanup.cleanup_cst_processes(dry_run=False, settle_seconds=0.5)
-                flow_log.append({"step": "quit_after_close", "result": end_quit})
 
 
 

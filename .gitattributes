@@ -1,3 +1,4 @@
-# CST 真机基准工程含二进制模型/结果文件，禁止任何 EOL 转换，
+# CST 真机基准工程为本地测试资产（已由 .gitignore 忽略）；
+# 若显式强制入库，其二进制模型/结果文件仍禁止任何 EOL 转换，
 # 否则 autocrlf 会在 checkout 时损坏 .cst 伴随目录。
 skills/cst-runtime-cli/tests/refs/** -text

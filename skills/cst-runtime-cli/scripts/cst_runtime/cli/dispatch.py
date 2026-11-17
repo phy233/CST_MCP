@@ -415,7 +415,7 @@ def _usage_guide() -> dict[str, Any]:
             "Do not treat Abs(E) as dBi; use Realized Gain/Gain/Directivity for gain evidence.",
             "Do not continue a pipeline after status == 'error' unless the recovery step is explicit.",
             "Treat pipeline recipes as guidance, not a hidden black-box runner; keep checking each JSON result.",
-            "Only force-kill CST process names in the cleanup allowlist; record Access is denied residuals instead of claiming they were killed.",
+            "Scope process inspection and cleanup to the target project and operation; keep shared license/DC services and unrelated sessions, and record Access is denied processes as unhandled instead of claiming they were killed.",
         ],
     }
 

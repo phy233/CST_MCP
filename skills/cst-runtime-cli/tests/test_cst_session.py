@@ -16,7 +16,11 @@ pytestmark = [
 
 
 def test_session_inspect_reports_sole_project(cst_case: Any) -> None:
-    """cst-session-inspect 必须看到唯一隔离工程与唯一 DE（打开中的工程持锁 → blocked）。"""
+    """cst-session-inspect 必须看到唯一隔离工程与唯一 DE。
+
+    只读检查不再继承写/复制限制：目标工程打开并持有锁文件只是背景信息，
+    只有 copy/reopen 意图才必须因为目标工程已打开而 blocked。
+    """
     result = cst_case.require_success(
         "cst-session-inspect",
         project_arguments(cst_case),
@@ -28,9 +32,23 @@ def test_session_inspect_reports_sole_project(cst_case: Any) -> None:
     assert normalized(projects[0]["project_path"]) == normalized(cst_case.project_path)
     assert open_status["design_environment_count"] == 1, result
     assert result["project_identity_status"]["status"] == "success", result
-    # 工程处于打开状态，CST 持有锁文件，readiness 必须如实上报 blocked。
-    assert result["readiness"] == "blocked", result
+    # 只读检查不得因为目标工程打开/持锁而被当成写冲突。
+    assert result["operation"] == "inspect", result
+    assert result["readiness"] != "blocked", result
+    assert result["conflicts"] == [], result
+    assert result["target"]["open"] is True, result
     assert result["lock_count"] >= 1, result
+    # 同一目标工程上，copy 意图仍必须如实上报阻塞与释放要求。
+    copy_result = cst_case.require_success(
+        "cst-session-inspect",
+        project_arguments(cst_case, operation="copy"),
+    )
+    assert copy_result["readiness"] == "blocked", copy_result
+    assert copy_result["target_release_required"] is True, copy_result
+    assert any(
+        conflict.get("kind") == "target_project_open"
+        for conflict in copy_result.get("conflicts") or []
+    ), copy_result
     cst_case.shared.require_visible_window()
 
 

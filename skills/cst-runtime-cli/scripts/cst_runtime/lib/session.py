@@ -110,16 +110,18 @@ def close_project(
     )
 
 
-def inspect(project_path: str = "") -> OperationResult:
-    """检查 CST 运行环境的状态。
+def inspect(project_path: str = "", operation: str = "") -> OperationResult:
+    """检查目标 CST 工程范围的环境状态。
 
     Args:
-        project_path: （可选）特定工程的路径，留空则检查全局 CST 环境
+        project_path: （可选）目标工程路径；留空仅报告全局背景信息
+        operation: 计划操作（inspect/read/write/solve/copy/reopen），
+            用于判断哪些目标工程冲突会阻断本次操作
 
     Returns:
-        包含环境状态信息的字典
+        包含目标工程冲突、背景进程/服务与就绪信息的字典
     """
-    return call_core(_inspect, project_path)
+    return call_core(_inspect, project_path, operation)
 
 
 def save_project(project_path: str) -> OperationResult:

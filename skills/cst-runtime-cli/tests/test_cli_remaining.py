@@ -56,6 +56,19 @@ class TestCliContractSession:
         assert "lock_count" in p
         assert "readiness" in p
         assert p["readiness"] in {"clear", "attention_required", "blocked"}
+        # 目标范围契约（issue #1）：无 project_path 时不得产生目标冲突或清理候选。
+        assert p["operation"] == "inspect"
+        assert p["conflicts"] == []
+        assert p["cleanup_required"] is False
+        assert p["cleanup_candidates"] == []
+        assert p["target_release_required"] is False
+        assert p["target"]["open"] is False
+        # 本机可能已有共享服务或其他会话；它们只是背景信息，不得变成阻塞。
+        assert isinstance(p["background_processes"], list)
+        assert isinstance(p["unrelated_processes"], list)
+        assert isinstance(p["next_steps"], list) and p["next_steps"]
+        for step in p["next_steps"]:
+            assert "cleanup-cst-processes" not in step
 
     def test_stage_evidence_capture_and_compare(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -111,3 +124,10 @@ class TestCliContractSession:
         p = json.loads(r.stdout)
         assert p["status"] == "success"
         assert p["dry_run"]
+        # dry-run 只报告目标范围候选，不实际终止任何进程。
+        assert p["pre_inspect"]["status"] == "success", p["pre_inspect"]
+        cleanup = p["cleanup_result"]
+        assert cleanup["status"] == "success", cleanup
+        assert cleanup["scope"] == "target"
+        assert cleanup["completed"] is False
+        assert cleanup["candidates"] == []

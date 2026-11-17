@@ -17,10 +17,8 @@ dist/
 /refs/
 /tasks/
 
-# 真机集成测试的基准工程必须完整入库（.cst + Model/Result 伴随目录），
-# 否则新 clone 无法复现 --run-cst 套件。放在 *.json/*.cst 等宽规则之后。
-!skills/cst-runtime-cli/tests/refs/
-!skills/cst-runtime-cli/tests/refs/**
-
-# 真机运行会在基准工程目录内生成 ModelCache 求解缓存，属可再生运行残留，不入库。
-skills/cst-runtime-cli/tests/refs/**/ModelCache/
+# CST 真机测试基准工程属于本地测试资产，不入库：
+# 运行 --run-cst 前在本地放置 skills/cst-runtime-cli/tests/refs/ref_0/ref_0.cst
+# 及其 Model/Result 伴随目录，或用 CST_TEST_PROJECT 指向其他只读源工程。
+# 该目录会被 CST 运行改写，纳入版本控制只会持续产生二进制噪声。
+skills/cst-runtime-cli/tests/refs/
